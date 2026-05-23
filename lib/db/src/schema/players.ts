@@ -10,6 +10,7 @@ export const playersTable = pgTable("players", {
   lastName: text("last_name").notNull(),
   teamId: integer("team_id"),
   position: text("position"),
+  imageUrl: text("image_url"),
   status: text("status").notNull().default("active"),
   externalIds: jsonb("external_ids"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

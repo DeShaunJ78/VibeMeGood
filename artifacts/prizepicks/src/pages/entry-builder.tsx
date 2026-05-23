@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useEntry } from "@/lib/entry-context";
 import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown, ShieldAlert, AlertTriangle, ClipboardCheck } from "lucide-react";
 import { Link } from "wouter";
+import { PlayerAvatar } from "@/components/ui/player-avatar";
 
 import type { EntryPick } from "@/lib/entry-context";
 
@@ -233,11 +234,9 @@ export default function EntryBuilder() {
                     </div>
                   </div>
                 )}
-                {picks.map((pick, i) => (
+                {picks.map((pick) => (
                   <div key={pick.ppLineId} className="px-4 py-3 flex items-center gap-3">
-                    <div className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-mono font-bold text-muted-foreground shrink-0">
-                      {i + 1}
-                    </div>
+                    <PlayerAvatar name={pick.playerName} imageUrl={pick.imageUrl} size="sm" />
                     <div className="flex-1 min-w-0">
                       <div className="font-bold text-sm truncate">{pick.playerName}</div>
                       <div className="text-xs font-mono text-muted-foreground">{pick.statType} · {pick.lineValue}</div>

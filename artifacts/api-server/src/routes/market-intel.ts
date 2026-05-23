@@ -130,6 +130,7 @@ router.get("/market-intel", async (req, res) => {
           ppLineId: row.line.id,
           playerId: row.player.id,
           playerName: row.player.fullName,
+          imageUrl: row.player.imageUrl ?? null,
           teamId: row.player.teamId,
           sport: row.player.sport,
           statType: row.line.statType,

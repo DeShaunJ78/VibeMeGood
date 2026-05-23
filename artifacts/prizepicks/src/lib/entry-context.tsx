@@ -4,6 +4,7 @@ export interface EntryPick {
   ppLineId: number;
   playerId: number;
   playerName: string;
+  imageUrl: string | null;
   teamAbbr: string | null;
   statType: string;
   lineValue: number;

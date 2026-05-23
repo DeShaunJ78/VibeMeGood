@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { TrendingUp, TrendingDown, Zap, PlusCircle } from "lucide-react";
+import { PlayerAvatar } from "@/components/ui/player-avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEntry } from "@/lib/entry-context";
 import { useToast } from "@/hooks/use-toast";
@@ -8,6 +9,7 @@ interface Streak {
   streakId: number;
   playerId: number;
   playerName: string;
+  imageUrl: string | null;
   teamAbbr: string | null;
   sport: string;
   statType: string;
@@ -58,6 +60,7 @@ export default function Streaks() {
       ppLineId:       0,
       playerId:       s.playerId,
       playerName:     s.playerName,
+      imageUrl:       s.imageUrl ?? null,
       teamAbbr:       s.teamAbbr,
       statType:       s.statType,
       lineValue:      parseFloat(s.todaysLine),
@@ -109,20 +112,23 @@ export default function Streaks() {
                   className="bg-slate-900 border border-slate-800 hover:border-emerald-800/50 rounded-lg px-4 py-3 transition-colors group"
                 >
                   <div className="flex items-center justify-between">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-semibold text-foreground truncate">
-                          {s.playerName}
-                        </span>
-                        <span className="text-[10px] font-mono text-muted-foreground shrink-0">
-                          {s.teamAbbr} · {s.sport}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="text-xs text-muted-foreground font-mono">{s.statType}</span>
-                        {s.todaysLine && (
-                          <span className="text-xs font-mono text-primary">Line: {s.todaysLine}</span>
-                        )}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <PlayerAvatar name={s.playerName} imageUrl={s.imageUrl} size="sm" />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm font-semibold text-foreground truncate">
+                            {s.playerName}
+                          </span>
+                          <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                            {s.teamAbbr} · {s.sport}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-xs text-muted-foreground font-mono">{s.statType}</span>
+                          {s.todaysLine && (
+                            <span className="text-xs font-mono text-primary">Line: {s.todaysLine}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0 ml-3">
@@ -163,20 +169,23 @@ export default function Streaks() {
                   className="bg-slate-900 border border-slate-800 hover:border-red-800/50 rounded-lg px-4 py-3 transition-colors group"
                 >
                   <div className="flex items-center justify-between">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-semibold text-foreground truncate">
-                          {s.playerName}
-                        </span>
-                        <span className="text-[10px] font-mono text-muted-foreground shrink-0">
-                          {s.teamAbbr} · {s.sport}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="text-xs text-muted-foreground font-mono">{s.statType}</span>
-                        {s.todaysLine && (
-                          <span className="text-xs font-mono text-primary">Line: {s.todaysLine}</span>
-                        )}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <PlayerAvatar name={s.playerName} imageUrl={s.imageUrl} size="sm" />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm font-semibold text-foreground truncate">
+                            {s.playerName}
+                          </span>
+                          <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                            {s.teamAbbr} · {s.sport}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-xs text-muted-foreground font-mono">{s.statType}</span>
+                          {s.todaysLine && (
+                            <span className="text-xs font-mono text-primary">Line: {s.todaysLine}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0 ml-3">

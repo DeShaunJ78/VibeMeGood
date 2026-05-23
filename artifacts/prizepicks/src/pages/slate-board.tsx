@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useEntry, type EntryPick } from "@/lib/entry-context";
 import { VarianceBadge } from "@/components/ui/variance-badge";
 import { useUserSettings } from "@/hooks/use-user-settings";
+import { PlayerAvatar } from "@/components/ui/player-avatar";
 
 type OurProjection = {
   value: number;
@@ -40,6 +41,7 @@ type MarketIntelRow = {
   ppLineId: number;
   playerId: number;
   playerName: string;
+  imageUrl: string | null;
   teamId: number | null;
   sport: string;
   statType: string;
@@ -220,6 +222,7 @@ interface OptResult {
   ppLineId: number;
   playerId: number;
   playerName: string;
+  imageUrl: string | null;
   teamAbbr: string | null;
   statType: string;
   lineValue: number;
@@ -354,6 +357,7 @@ export default function SlateBoard() {
         ppLineId: r.ppLineId,
         playerId: r.playerId,
         playerName: r.playerName,
+        imageUrl: r.imageUrl ?? null,
         teamAbbr: r.teamAbbr ?? null,
         statType: r.statType,
         lineValue: r.lineValue,
@@ -378,13 +382,14 @@ export default function SlateBoard() {
           ppLineId: r.ppLineId,
           playerId: r.playerId,
           playerName: r.playerName,
-          teamAbbr: r.teamAbbr,
+          imageUrl: r.imageUrl ?? null,
+          teamAbbr: (r as any).teamAbbr ?? null,
           statType: r.statType,
           lineValue: r.lineValue,
           lineType: r.lineType,
           direction: "more",
           yourProjection: r.ourProjection?.value ?? null,
-          pOver: r.pOver,
+          pOver: r.ourProjection?.pOver ?? null,
           edgeScore: r.edgeScore,
           actionTag: r.actionTag,
         } satisfies EntryPick);
@@ -557,11 +562,14 @@ export default function SlateBoard() {
                         </TableCell>
                         <TableCell className="font-mono text-xs text-primary">{row.sport}</TableCell>
                         <TableCell className="font-bold">
-                          <div className="flex items-center gap-1.5">
-                            {row.playerName}
-                            {proj?.dataQualityScore != null && !isNoPlay && (
-                              <DQBadge score={proj.dataQualityScore} />
-                            )}
+                          <div className="flex items-center gap-2">
+                            <PlayerAvatar name={row.playerName} imageUrl={row.imageUrl} size="sm" />
+                            <div>
+                              <div className="font-bold text-sm leading-tight">{row.playerName}</div>
+                              {proj?.dataQualityScore != null && !isNoPlay && (
+                                <DQBadge score={proj.dataQualityScore} />
+                              )}
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell font-mono text-xs text-muted-foreground">{row.teamAbbr ?? "—"}</TableCell>

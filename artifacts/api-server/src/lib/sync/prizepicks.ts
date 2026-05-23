@@ -41,6 +41,7 @@ export async function syncPpLines(): Promise<number> {
       const sport = (lAttr.name as string) || (pAttr.sport as string) || "Unknown";
       const playerName = (pAttr.name as string) || "Unknown";
       const teamAbbr = ((pAttr.team as string) || "").toUpperCase();
+      const imageUrl = (pAttr.image_url as string | undefined) ?? null;
 
       // Upsert team
       let teamId: number | null = null;
@@ -70,13 +71,17 @@ export async function syncPpLines(): Promise<number> {
           firstName: parts[0] || "",
           lastName: parts.slice(1).join(" ") || "",
           teamId,
+          imageUrl,
           status: "active",
           externalIds: { pp_id: proj.relationships?.new_player?.data?.id },
         }).returning();
-      } else if (teamId && player.teamId !== teamId) {
-        await db.update(playersTable)
-          .set({ teamId, updatedAt: new Date() })
-          .where(eq(playersTable.id, player.id));
+      } else {
+        const updates: Record<string, unknown> = { updatedAt: new Date() };
+        if (teamId && player.teamId !== teamId) updates.teamId = teamId;
+        if (imageUrl && player.imageUrl !== imageUrl) updates.imageUrl = imageUrl;
+        if (Object.keys(updates).length > 1) {
+          await db.update(playersTable).set(updates).where(eq(playersTable.id, player.id));
+        }
       }
 
       // Check for existing active line

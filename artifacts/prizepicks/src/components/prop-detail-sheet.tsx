@@ -11,6 +11,7 @@ import {
   BarChart, Bar, Cell, ReferenceLine,
 } from "recharts";
 import { Plus, Minus, Zap, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Activity, Database, Wind, CloudRain, Shield } from "lucide-react";
+import { PlayerAvatar } from "@/components/ui/player-avatar";
 import { VarianceBadge } from "@/components/ui/variance-badge";
 import { useUserSettings } from "@/hooks/use-user-settings";
 
@@ -206,6 +207,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
         ppLineId,
         playerId: data.player.id,
         playerName: data.player.fullName,
+        imageUrl: data.player.imageUrl ?? null,
         teamAbbr: null,
         statType: data.ppLine.statType,
         lineValue: Number(data.ppLine.lineValue),
@@ -290,7 +292,9 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
             {/* Header */}
             <SheetHeader className="p-5 pb-4 border-b border-slate-800 bg-slate-900/50 shrink-0">
               <div className="flex items-start justify-between">
-                <div>
+                <div className="flex items-start gap-3">
+                  <PlayerAvatar name={data.player.fullName} imageUrl={data.player.imageUrl} size="lg" />
+                  <div>
                   <SheetTitle className="text-xl font-bold">{data.player.fullName}</SheetTitle>
                   <SheetDescription className="flex items-center gap-2 mt-1 font-mono text-xs flex-wrap">
                     <span className="text-muted-foreground">{data.player.sport} · {data.player.position}</span>
@@ -311,6 +315,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
                       <span className="text-slate-400 text-[9px]">SP: {data.game.metadata.homePitcher}</span>
                     )}
                   </SheetDescription>
+                  </div>
                 </div>
                 <div className="flex flex-col items-end gap-1.5">
                   {data.propScore && <ActionTagBadge tag={data.propScore.actionTag} />}

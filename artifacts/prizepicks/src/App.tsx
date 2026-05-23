@@ -65,6 +65,17 @@ function SSEListener() {
       });
     });
 
+    es.addEventListener("injury_alert", (e) => {
+      const data = JSON.parse(e.data) as { playerName: string; status: string; message: string; severity: string };
+      toast({
+        title: `🏥 ${data.playerName} — ${data.status}`,
+        description: data.message,
+        variant: data.severity === "critical" ? "destructive" : "default",
+        duration: 12000,
+      });
+      qc.invalidateQueries({ queryKey: ["injuries"] });
+    });
+
     es.addEventListener("heartbeat", () => { /* keep-alive */ });
 
     return () => es.close();
