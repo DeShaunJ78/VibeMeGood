@@ -1,82 +1,434 @@
-import { useState } from "react";
-import { useListEntries, getListEntriesQueryKey } from "@workspace/api-client-react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useState, useRef } from "react";
+import { useListEntries, getListEntriesQueryKey, useCreateEntry } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock } from "lucide-react";
 import { format } from "date-fns";
 
+const RESULT_STYLES: Record<string, { label: string; className: string }> = {
+  win:     { label: "WIN",     className: "bg-emerald-900/50 text-emerald-300 border-emerald-700/50" },
+  loss:    { label: "LOSS",    className: "bg-rose-900/50 text-rose-300 border-rose-700/50" },
+  partial: { label: "PARTIAL", className: "bg-amber-900/50 text-amber-300 border-amber-700/50" },
+  pending: { label: "PENDING", className: "bg-slate-800 text-slate-400 border-slate-700" },
+  refund:  { label: "REFUND",  className: "bg-slate-800 text-slate-300 border-slate-600" },
+};
+
+const PICK_RESULT_STYLES: Record<string, string> = {
+  hit:     "text-emerald-400",
+  miss:    "text-rose-400",
+  dnp:     "text-amber-400",
+  pending: "text-muted-foreground",
+};
+
+function ResultBadge({ result }: { result: string }) {
+  const s = RESULT_STYLES[result] ?? RESULT_STYLES.pending;
+  return (
+    <Badge className={`font-mono text-[11px] border px-2 py-0.5 rounded-sm ${s.className}`}>
+      {s.label}
+    </Badge>
+  );
+}
+
+function EmotionBadge({ emotion }: { emotion?: string | null }) {
+  if (!emotion) return null;
+  const map: Record<string, string> = {
+    confident: "💪", neutral: "😐", frustrated: "😤", excited: "🔥", anxious: "😰",
+  };
+  return <span className="text-base" title={emotion}>{map[emotion] ?? "🎯"}</span>;
+}
+
+function EntryRow({ entry }: { entry: any }) {
+  const [expanded, setExpanded] = useState(false);
+  const [explaining, setExplaining] = useState(false);
+  const [explainText, setExplainText] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
+
+  const stake = Number(entry.stake);
+  const payout = Number(entry.actualPayout ?? 0);
+  const pnl =
+    entry.result === "win"     ? payout - stake :
+    entry.result === "partial" ? payout - stake :
+    entry.result === "loss"    ? -stake : null;
+
+  async function handleExplain(e: React.MouseEvent) {
+    e.stopPropagation();
+    setExplainText("");
+    setExplaining(true);
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    try {
+      const res = await fetch(`/api/explain/entry/${entry.id}`, {
+        method: "POST",
+        signal: abortRef.current.signal,
+      });
+      const reader = res.body?.getReader();
+      if (!reader) return;
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const p = JSON.parse(line.slice(6));
+              if (p.text) setExplainText(prev => prev + p.text);
+            } catch { /* ignore */ }
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== "AbortError") setExplainText("Analysis failed. Try again.");
+    } finally {
+      setExplaining(false);
+    }
+  }
+
+  return (
+    <div className="bg-slate-950 border border-slate-800 rounded-lg overflow-hidden">
+      <div
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-900/50 transition-colors select-none"
+        onClick={() => setExpanded(v => !v)}
+      >
+        <span className="text-slate-600 shrink-0 w-4">
+          {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </span>
+
+        <span className="w-20 shrink-0 font-mono text-xs text-slate-400">
+          {format(new Date(entry.entryDate), "MMM d")}
+        </span>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Badge variant="outline" className="font-mono text-[10px] border-slate-700 text-slate-300 bg-slate-800/50 px-2 py-0 rounded-sm uppercase">
+            {entry.pickCount}-pick
+          </Badge>
+          <Badge variant="outline" className={`font-mono text-[10px] border px-2 py-0 rounded-sm uppercase ${entry.entryType === "flex" ? "border-emerald-800/60 text-emerald-400 bg-emerald-950/20" : "border-slate-700 text-slate-400 bg-slate-800/30"}`}>
+            {entry.entryType}
+          </Badge>
+        </div>
+
+        <div className="w-32 shrink-0 font-mono text-sm">
+          <span className="text-muted-foreground text-xs">$</span>
+          <span className="font-bold">{stake.toFixed(0)}</span>
+          {entry.potentialPayout && (
+            <span className="text-xs text-muted-foreground ml-1">→ ${Number(entry.potentialPayout).toFixed(0)}</span>
+          )}
+        </div>
+
+        {entry.earlyExitEligible && (
+          <Badge className="bg-indigo-900/40 text-indigo-300 border border-indigo-700/40 font-mono text-[10px] px-1.5 py-0 shrink-0">
+            <Clock className="w-3 h-3 mr-1 inline" />
+            EXIT {entry.earlyExitValue ? `$${Number(entry.earlyExitValue).toFixed(2)}` : ""}
+          </Badge>
+        )}
+
+        <div className="flex-1 min-w-0 text-xs text-slate-400 truncate">
+          {entry.notes}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <EmotionBadge emotion={entry.emotionalState} />
+          {pnl != null && (
+            <span className={`font-mono text-sm font-bold ${pnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+              {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}
+            </span>
+          )}
+          <ResultBadge result={entry.result} />
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="border-t border-slate-800 px-4 py-3 space-y-3">
+          {Array.isArray(entry.picks) && entry.picks.length > 0 && (
+            <div>
+              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Picks</div>
+              <div className="space-y-1">
+                {entry.picks.map((pick: any, i: number) => (
+                  <div key={i} className="flex items-center gap-3 text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-2 rounded">
+                    <span className="text-muted-foreground w-4">{i + 1}</span>
+                    <span className="font-bold w-36 truncate">{pick.playerName ?? `Pick ${i + 1}`}</span>
+                    <span className="text-slate-400 w-20">{pick.statType}</span>
+                    <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${pick.direction === "more" ? "bg-emerald-900/30 text-emerald-400" : "bg-rose-900/30 text-rose-400"}`}>
+                      {pick.direction === "more" ? "↑ MORE" : "↓ LESS"}
+                    </span>
+                    <span className="text-primary font-bold w-10">{pick.lineValue}</span>
+                    {pick.lineType && pick.lineType !== "standard" && (
+                      <Badge className={`text-[10px] px-1 py-0 ${pick.lineType === "demon" ? "bg-fuchsia-900/40 text-fuchsia-300" : "bg-orange-900/40 text-orange-300"}`}>
+                        {pick.lineType}
+                      </Badge>
+                    )}
+                    {pick.yourProjection != null && (
+                      <span className="text-muted-foreground">proj: {Number(pick.yourProjection).toFixed(1)}</span>
+                    )}
+                    <span className={`ml-auto font-bold uppercase ${PICK_RESULT_STYLES[pick.result] ?? "text-muted-foreground"}`}>
+                      {pick.result}
+                    </span>
+                    {pick.clv != null && (
+                      <span className="text-slate-500">CLV: {Number(pick.clv) > 0 ? "+" : ""}{Number(pick.clv).toFixed(2)}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {entry.notes && (
+            <div className="bg-slate-900 border border-slate-800/60 p-3 rounded text-xs text-slate-300">
+              <span className="text-[10px] font-mono text-muted-foreground uppercase block mb-1">Session Notes</span>
+              {entry.notes}
+            </div>
+          )}
+
+          <div className="flex items-start gap-3">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExplain}
+              disabled={explaining}
+              className="font-mono text-xs border-slate-700 bg-slate-900 hover:bg-slate-800 h-7 shrink-0"
+            >
+              <Zap className="w-3 h-3 mr-1.5 text-amber-400" />
+              {explaining ? "Analyzing…" : "AI Entry Analysis"}
+            </Button>
+          </div>
+
+          {(explainText || explaining) && (
+            <div className="bg-slate-900 border border-slate-800 rounded p-3 text-xs font-mono text-slate-300 whitespace-pre-wrap leading-relaxed">
+              {explainText || <span className="animate-pulse text-muted-foreground">▋</span>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NewEntryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { mutateAsync, isPending } = useCreateEntry();
+  const [form, setForm] = useState({
+    entryDate: new Date().toISOString().split("T")[0],
+    entryType: "power",
+    pickCount: "3",
+    stake: "25",
+    potentialPayout: "",
+    actualPayout: "",
+    result: "pending",
+    emotionalState: "",
+    notes: "",
+  });
+
+  function set(field: string, val: string) {
+    setForm(f => ({ ...f, [field]: val }));
+  }
+
+  async function handleSave() {
+    try {
+      await mutateAsync({
+        data: {
+          entryDate: form.entryDate,
+          entryType: form.entryType as any,
+          pickCount: parseInt(form.pickCount),
+          stake: parseFloat(form.stake),
+          potentialPayout: form.potentialPayout ? parseFloat(form.potentialPayout) : null,
+          emotionalState: form.emotionalState || null,
+          notes: form.notes || null,
+        },
+      });
+      await qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
+      toast({ title: "Entry logged", description: `${form.pickCount}-pick ${form.entryType} saved to journal.` });
+      onClose();
+    } catch {
+      toast({ title: "Save failed", variant: "destructive" });
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="bg-slate-900 border-slate-800 text-foreground max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="font-mono text-base">Log New Entry</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 mt-1">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-mono text-muted-foreground uppercase block mb-1">Date</label>
+              <Input type="date" value={form.entryDate} onChange={e => set("entryDate", e.target.value)} className="bg-slate-950 border-slate-800 font-mono text-sm h-8" />
+            </div>
+            <div>
+              <label className="text-[10px] font-mono text-muted-foreground uppercase block mb-1">Result</label>
+              <Select value={form.result} onValueChange={v => set("result", v)}>
+                <SelectTrigger className="bg-slate-950 border-slate-800 font-mono text-sm h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["pending","win","loss","partial","refund"].map(r => (
+                    <SelectItem key={r} value={r} className="font-mono uppercase">{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-[10px] font-mono text-muted-foreground uppercase block mb-1">Type</label>
+              <Select value={form.entryType} onValueChange={v => set("entryType", v)}>
+                <SelectTrigger className="bg-slate-950 border-slate-800 font-mono text-sm h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="power" className="font-mono">Power</SelectItem>
+                  <SelectItem value="flex"  className="font-mono">Flex</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-[10px] font-mono text-muted-foreground uppercase block mb-1">Picks</label>
+              <Select value={form.pickCount} onValueChange={v => set("pickCount", v)}>
+                <SelectTrigger className="bg-slate-950 border-slate-800 font-mono text-sm h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["2","3","4","5","6"].map(n => (
+                    <SelectItem key={n} value={n} className="font-mono">{n}-pick</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-[10px] font-mono text-muted-foreground uppercase block mb-1">Stake ($)</label>
+              <Input value={form.stake} onChange={e => set("stake", e.target.value)} className="bg-slate-950 border-slate-800 font-mono text-sm h-8" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-mono text-muted-foreground uppercase block mb-1">Potential Payout ($)</label>
+              <Input value={form.potentialPayout} onChange={e => set("potentialPayout", e.target.value)} placeholder="—" className="bg-slate-950 border-slate-800 font-mono text-sm h-8" />
+            </div>
+            <div>
+              <label className="text-[10px] font-mono text-muted-foreground uppercase block mb-1">Actual Payout ($)</label>
+              <Input value={form.actualPayout} onChange={e => set("actualPayout", e.target.value)} placeholder="—" className="bg-slate-950 border-slate-800 font-mono text-sm h-8" />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-mono text-muted-foreground uppercase block mb-1">Emotional State</label>
+            <Select value={form.emotionalState} onValueChange={v => set("emotionalState", v)}>
+              <SelectTrigger className="bg-slate-950 border-slate-800 font-mono text-sm h-8">
+                <SelectValue placeholder="Optional…" />
+              </SelectTrigger>
+              <SelectContent>
+                {["confident","neutral","frustrated","excited","anxious"].map(e => (
+                  <SelectItem key={e} value={e} className="font-mono capitalize">{e}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-mono text-muted-foreground uppercase block mb-1">Notes</label>
+            <textarea
+              value={form.notes}
+              onChange={e => set("notes", e.target.value)}
+              placeholder="Reasoning, context, lessons learned…"
+              rows={3}
+              className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm font-mono text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onClose} className="font-mono text-xs border-slate-700 h-8">Cancel</Button>
+            <Button onClick={handleSave} disabled={isPending} className="font-mono text-xs h-8">
+              {isPending ? "Saving…" : "Log Entry"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Journal() {
-  const [search, setSearch] = useState("");
-  
+  const [search, setSearch]   = useState("");
+  const [newOpen, setNewOpen] = useState(false);
+  const qc = useQueryClient();
+
   const { data: entries, isLoading } = useListEntries(
     search ? { search } : undefined,
     { query: { queryKey: getListEntriesQueryKey(search ? { search } : undefined) } }
   );
 
+  const list = entries ?? [];
+  const settled = list.filter((e: any) => e.result !== "pending");
+  const pnl = settled.reduce((sum: number, e: any) => {
+    const p = Number(e.actualPayout ?? 0);
+    const s = Number(e.stake);
+    return sum + (e.result === "win" || e.result === "partial" ? p - s : -s);
+  }, 0);
+  const wins = list.filter((e: any) => e.result === "win").length;
+  const losses = list.filter((e: any) => e.result === "loss").length;
+
   return (
-    <div className="space-y-6 h-full flex flex-col">
+    <div className="space-y-4 h-full flex flex-col">
       <div className="flex items-center justify-between border-b border-border pb-4 shrink-0">
-        <h1 className="text-2xl font-bold tracking-tight">Journal</h1>
-        <div className="relative w-64">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search entries or notes..." 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 bg-slate-900 border-slate-800 font-mono text-sm" 
-          />
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold tracking-tight">Journal</h1>
+          <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
+            <span>{list.length} entries</span>
+            <span>·</span>
+            <span>{wins}W / {losses}L</span>
+            <span>·</span>
+            <span className={`font-bold ${pnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+              {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} P&L
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative w-52">
+            <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search notes…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pl-8 bg-slate-900 border-slate-800 font-mono text-sm h-8"
+            />
+          </div>
+          <Button
+            onClick={() => setNewOpen(true)}
+            className="font-mono text-xs h-8 px-3"
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" /> Log Entry
+          </Button>
         </div>
       </div>
 
-      <div className="flex-1 bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col min-h-0">
-        <div className="overflow-auto flex-1 p-4">
-          {isLoading ? (
-            <div className="space-y-4">
-              {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-16 w-full bg-slate-800" />)}
-            </div>
-          ) : entries?.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-muted-foreground">
-              No entries found.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {entries?.map(entry => (
-                <div key={entry.id} className="bg-slate-950 border border-slate-800 rounded-lg p-4 flex flex-col gap-4">
-                  <div className="flex items-center justify-between border-b border-slate-800/50 pb-3">
-                    <div className="flex items-center gap-4">
-                      <div className="font-mono text-sm text-slate-400">{format(new Date(entry.entryDate), 'MMM d, yyyy')}</div>
-                      <Badge variant="outline" className="bg-slate-800/50 text-slate-300 font-mono rounded-sm px-2">
-                        {entry.pickCount}-Pick {entry.entryType}
-                      </Badge>
-                      <div className="font-mono text-sm"><span className="text-muted-foreground">Stake:</span> ${entry.stake}</div>
-                      {entry.potentialPayout && <div className="font-mono text-sm"><span className="text-muted-foreground">To Win:</span> ${entry.potentialPayout}</div>}
-                    </div>
-                    <div>
-                      <ResultBadge result={entry.result} actualPayout={entry.actualPayout} />
-                    </div>
-                  </div>
-                  {entry.notes && (
-                    <div className="text-sm text-slate-400 bg-slate-900 p-3 rounded border border-slate-800/50">
-                      <span className="font-bold text-xs text-muted-foreground uppercase mr-2">Notes:</span> {entry.notes}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      <div className="flex-1 overflow-auto space-y-2 min-h-0">
+        {isLoading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-14 bg-slate-900 rounded-lg" />
+          ))
+        ) : list.length === 0 ? (
+          <div className="flex items-center justify-center h-48 text-muted-foreground font-mono text-sm">
+            No entries found.
+          </div>
+        ) : (
+          list.map((entry: any) => <EntryRow key={entry.id} entry={entry} />)
+        )}
       </div>
+
+      <NewEntryModal
+        open={newOpen}
+        onClose={() => {
+          setNewOpen(false);
+          qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
+        }}
+      />
     </div>
   );
-}
-
-function ResultBadge({ result, actualPayout }: { result: string, actualPayout: number | null | undefined }) {
-  const r = result.toLowerCase();
-  if (r === 'pending') return <Badge variant="outline" className="text-amber-400 border-amber-400/30">PENDING</Badge>;
-  if (r === 'won') return <Badge variant="outline" className="text-emerald-400 border-emerald-400/30 bg-emerald-400/10 font-bold">WON {actualPayout ? `+$${actualPayout}` : ''}</Badge>;
-  if (r === 'lost') return <Badge variant="outline" className="text-rose-400 border-rose-400/30 bg-rose-400/10">LOST</Badge>;
-  if (r === 'tie' || r === 'push') return <Badge variant="outline" className="text-slate-400 border-slate-400/30">PUSH</Badge>;
-  return <Badge variant="outline">{result}</Badge>;
 }

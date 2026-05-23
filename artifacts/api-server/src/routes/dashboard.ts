@@ -47,12 +47,26 @@ router.get("/dashboard/summary", async (req, res) => {
     const teamMap = Object.fromEntries(allTeams.map(t => [t.id, t]));
     const scoreByLineId = Object.fromEntries(lineScores.map(s => [s.ppLineId, s]));
 
+    // Build game lookup keyed by (homeTeamId, awayTeamId) to find opponent
+    const gamesByTeam: Record<number, typeof todaysGames[0]> = {};
+    for (const g of todaysGames) {
+      gamesByTeam[g.homeTeamId] = g;
+      gamesByTeam[g.awayTeamId] = g;
+    }
+
     // Top PLAY props by final score
     const topPlayProps = activeLines
       .map(line => {
         const score = scoreByLineId[line.id];
         if (!score || score.actionTag !== "PLAY") return null;
         const player = playerMap[line.playerId];
+        const teamId = player?.teamId ?? null;
+        const teamAbbr = teamId ? (teamMap[teamId]?.abbreviation ?? null) : null;
+        const game = teamId ? gamesByTeam[teamId] : null;
+        const opponentTeamId = game
+          ? (game.homeTeamId === teamId ? game.awayTeamId : game.homeTeamId)
+          : null;
+        const opponentAbbr = opponentTeamId ? (teamMap[opponentTeamId]?.abbreviation ?? null) : null;
         return {
           ppLineId: line.id,
           playerName: player?.fullName ?? "Unknown",
@@ -60,6 +74,8 @@ router.get("/dashboard/summary", async (req, res) => {
           statType: line.statType,
           lineValue: Number(line.lineValue),
           lineType: line.lineType,
+          teamAbbr,
+          opponentAbbr,
           finalScore: Number(score.finalScore),
           edgeScore: Number(score.edgeScore),
           actionTag: score.actionTag,
@@ -70,7 +86,8 @@ router.get("/dashboard/summary", async (req, res) => {
       .slice(0, 8);
 
     // Biggest line movements
-    const histByLine: Record<number, typeof allHistory> = {};
+    type HistoryRow = (typeof allHistory)[0];
+    const histByLine: Record<number, HistoryRow[]> = {};
     for (const h of allHistory) {
       if (!histByLine[h.ppLineId]) histByLine[h.ppLineId] = [];
       histByLine[h.ppLineId].push(h);

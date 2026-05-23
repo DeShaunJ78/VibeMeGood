@@ -39,15 +39,16 @@ export default function EntryBuilder() {
     }
     try {
       await createEntry.mutateAsync({
-        entryDate: new Date().toISOString().split("T")[0],
-        entryType: playstyle,
-        pickCount: picks.length,
-        stake: stakeNum.toFixed(2),
-        displayedPayoutMultiplier: multiplier ? String(multiplier) : undefined,
-        potentialPayout: powerPayout ? String(powerPayout) : undefined,
-        result: "pending",
-        notes: notes || undefined,
-      } as any);
+        data: {
+          entryDate: new Date().toISOString().split("T")[0],
+          entryType: playstyle,
+          pickCount: picks.length,
+          stake: stakeNum,
+          displayedPayoutMultiplier: multiplier || null,
+          potentialPayout: powerPayout || null,
+          notes: notes || null,
+        },
+      });
       toast({ title: "Entry logged", description: `${picks.length}-pick ${playstyle} — $${stakeNum} stake saved to journal.` });
       clearPicks();
       setNotes("");
