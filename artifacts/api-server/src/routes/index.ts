@@ -22,6 +22,9 @@ import syncRouter from "./sync";
 import explainRouter from "./explain";
 import anthropicRouter from "./anthropic";
 import marketIntelRouter from "./market-intel";
+import streaksRouter from "./streaks";
+import clvRouter from "./clv";
+import matchupRouter from "./matchup";
 
 const router: IRouter = Router();
 
@@ -48,5 +51,8 @@ router.use(syncRouter);
 router.use(explainRouter);
 router.use(anthropicRouter);
 router.use(marketIntelRouter);
+router.use(streaksRouter);
+router.use(clvRouter);
+router.use(matchupRouter);
 
 export default router;

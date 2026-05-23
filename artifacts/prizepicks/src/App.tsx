@@ -13,6 +13,10 @@ import Journal from "@/pages/journal";
 import Review from "@/pages/review";
 import Settings from "@/pages/settings";
 import AiChat from "@/pages/ai-chat";
+import Streaks from "@/pages/streaks";
+import Clv from "@/pages/clv";
+import Matchup from "@/pages/matchup";
+import Guide from "@/pages/guide";
 import { EntryProvider } from "@/lib/entry-context";
 
 const queryClient = new QueryClient();
@@ -53,6 +57,10 @@ function Router() {
         <Route path="/journal" component={Journal} />
         <Route path="/review" component={Review} />
         <Route path="/ai-chat" component={AiChat} />
+        <Route path="/streaks" component={Streaks} />
+        <Route path="/clv" component={Clv} />
+        <Route path="/matchup" component={Matchup} />
+        <Route path="/guide" component={Guide} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>

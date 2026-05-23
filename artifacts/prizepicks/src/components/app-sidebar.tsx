@@ -8,6 +8,10 @@ import {
   LineChart,
   ListPlus,
   Bot,
+  Flame,
+  TrendingUp,
+  Swords,
+  HelpCircle,
 } from "lucide-react";
 import {
   Sidebar,
@@ -32,6 +36,16 @@ const NAV_ITEMS = [
   { title: "Journal", url: "/journal", icon: BookOpen },
   { title: "Review", url: "/review", icon: LineChart },
   { title: "AI Analyst", url: "/ai-chat", icon: Bot },
+];
+
+const INTEL_ITEMS = [
+  { title: "Streak Tracker", url: "/streaks", icon: Flame },
+  { title: "CLV Tracker", url: "/clv", icon: TrendingUp },
+  { title: "Matchup Analysis", url: "/matchup", icon: Swords },
+  { title: "User Guide", url: "/guide", icon: HelpCircle },
+];
+
+const BOTTOM_ITEMS = [
   { title: "Settings", url: "/settings", icon: SettingsIcon },
 ];
 
@@ -87,6 +101,67 @@ export function AppSidebar() {
                             {picks.length}
                           </span>
                         )}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          {!isCollapsed && (
+            <SidebarGroupLabel className="text-xs uppercase font-mono text-muted-foreground tracking-wider mb-2">
+              Intelligence
+            </SidebarGroupLabel>
+          )}
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {INTEL_ITEMS.map((item) => {
+                const isActive = location === item.url;
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      tooltip={item.title}
+                      className={cn(
+                        "transition-colors",
+                        isActive ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-slate-800/50"
+                      )}
+                    >
+                      <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup className="mt-auto">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {BOTTOM_ITEMS.map((item) => {
+                const isActive = location === item.url;
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      tooltip={item.title}
+                      className={cn(
+                        "transition-colors",
+                        isActive ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-slate-800/50"
+                      )}
+                    >
+                      <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                        <item.icon />
+                        <span>{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
