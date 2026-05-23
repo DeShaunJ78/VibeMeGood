@@ -10,7 +10,9 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, ReferenceLine,
 } from "recharts";
-import { Plus, Minus, Zap, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Activity, Database, Wind, CloudRain } from "lucide-react";
+import { Plus, Minus, Zap, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Activity, Database, Wind, CloudRain, Shield } from "lucide-react";
+import { VarianceBadge } from "@/components/ui/variance-badge";
+import { useUserSettings } from "@/hooks/use-user-settings";
 
 interface PropDetailSheetProps {
   ppLineId: number | null;
@@ -67,23 +69,129 @@ function confidenceBadgeClass(conf: string | null): string {
   }
 }
 
+type VarianceData = {
+  volatilityRating: string | null;
+  blowoutRisk: number | null;
+  fatigueScore: number | null;
+  usageScore: number | null;
+  matchupScore: number | null;
+  evModifier: string | null;
+  warnings: string[] | null;
+  whyItMoves: string | null;
+};
+
+function WhyThisEdgePanel({ variance }: { variance: VarianceData }) {
+  const SIGNAL_LABELS: Record<string, { label: string; emoji: string; getColor: (v: number) => string }> = {
+    fatigue: {
+      label: "Fatigue",
+      emoji: "🔋",
+      getColor: v => v >= 60 ? "text-rose-400" : v >= 35 ? "text-amber-400" : "text-emerald-400",
+    },
+    blowout: {
+      label: "Blowout Risk",
+      emoji: "💥",
+      getColor: v => v >= 40 ? "text-rose-400" : v >= 25 ? "text-amber-400" : "text-emerald-400",
+    },
+    usage: {
+      label: "Usage Score",
+      emoji: "📈",
+      getColor: v => v >= 70 ? "text-violet-400" : v >= 45 ? "text-slate-300" : "text-orange-400",
+    },
+    matchup: {
+      label: "Matchup",
+      emoji: "⚔️",
+      getColor: v => v >= 65 ? "text-emerald-400" : v >= 45 ? "text-slate-300" : "text-rose-400",
+    },
+  };
+
+  const scores = [
+    { key: "fatigue",  value: variance.fatigueScore },
+    { key: "blowout",  value: variance.blowoutRisk },
+    { key: "usage",    value: variance.usageScore },
+    { key: "matchup",  value: variance.matchupScore },
+  ].filter(s => s.value != null) as { key: string; value: number }[];
+
+  const evMod = variance.evModifier ? parseFloat(variance.evModifier) : 0;
+
+  return (
+    <div className="px-5 py-4 border-b border-slate-800/50">
+      <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+        <Shield className="w-3 h-3" /> Why This Edge Exists
+        <VarianceBadge rating={variance.volatilityRating} size="xs" className="ml-auto" />
+      </div>
+
+      {variance.whyItMoves && (
+        <p className="text-xs text-slate-300 mb-3 leading-relaxed">{variance.whyItMoves}</p>
+      )}
+
+      {scores.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          {scores.map(({ key, value }) => {
+            const cfg = SIGNAL_LABELS[key];
+            if (!cfg) return null;
+            return (
+              <div key={key} className="bg-slate-900 border border-slate-800 rounded px-2.5 py-2">
+                <div className="text-[10px] text-muted-foreground font-mono">{cfg.emoji} {cfg.label}</div>
+                <div className={`text-sm font-mono font-bold mt-0.5 ${cfg.getColor(value)}`}>{value}/100</div>
+                <div className="h-1 bg-slate-800 rounded-full mt-1.5 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${cfg.getColor(value).replace("text-", "bg-")}`}
+                    style={{ width: `${Math.max(2, value)}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {Math.abs(evMod) >= 0.01 && (
+        <div className={`text-[11px] font-mono flex items-center gap-1.5 ${evMod > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+          <TrendingUp className="w-3 h-3" />
+          EV modifier: {evMod > 0 ? "+" : ""}{(evMod * 100).toFixed(0)}% (capped ±15%)
+        </div>
+      )}
+
+      {variance.warnings && variance.warnings.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {variance.warnings.map(w => (
+            <span key={w} className="text-[10px] font-mono bg-rose-900/30 text-rose-300 border border-rose-700/30 px-1.5 py-0.5 rounded">
+              ⚠ {w.replace(/_/g, " ")}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailSheetProps) {
   const [data, setData] = useState<PropDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [explainText, setExplainText] = useState<string>("");
   const [explaining, setExplaining] = useState(false);
   const [direction, setDirection] = useState<"more" | "less">("more");
+  const [variance, setVariance] = useState<VarianceData | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const { addPick, removePick, hasPick, updateDirection } = useEntry();
+  const { data: userSettings } = useUserSettings();
 
   useEffect(() => {
     if (!ppLineId || !open) return;
     setData(null);
     setExplainText("");
     setLoading(true);
-    fetch(`/api/slate/${ppLineId}`)
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    setVariance(null);
+    fetch(`${base}/api/slate/${ppLineId}`)
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
+      .then(d => {
+        setData(d);
+        setLoading(false);
+        return fetch(`${base}/api/variance/${ppLineId}`);
+      })
+      .then(r => r?.ok ? r.json() : null)
+      .then(v => { if (v) setVariance(v); })
       .catch(() => setLoading(false));
   }, [ppLineId, open]);
 
@@ -463,6 +571,11 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
                     )}
                   </div>
                 </div>
+              )}
+
+              {/* Variance Intelligence — Why This Edge Exists */}
+              {userSettings?.varianceIntelEnabled && variance && (
+                <WhyThisEdgePanel variance={variance} />
               )}
 
               {/* AI Explain */}

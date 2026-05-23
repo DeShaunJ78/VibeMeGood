@@ -20,6 +20,17 @@ export const userSettingsTable = pgTable("user_settings", {
   minEdgeToPlay: numeric("min_edge_to_play").default("4"),
   aiModel: varchar("ai_model", { length: 100 }).default("claude-sonnet-4-20250514"),
   excludedSports: jsonb("excluded_sports").default([]),
+  varianceIntelEnabled: boolean("variance_intel_enabled").default(false),
+  varianceSignals: jsonb("variance_signals").default({
+    fatigue: true, environment: true, usage: true,
+    matchup: true, narrative: false, referee: false,
+  }),
+  varianceModes: jsonb("variance_modes").default({
+    aggressiveWeighting: false, stablePicksOnly: false,
+    ceilingHunterMode: false, excludeHighVolatility: false,
+  }),
+  experimentalLabEnabled: boolean("experimental_lab_enabled").default(false),
+  experimentalLabAcknowledged: boolean("experimental_lab_acknowledged").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (t) => ({

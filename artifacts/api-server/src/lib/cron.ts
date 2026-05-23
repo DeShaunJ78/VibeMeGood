@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { dataPullLogsTable, alertsTable, ppLinesTable, propScoresTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { logger } from "./logger";
+import { computeAllVarianceScores } from "./variance";
 
 async function logPull(provider: string, jobName: string, fn: () => Promise<number>) {
   const [log] = await db.insert(dataPullLogsTable).values({
@@ -68,6 +69,11 @@ export function startCronJobs() {
     await logPull("projections", "daily-projections", async () => {
       return 0;
     });
+  });
+
+  // Variance scores — runs after projections at 6:30 AM
+  cron.schedule("30 6 * * *", async () => {
+    await logPull("internal", "variance-scores", computeAllVarianceScores);
   });
 
   // Alert: stale data warning — check every hour if pp-lines haven't been updated in 2h

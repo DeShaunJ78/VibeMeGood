@@ -12,6 +12,10 @@ import {
   TrendingUp,
   Swords,
   HelpCircle,
+  Shield,
+  Battery,
+  Wind,
+  FlaskConical,
 } from "lucide-react";
 import {
   Sidebar,
@@ -27,6 +31,7 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { useEntry } from "@/lib/entry-context";
+import { useUserSettings } from "@/hooks/use-user-settings";
 
 const NAV_ITEMS = [
   { title: "Command Center", url: "/", icon: LayoutDashboard },
@@ -49,11 +54,20 @@ const BOTTOM_ITEMS = [
   { title: "Settings", url: "/settings", icon: SettingsIcon },
 ];
 
+const VARIANCE_ITEMS = [
+  { title: "Stability Radar",  url: "/variance/stability",    icon: Shield },
+  { title: "Fatigue Tracker",  url: "/variance/fatigue",      icon: Battery },
+  { title: "Environment Board",url: "/variance/environment",  icon: Wind },
+  { title: "Usage Signals",    url: "/variance/usage",        icon: Activity },
+  { title: "Experimental Lab", url: "/variance/lab",          icon: FlaskConical, isLab: true },
+];
+
 export function AppSidebar() {
   const [location] = useLocation();
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
   const { picks } = useEntry();
+  const { data: userSettings } = useUserSettings();
 
   return (
     <Sidebar variant="sidebar" collapsible="icon">
@@ -142,6 +156,44 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {userSettings?.varianceIntelEnabled && (
+          <SidebarGroup>
+            {!isCollapsed && (
+              <SidebarGroupLabel className="text-xs uppercase font-mono text-muted-foreground tracking-wider mb-2">
+                Variance Intel
+              </SidebarGroupLabel>
+            )}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {VARIANCE_ITEMS.filter(item => !item.isLab || userSettings.experimentalLabEnabled).map(item => {
+                  const isActive = location === item.url;
+                  return (
+                    <SidebarMenuItem key={item.url}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        tooltip={item.title}
+                        className={cn(
+                          "transition-colors",
+                          isActive ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-slate-800/50"
+                        )}
+                      >
+                        <Link href={item.url}>
+                          <item.icon className="w-4 h-4" />
+                          <span>{item.title}</span>
+                          {item.isLab && !isCollapsed && (
+                            <span className="ml-auto text-[9px] font-mono bg-amber-900/40 text-amber-400 border border-amber-700/50 px-1 py-0.5 rounded">LAB</span>
+                          )}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         <SidebarGroup className="mt-auto">
           <SidebarGroupContent>

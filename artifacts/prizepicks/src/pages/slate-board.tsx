@@ -18,6 +18,8 @@ import { TeamPicksBoard } from "@/components/team-picks-board";
 import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useEntry, type EntryPick } from "@/lib/entry-context";
+import { VarianceBadge } from "@/components/ui/variance-badge";
+import { useUserSettings } from "@/hooks/use-user-settings";
 
 type OurProjection = {
   value: number;
@@ -53,6 +55,17 @@ type MarketIntelRow = {
   streak: { count: number; type: string | null } | null;
   recentMoves: { book: string; from: unknown; to: unknown; direction: string | null; at: unknown }[];
   scoring: Record<string, unknown> | null;
+  variance: {
+    volatilityRating: string | null;
+    blowoutRisk: number | null;
+    fatigueScore: number | null;
+    usageScore: number | null;
+    matchupScore: number | null;
+    environmentScore: number | null;
+    warnings: string[] | null;
+    evModifier: unknown;
+    whyItMoves: string | null;
+  } | null;
 };
 
 function useMarketIntel(params: Record<string, string | undefined>) {
@@ -195,6 +208,8 @@ interface OptResult {
 }
 
 export default function SlateBoard() {
+  const { data: userSettings } = useUserSettings();
+  const varianceEnabled = userSettings?.varianceIntelEnabled ?? false;
   const [tab, setTab] = useState<"player" | "team">("player");
   const [sport, setSport] = useState<string>("all");
   const [lineTypeFilter, setLineTypeFilter] = useState<string>("all");
@@ -241,6 +256,7 @@ export default function SlateBoard() {
       streak: mi?.streak ?? null,
       recentMoves: mi?.recentMoves ?? [],
       scoring: mi?.scoring ?? null,
+      variance: mi?.variance ?? null,
     };
   });
 
@@ -272,6 +288,7 @@ export default function SlateBoard() {
       streak: mi.streak,
       recentMoves: mi.recentMoves,
       scoring: mi.scoring,
+      variance: mi.variance ?? null,
     }));
 
   const allRows = [...mergedRows, ...miOnlyRows];
@@ -460,20 +477,21 @@ export default function SlateBoard() {
                   <TableHead className="w-20 font-mono text-xs text-center">P(Over)</TableHead>
                   <TableHead className="w-14 font-mono text-xs text-center">Streak</TableHead>
                   <TableHead className="w-24 font-mono text-xs text-center">Action</TableHead>
+                  {varianceEnabled && <TableHead className="w-22 font-mono text-xs text-center">Volatility</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   Array.from({ length: 10 }).map((_, i) => (
                     <TableRow key={i} className="border-slate-800">
-                      {Array.from({ length: 14 }).map((_, j) => (
+                      {Array.from({ length: varianceEnabled ? 15 : 14 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full bg-slate-800" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : playerRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="h-48 text-center text-muted-foreground font-mono">
+                    <TableCell colSpan={varianceEnabled ? 15 : 14} className="h-48 text-center text-muted-foreground font-mono">
                       No props — click Force Sync to load live slate
                     </TableCell>
                   </TableRow>
@@ -580,6 +598,28 @@ export default function SlateBoard() {
                             <ActionTagBadge tag={row.actionTag} />
                           )}
                         </TableCell>
+
+                        {/* Variance Volatility Badge */}
+                        {varianceEnabled && (
+                          <TableCell className="text-center">
+                            {row.variance?.volatilityRating ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex justify-center cursor-help">
+                                    <VarianceBadge rating={row.variance.volatilityRating} size="xs" />
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="font-mono text-xs max-w-xs">
+                                  {row.variance.whyItMoves && <p className="mb-1">{row.variance.whyItMoves}</p>}
+                                  {row.variance.fatigueScore != null && <p className="text-slate-400">Fatigue: {row.variance.fatigueScore}/100</p>}
+                                  {row.variance.blowoutRisk != null && <p className="text-slate-400">Blowout risk: {row.variance.blowoutRisk}%</p>}
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <span className="text-slate-600 text-xs">—</span>
+                            )}
+                          </TableCell>
+                        )}
                       </TableRow>
                     );
                   })

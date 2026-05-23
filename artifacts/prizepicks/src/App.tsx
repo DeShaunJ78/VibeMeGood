@@ -18,6 +18,11 @@ import Streaks from "@/pages/streaks";
 import Clv from "@/pages/clv";
 import Matchup from "@/pages/matchup";
 import Guide from "@/pages/guide";
+import StabilityRadar from "@/pages/variance/stability";
+import FatigueTracker from "@/pages/variance/fatigue";
+import EnvironmentBoard from "@/pages/variance/environment";
+import UsageSignals from "@/pages/variance/usage";
+import ExperimentalLab from "@/pages/variance/lab";
 import { EntryProvider } from "@/lib/entry-context";
 
 const queryClient = new QueryClient();
@@ -84,6 +89,11 @@ function Router() {
         <Route path="/matchup" component={Matchup} />
         <Route path="/guide" component={Guide} />
         <Route path="/settings" component={Settings} />
+        <Route path="/variance/stability" component={StabilityRadar} />
+        <Route path="/variance/fatigue" component={FatigueTracker} />
+        <Route path="/variance/environment" component={EnvironmentBoard} />
+        <Route path="/variance/usage" component={UsageSignals} />
+        <Route path="/variance/lab" component={ExperimentalLab} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

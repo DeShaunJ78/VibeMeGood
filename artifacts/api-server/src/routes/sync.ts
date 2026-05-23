@@ -8,6 +8,7 @@ import { syncPpLines } from "../lib/sync/prizepicks";
 import { syncExternalOdds, recalcPropScores } from "../lib/sync/external-odds";
 import { computeAllProjections } from "../lib/projection/compute";
 import { computeStreaks } from "../lib/sync/streaks";
+import { computeAllVarianceScores } from "../lib/variance";
 
 const router = Router();
 
@@ -105,6 +106,7 @@ router.post("/sync/all", async (req, res) => {
   const jobs: Array<{ name: string; provider: string; fn: () => Promise<number> }> = [
     { name: "pp-lines", provider: "prizepicks", fn: syncPpLines },
     { name: "external-odds", provider: "the-odds-api", fn: syncExternalOdds },
+    { name: "variance", provider: "internal", fn: computeAllVarianceScores },
   ];
 
   for (const job of jobs) {

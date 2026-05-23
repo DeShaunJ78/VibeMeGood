@@ -3,7 +3,8 @@ import { db } from "@workspace/db";
 import {
   ppLinesTable, playersTable, gamesTable, propScoresTable,
   projectionsTable, externalLinesTable, injuriesTable,
-  lineupConfirmationsTable, entriesTable, entryPicksTable
+  lineupConfirmationsTable, entriesTable, entryPicksTable,
+  varianceScoresTable,
 } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
@@ -58,6 +59,16 @@ router.post("/explain/prop/:id", async (req: Request, res: Response): Promise<vo
     const game = line.gameId
       ? (await db.select().from(gamesTable).where(eq(gamesTable.id, line.gameId)))[0] ?? null
       : null;
+    const [varScore] = await db.select({
+      whyItMoves: varianceScoresTable.whyItMoves,
+      fatigueScore: varianceScoresTable.fatigueScore,
+      blowoutRisk: varianceScoresTable.blowoutRisk,
+      usageScore: varianceScoresTable.usageScore,
+      matchupScore: varianceScoresTable.matchupScore,
+      volatilityRating: varianceScoresTable.volatilityRating,
+      warnings: varianceScoresTable.warnings,
+      evModifier: varianceScoresTable.evModifier,
+    }).from(varianceScoresTable).where(eq(varianceScoresTable.ppLineId, lineId));
     const lineupConfs = line.gameId
       ? await db.select().from(lineupConfirmationsTable)
           .where(and(eq(lineupConfirmationsTable.playerId, line.playerId), eq(lineupConfirmationsTable.gameId, line.gameId)))
@@ -67,6 +78,16 @@ router.post("/explain/prop/:id", async (req: Request, res: Response): Promise<vo
       player: { name: player?.fullName, sport: player?.sport, position: player?.position, status: player?.status },
       prop: { statType: line.statType, lineValue: Number(line.lineValue), lineType: line.lineType, directionality: line.directionalityType },
       game: game ? { startTime: game.startTime, sport: game.sport, spread: game.spread, total: game.total } : null,
+      variance: varScore ? {
+        whyItMoves: varScore.whyItMoves,
+        volatilityRating: varScore.volatilityRating,
+        fatigueScore: varScore.fatigueScore,
+        blowoutRisk: varScore.blowoutRisk,
+        usageScore: varScore.usageScore,
+        matchupScore: varScore.matchupScore,
+        evModifier: varScore.evModifier,
+        warnings: varScore.warnings,
+      } : null,
       scores: score ? {
         edge: Number(score.edgeScore), stability: Number(score.stabilityScore),
         marketSupport: Number(score.marketSupportScore), risk: Number(score.riskScore),
@@ -92,16 +113,20 @@ router.post("/explain/prop/:id", async (req: Request, res: Response): Promise<vo
       } : null,
     };
 
+    const varianceSection = varScore?.whyItMoves
+      ? `\n\nVariance context: ${varScore.whyItMoves}${varScore.warnings && Array.isArray(varScore.warnings) && varScore.warnings.length > 0 ? ` Warnings: ${(varScore.warnings as string[]).join(", ")}.` : ""}${varScore.evModifier && varScore.evModifier !== "0" ? ` EV modifier applied: ${(parseFloat(varScore.evModifier.toString()) * 100).toFixed(0)}%.` : ""}`
+      : "";
+
     const prompt = `You are an expert sports analytics AI helping a private analyst understand a PrizePicks prop.
 
 Here is the full data context for this prop:
-${JSON.stringify(context, null, 2)}
+${JSON.stringify(context, null, 2)}${varianceSection}
 
 Provide a concise but thorough analysis of this prop. Cover:
 1. The edge and why it exists (or doesn't)
 2. Key data points supporting or undermining the play
-3. Risk factors (injuries, lineup, variance, lineType implications)
-4. Your overall assessment and suggested direction (More/Less)
+3. Risk factors (injuries, lineup, variance, lineType implications)${varScore ? "\n4. Contextual variance factors (fatigue, blowout risk, usage trends)" : ""}
+${varScore ? "5." : "4."} Your overall assessment and suggested direction (More/Less)
 
 Be direct and analytical. No filler. This is a private tool for someone who knows what they're doing.`;
 

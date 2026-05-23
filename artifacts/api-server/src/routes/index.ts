@@ -26,6 +26,8 @@ import streaksRouter from "./streaks";
 import clvRouter from "./clv";
 import matchupRouter from "./matchup";
 import debugRouter from "./debug";
+import varianceRouter from "./variance";
+import userSettingsRouter from "./user-settings";
 
 const router: IRouter = Router();
 
@@ -56,5 +58,7 @@ router.use(streaksRouter);
 router.use(clvRouter);
 router.use(matchupRouter);
 router.use(debugRouter);
+router.use(varianceRouter);
+router.use(userSettingsRouter);
 
 export default router;

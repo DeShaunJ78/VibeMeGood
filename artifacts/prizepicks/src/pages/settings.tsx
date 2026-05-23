@@ -5,9 +5,159 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock } from "lucide-react";
+import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { useUserSettings, useUpdateUserSettings, type UserSettings } from "@/hooks/use-user-settings";
+
+const SIGNAL_TOGGLES = [
+  { key: "fatigue",     label: "Fatigue & Rest Modeling", desc: "Back-to-backs, distance, timezone shift" },
+  { key: "environment", label: "Game Environment",        desc: "Blowout probability, spread, game total" },
+  { key: "usage",       label: "Role & Usage Trends",     desc: "Minutes trend, usage spike / drop" },
+  { key: "matchup",     label: "Matchup Depth",           desc: "Historical vs opponent, over rate" },
+  { key: "narrative",   label: "Narrative Context",       desc: "Low weight — revenge, national TV, playoffs" },
+  { key: "referee",     label: "Referee Modeling",        desc: "Foul rate, pace factor (requires opt-in)" },
+];
+
+const MODE_TOGGLES = [
+  { key: "aggressiveWeighting", label: "Aggressive Variance Weighting", desc: "Doubles validated signal weights. High-risk." },
+  { key: "stablePicksOnly",     label: "Stable Picks Mode",            desc: "Only show props with stable volatility rating." },
+  { key: "ceilingHunterMode",   label: "Ceiling Hunter Mode",          desc: "Prioritize usage spikes and elevated environments." },
+  { key: "excludeHighVolatility", label: "Exclude High Volatility",    desc: "Remove boom/bust and volatile props from optimizer." },
+];
+
+function VarianceIntelSection({ settings, onUpdate }: { settings: UserSettings; onUpdate: (patch: Partial<UserSettings>) => void }) {
+  const [showExpLab, setShowExpLab] = useState(false);
+  const signals = (settings.varianceSignals ?? {}) as Record<string, boolean>;
+  const modes = (settings.varianceModes ?? {}) as Record<string, boolean>;
+
+  return (
+    <Card className="bg-slate-900 border-slate-800">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Brain className="w-4 h-4 text-primary" /> Variance Intelligence
+        </CardTitle>
+        <CardDescription>
+          Contextual signals layered on top of every prop. When OFF, the app behaves exactly as before — no variance signals appear anywhere.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {/* Master toggle */}
+        <div className="flex items-center justify-between p-4 bg-slate-950 border border-slate-700 rounded-lg">
+          <div>
+            <div className="font-semibold text-sm">Enable Variance Intelligence</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              Adds fatigue, blowout risk, usage trends, and matchup depth to every prop.
+            </div>
+          </div>
+          <Switch
+            checked={settings.varianceIntelEnabled ?? false}
+            onCheckedChange={v => onUpdate({ varianceIntelEnabled: v })}
+          />
+        </div>
+
+        {settings.varianceIntelEnabled && (
+          <div className="space-y-5 pl-4 border-l-2 border-primary/20">
+            {/* Signal sub-toggles */}
+            <div>
+              <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">Active Signals</div>
+              <div className="space-y-3">
+                {SIGNAL_TOGGLES.map(({ key, label, desc }) => (
+                  <div key={key} className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm text-foreground">{label}</div>
+                      <div className="text-xs text-muted-foreground">{desc}</div>
+                    </div>
+                    <Switch
+                      checked={signals[key] ?? false}
+                      onCheckedChange={v => onUpdate({ varianceSignals: { ...signals, [key]: v } as UserSettings["varianceSignals"] })}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Optimizer modes */}
+            <div>
+              <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">Optimizer Modes</div>
+              <div className="space-y-3">
+                {MODE_TOGGLES.map(({ key, label, desc }) => (
+                  <div key={key} className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm text-foreground">{label}</div>
+                      <div className="text-xs text-muted-foreground">{desc}</div>
+                    </div>
+                    <Switch
+                      checked={modes[key] ?? false}
+                      onCheckedChange={v => onUpdate({ varianceModes: { ...modes, [key]: v } as UserSettings["varianceModes"] })}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Experimental Lab */}
+            <div className="p-4 bg-amber-950/30 border border-amber-700/40 rounded-lg">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-amber-300 flex items-center gap-2">
+                    <FlaskConical className="w-4 h-4" />
+                    Experimental Signals Lab
+                    <span className="text-[10px] font-mono bg-amber-900/50 text-amber-400 border border-amber-700/50 px-1.5 py-0.5 rounded uppercase tracking-widest">LAB</span>
+                  </div>
+                  <div className="text-xs text-amber-200/60 mt-1">
+                    Birthday games, new shoes, haircut trends. Entertainment only. <strong className="text-amber-300">Never</strong> touches EV calculations.
+                  </div>
+                </div>
+                <Switch
+                  checked={settings.experimentalLabEnabled ?? false}
+                  onCheckedChange={v => {
+                    if (v && !settings.experimentalLabAcknowledged) {
+                      setShowExpLab(true);
+                    } else {
+                      onUpdate({ experimentalLabEnabled: v });
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+
+      <AlertDialog open={showExpLab} onOpenChange={setShowExpLab}>
+        <AlertDialogContent className="bg-slate-900 border-slate-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-mono text-amber-300 flex items-center gap-2">
+              <FlaskConical className="w-4 h-4" /> Experimental Signals Lab
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400 space-y-2">
+              <p>The Experimental Lab contains signals with <strong className="text-foreground">no statistical validation</strong>.</p>
+              <p>These include: birthday games, new shoes, haircut patterns, social media activity.</p>
+              <p><strong className="text-amber-300">These signals will NEVER influence EV calculations, optimizer recommendations, or probability scores.</strong></p>
+              <p>Enable this if you want to track and explore unverified patterns for your own curiosity.</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Off</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => onUpdate({ experimentalLabEnabled: true, experimentalLabAcknowledged: true })}
+              className="bg-amber-800 hover:bg-amber-700 text-amber-100"
+            >
+              I Understand — Enable Lab
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
 
 const SYNC_JOBS = [
   { label: "PrizePicks Lines",   endpoint: "/api/sync/pp-lines" },
@@ -29,6 +179,8 @@ export default function Settings() {
   const qc = useQueryClient();
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncingJob, setSyncingJob] = useState<string | null>(null);
+  const { data: userSettings } = useUserSettings();
+  const updateSettings = useUpdateUserSettings();
 
   const { data, isLoading, refetch } = useGetDataHealth({
     query: { queryKey: getGetDataHealthQueryKey() },
@@ -94,6 +246,13 @@ export default function Settings() {
           </Button>
         </div>
       </div>
+
+      {userSettings && (
+        <VarianceIntelSection
+          settings={userSettings}
+          onUpdate={patch => updateSettings.mutate(patch)}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Manual sync controls */}

@@ -29,3 +29,7 @@ export * from "./behavioral-logs";
 export * from "./line-move-events";
 export * from "./sync-runs";
 export * from "./player-game-logs";
+export * from "./variance-scores";
+export * from "./fatigue-data";
+export * from "./referee-data";
+export * from "./experimental-signals";

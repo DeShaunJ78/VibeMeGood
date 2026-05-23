@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import {
   ppLinesTable, externalLinesTable, propScoresTable, playersTable,
   ourProjectionsTable, playerStreaksTable, lineMoveEventsTable, syncRunsTable,
+  varianceScoresTable,
 } from "@workspace/db/schema";
 import { eq, and, or, isNull, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -95,6 +96,18 @@ router.get("/market-intel", async (req, res) => {
           .orderBy(desc(lineMoveEventsTable.capturedAt))
           .limit(5);
 
+        const [varScore] = await db.select({
+          volatilityRating: varianceScoresTable.volatilityRating,
+          blowoutRisk: varianceScoresTable.blowoutRisk,
+          fatigueScore: varianceScoresTable.fatigueScore,
+          usageScore: varianceScoresTable.usageScore,
+          matchupScore: varianceScoresTable.matchupScore,
+          environmentScore: varianceScoresTable.environmentScore,
+          warnings: varianceScoresTable.warnings,
+          evModifier: varianceScoresTable.evModifier,
+          whyItMoves: varianceScoresTable.whyItMoves,
+        }).from(varianceScoresTable).where(eq(varianceScoresTable.ppLineId, row.line.id));
+
         // Projection distribution — full output
         const proj = row.proj;
         const noPlayReason = proj?.noPlayReason ?? null;
@@ -168,6 +181,19 @@ router.get("/market-intel", async (req, res) => {
 
           // Full reasoning for explainability
           scoring: scoreReasoning,
+
+          // Variance Intelligence (null when varianceIntelEnabled=false or not computed yet)
+          variance: varScore ? {
+            volatilityRating: varScore.volatilityRating,
+            blowoutRisk: varScore.blowoutRisk,
+            fatigueScore: varScore.fatigueScore,
+            usageScore: varScore.usageScore,
+            matchupScore: varScore.matchupScore,
+            environmentScore: varScore.environmentScore,
+            warnings: varScore.warnings as string[] | null,
+            evModifier: varScore.evModifier,
+            whyItMoves: varScore.whyItMoves,
+          } : null,
         };
       }),
     );
