@@ -176,6 +176,45 @@ router.get("/dashboard/summary", async (req, res) => {
       ? playProjections.reduce((sum, p) => sum + parseFloat(p.pOver!.toString()), 0) / playProjections.length
       : null;
 
+    // Top picks by model pOver (all qualified, sorted by confidence)
+    const projLookup = new Map(
+      modelProjections.map(p => [`${p.playerId}:${p.statType}`, p])
+    );
+    const topProjProps = activeLines
+      .filter(l => !l.pickCategory || l.pickCategory === "player")
+      .map(line => {
+        const proj = projLookup.get(`${line.playerId}:${line.statType}`);
+        if (!proj?.pOver) return null;
+        const pOverPct = Math.round(parseFloat(proj.pOver.toString()) * 10) / 10;
+        const player = playerMap[line.playerId];
+        const teamId = player?.teamId ?? null;
+        const teamAbbr = teamId ? (teamMap[teamId]?.abbreviation ?? null) : null;
+        const game = teamId ? gamesByTeam[teamId] : null;
+        const opponentTeamId = game
+          ? (game.homeTeamId === teamId ? game.awayTeamId : game.homeTeamId)
+          : null;
+        const opponentAbbr = opponentTeamId ? (teamMap[opponentTeamId]?.abbreviation ?? null) : null;
+        const score = scoreByLineId[line.id];
+        return {
+          ppLineId: line.id,
+          playerName: player?.fullName ?? "Unknown",
+          sport: player?.sport ?? "unknown",
+          statType: line.statType,
+          lineValue: Number(line.lineValue),
+          lineType: line.lineType,
+          teamAbbr,
+          opponentAbbr,
+          pOver: pOverPct,
+          edgeScore: score ? Number(score.edgeScore) : null,
+          actionTag: score?.actionTag ?? null,
+          isGated: !!proj.noPlayReason,
+          noPlayReason: proj.noPlayReason,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b?.pOver ?? 0) - (a?.pOver ?? 0))
+      .slice(0, 6);
+
     const dataFreshness = {
       ppLines: activeLines.length > 0 ? Math.min(...activeLines.map(l => l.updatedAt.getTime())) : null,
       injuries: recentInjuries.length > 0 ? recentInjuries[0].reportedAt.getTime() : null,
@@ -186,6 +225,7 @@ router.get("/dashboard/summary", async (req, res) => {
       topInjuries: enrichedInjuries,
       biggestLineMovements: lineMovements,
       topPlayProps,
+      topProjProps,
       watchlistCount: Number(watchlistCountResult[0]?.count ?? 0),
       activePropsCount: activeLines.length,
       pendingEntriesCount: Number(pendingEntriesResult[0]?.count ?? 0),

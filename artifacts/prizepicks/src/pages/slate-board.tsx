@@ -258,6 +258,14 @@ export default function SlateBoard() {
   if (lineTypeFilter !== "all") playerRows = playerRows.filter(r => r.lineType === lineTypeFilter);
   if (minEdge) playerRows = playerRows.filter(r => r.edgeScore != null && r.edgeScore >= parseFloat(minEdge));
 
+  // Default sort: highest model P(Over) first, then by edge score
+  playerRows = [...playerRows].sort((a, b) => {
+    const aPOver = a.ourProjection?.pOver ?? -1;
+    const bPOver = b.ourProjection?.pOver ?? -1;
+    if (bPOver !== aPOver) return bPOver - aPOver;
+    return (b.edgeScore ?? 0) - (a.edgeScore ?? 0);
+  });
+
   const watchCount = playerRows.filter(r => r.isWatched).length;
   const noPlayCount = playerRows.filter(r => r.actionTag === "NO-PLAY").length;
   const playCount = playerRows.filter(r => r.actionTag === "PLAY").length;

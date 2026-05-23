@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import {
   useListEntries, getListEntriesQueryKey, useCreateEntry,
-  useUpdateEntry,
+  useUpdateEntry, useUpdateEntryPick,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -164,6 +164,78 @@ function MarkResultPanel({ entry, onDone }: { entry: any; onDone: () => void }) 
   );
 }
 
+function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const updatePick = useUpdateEntryPick();
+
+  async function setPickResult(pickId: number, result: "hit" | "miss" | "dnp") {
+    try {
+      await updatePick.mutateAsync({ entryId, pickId, data: { result } });
+      await qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
+    } catch {
+      toast({ title: "Failed to update pick", variant: "destructive" });
+    }
+  }
+
+  return (
+    <div>
+      <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Picks</div>
+      <div className="space-y-1">
+        {picks.map((pick: any, i: number) => (
+          <div key={pick.id ?? i} className="flex items-center gap-2 text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-2 rounded">
+            <span className="text-muted-foreground w-4 shrink-0">{i + 1}</span>
+            <span className="font-bold w-32 truncate shrink-0">{pick.playerName ?? `Pick ${i + 1}`}</span>
+            <span className="text-slate-400 w-16 shrink-0">{pick.statType}</span>
+            <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded shrink-0 ${pick.direction === "more" ? "bg-emerald-900/30 text-emerald-400" : "bg-rose-900/30 text-rose-400"}`}>
+              {pick.direction === "more" ? "↑ MORE" : "↓ LESS"}
+            </span>
+            <span className="text-primary font-bold w-8 shrink-0">{pick.lineValue}</span>
+            {pick.lineType && pick.lineType !== "standard" && (
+              <Badge className={`text-[10px] px-1 py-0 shrink-0 ${pick.lineType === "demon" ? "bg-fuchsia-900/40 text-fuchsia-300" : "bg-orange-900/40 text-orange-300"}`}>
+                {pick.lineType}
+              </Badge>
+            )}
+            {pick.projectionGap != null && (
+              <span className={`text-[10px] font-mono shrink-0 ${Number(pick.projectionGap) > 0 ? "text-emerald-500/70" : "text-rose-500/70"}`}>
+                {Number(pick.projectionGap) > 0 ? "+" : ""}{Number(pick.projectionGap).toFixed(1)} edge
+              </span>
+            )}
+            {pick.clv != null && (
+              <span className="text-slate-500 shrink-0 ml-1">CLV: {Number(pick.clv) > 0 ? "+" : ""}{Number(pick.clv).toFixed(2)}</span>
+            )}
+            <div className="ml-auto flex items-center gap-1 shrink-0">
+              {pick.result === "pending" && pick.id ? (
+                <>
+                  <button
+                    onClick={() => setPickResult(pick.id, "hit")}
+                    disabled={updatePick.isPending}
+                    className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-emerald-900/30 text-emerald-500 hover:bg-emerald-900/60 transition-colors border border-emerald-800/40"
+                  >HIT</button>
+                  <button
+                    onClick={() => setPickResult(pick.id, "miss")}
+                    disabled={updatePick.isPending}
+                    className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-rose-900/30 text-rose-500 hover:bg-rose-900/60 transition-colors border border-rose-800/40"
+                  >MISS</button>
+                  <button
+                    onClick={() => setPickResult(pick.id, "dnp")}
+                    disabled={updatePick.isPending}
+                    className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors border border-slate-700"
+                  >DNP</button>
+                </>
+              ) : (
+                <span className={`font-bold uppercase ${PICK_RESULT_STYLES[pick.result] ?? "text-muted-foreground"}`}>
+                  {pick.result}
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function EntryRow({ entry }: { entry: any }) {
   const [expanded, setExpanded] = useState(false);
   const [explaining, setExplaining] = useState(false);
@@ -275,41 +347,7 @@ function EntryRow({ entry }: { entry: any }) {
           )}
 
           {Array.isArray(entry.picks) && entry.picks.length > 0 && (
-            <div>
-              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Picks</div>
-              <div className="space-y-1">
-                {entry.picks.map((pick: any, i: number) => (
-                  <div key={i} className="flex items-center gap-3 text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-2 rounded">
-                    <span className="text-muted-foreground w-4">{i + 1}</span>
-                    <span className="font-bold w-36 truncate">{pick.playerName ?? `Pick ${i + 1}`}</span>
-                    <span className="text-slate-400 w-20">{pick.statType}</span>
-                    <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${pick.direction === "more" ? "bg-emerald-900/30 text-emerald-400" : "bg-rose-900/30 text-rose-400"}`}>
-                      {pick.direction === "more" ? "↑ MORE" : "↓ LESS"}
-                    </span>
-                    <span className="text-primary font-bold w-10">{pick.lineValue}</span>
-                    {pick.lineType && pick.lineType !== "standard" && (
-                      <Badge className={`text-[10px] px-1 py-0 ${pick.lineType === "demon" ? "bg-fuchsia-900/40 text-fuchsia-300" : "bg-orange-900/40 text-orange-300"}`}>
-                        {pick.lineType}
-                      </Badge>
-                    )}
-                    {pick.yourProjection != null && (
-                      <span className="text-muted-foreground">proj: {Number(pick.yourProjection).toFixed(1)}</span>
-                    )}
-                    {pick.projectionGap != null && (
-                      <span className={`text-[10px] font-mono ${Number(pick.projectionGap) > 0 ? "text-emerald-500/70" : "text-rose-500/70"}`}>
-                        {Number(pick.projectionGap) > 0 ? "+" : ""}{Number(pick.projectionGap).toFixed(1)} edge
-                      </span>
-                    )}
-                    <span className={`ml-auto font-bold uppercase ${PICK_RESULT_STYLES[pick.result] ?? "text-muted-foreground"}`}>
-                      {pick.result}
-                    </span>
-                    {pick.clv != null && (
-                      <span className="text-slate-500">CLV: {Number(pick.clv) > 0 ? "+" : ""}{Number(pick.clv).toFixed(2)}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <PicksList entryId={entry.id} picks={entry.picks} />
           )}
 
           {entry.notes && (

@@ -21,7 +21,26 @@ router.get("/entries", async (req, res) => {
       ? entries.filter(e => e.notes?.toLowerCase().includes(search.toLowerCase()))
       : entries;
 
-    res.json(filtered.sort((a, b) => new Date(b.entryDate).getTime() - new Date(a.entryDate).getTime()));
+    const sorted = filtered.sort((a, b) => new Date(b.entryDate).getTime() - new Date(a.entryDate).getTime());
+
+    // Join picks for all entries
+    const entryIds = sorted.map(e => e.id);
+    const allPicks = entryIds.length
+      ? await db.select().from(entryPicksTable).where(inArray(entryPicksTable.entryId, entryIds))
+      : [];
+    const allPlayerIds = [...new Set(allPicks.map(p => p.playerId))];
+    const allPlayers = allPlayerIds.length
+      ? await db.select({ id: playersTable.id, fullName: playersTable.fullName })
+          .from(playersTable).where(inArray(playersTable.id, allPlayerIds))
+      : [];
+    const playerNameMap = Object.fromEntries(allPlayers.map(p => [p.id, p.fullName]));
+    const picksByEntry: Record<number, typeof allPicks> = {};
+    for (const pick of allPicks) {
+      if (!picksByEntry[pick.entryId]) picksByEntry[pick.entryId] = [];
+      picksByEntry[pick.entryId].push({ ...pick, playerName: playerNameMap[pick.playerId] ?? null } as any);
+    }
+
+    res.json(sorted.map(e => ({ ...e, picks: picksByEntry[e.id] ?? [] })));
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });
