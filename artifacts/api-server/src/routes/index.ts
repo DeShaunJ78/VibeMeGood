@@ -21,6 +21,7 @@ import dataHealthRouter from "./data-health";
 import syncRouter from "./sync";
 import explainRouter from "./explain";
 import anthropicRouter from "./anthropic";
+import marketIntelRouter from "./market-intel";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(dataHealthRouter);
 router.use(syncRouter);
 router.use(explainRouter);
 router.use(anthropicRouter);
+router.use(marketIntelRouter);
 
 export default router;

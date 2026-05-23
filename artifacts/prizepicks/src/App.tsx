@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
@@ -16,6 +16,31 @@ import AiChat from "@/pages/ai-chat";
 import { EntryProvider } from "@/lib/entry-context";
 
 const queryClient = new QueryClient();
+
+export type SyncStatus = Record<string, "running" | "success" | "error">;
+export type SSENotification = { type: "goblin" | "move"; playerName?: string; stat?: string; line?: number; from?: number; to?: number; sport?: string; timestamp: string };
+
+function SSEListener() {
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const es = new EventSource(`${base}/api/events`);
+
+    es.addEventListener("sync_status", (e) => {
+      const data = JSON.parse(e.data) as { job: string; status: string };
+      if (data.status === "success") {
+        qc.invalidateQueries();
+      }
+    });
+
+    es.addEventListener("heartbeat", () => { /* keep-alive */ });
+
+    return () => es.close();
+  }, [qc]);
+
+  return null;
+}
 
 function Router() {
   return (
@@ -45,6 +70,7 @@ function App() {
       <TooltipProvider>
         <EntryProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <SSEListener />
             <Router />
           </WouterRouter>
         </EntryProvider>
