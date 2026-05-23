@@ -8,6 +8,7 @@
     "seed": "tsx ./src/seed.ts",
     "seed-game-logs": "tsx ./src/seed-game-logs.ts",
     "seed-matchup-history": "tsx ./src/seed-matchup-history.ts",
+    "seed-entries": "tsx ./src/seed-entries.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

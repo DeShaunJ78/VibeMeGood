@@ -1,5 +1,8 @@
 import { useState, useRef } from "react";
-import { useListEntries, getListEntriesQueryKey, useCreateEntry } from "@workspace/api-client-react";
+import {
+  useListEntries, getListEntriesQueryKey, useCreateEntry,
+  useUpdateEntry,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock } from "lucide-react";
+import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 
 const RESULT_STYLES: Record<string, { label: string; className: string }> = {
@@ -41,6 +44,124 @@ function EmotionBadge({ emotion }: { emotion?: string | null }) {
     confident: "💪", neutral: "😐", frustrated: "😤", excited: "🔥", anxious: "😰",
   };
   return <span className="text-base" title={emotion}>{map[emotion] ?? "🎯"}</span>;
+}
+
+function MarkResultPanel({ entry, onDone }: { entry: any; onDone: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const patchEntry = useUpdateEntry();
+  const [pending, setPending] = useState<"win" | "loss" | "partial" | null>(null);
+  const [partialPayout, setPartialPayout] = useState("");
+  const [confirmResult, setConfirmResult] = useState<"win" | "loss" | "partial" | null>(null);
+
+  const stake = Number(entry.stake ?? 0);
+  const potentialPayout = Number(entry.potentialPayout ?? 0);
+
+  async function mark(result: "win" | "loss" | "partial") {
+    if (result === "partial" && !partialPayout) {
+      setPending("partial");
+      return;
+    }
+    setPending(null);
+    const actualPayout =
+      result === "win" ? potentialPayout :
+      result === "loss" ? 0 :
+      parseFloat(partialPayout || "0");
+    try {
+      await patchEntry.mutateAsync({
+        id: entry.id,
+        data: { result, actualPayout },
+      });
+      await qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
+      toast({
+        title: `Entry marked ${result.toUpperCase()}`,
+        description: result === "win"
+          ? `+$${(actualPayout - stake).toFixed(2)} P&L`
+          : result === "loss"
+          ? `-$${stake.toFixed(2)} P&L`
+          : `+$${(actualPayout - stake).toFixed(2)} P&L (partial)`,
+      });
+      onDone();
+    } catch {
+      toast({ title: "Failed to update result", variant: "destructive" });
+    }
+  }
+
+  if (confirmResult) {
+    return (
+      <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-3 space-y-2">
+        <div className="text-[10px] font-mono text-muted-foreground uppercase">Confirm result</div>
+        {confirmResult === "partial" ? (
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              placeholder="Actual payout ($)"
+              value={partialPayout}
+              onChange={e => setPartialPayout(e.target.value)}
+              className="bg-slate-950 border-slate-700 font-mono text-sm h-8 w-40"
+              autoFocus
+            />
+            <Button size="sm" onClick={() => mark("partial")} disabled={patchEntry.isPending || !partialPayout} className="font-mono text-xs h-8 bg-amber-600 hover:bg-amber-700">
+              Confirm PARTIAL
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirmResult(null)} className="font-mono text-xs h-8 text-muted-foreground">
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm">
+              {confirmResult === "win"
+                ? <span className="text-emerald-400">+${(potentialPayout - stake).toFixed(2)} P&L</span>
+                : <span className="text-rose-400">-${stake.toFixed(2)} P&L</span>}
+            </span>
+            <Button size="sm" onClick={() => mark(confirmResult)} disabled={patchEntry.isPending} className={`font-mono text-xs h-8 ${confirmResult === "win" ? "bg-emerald-700 hover:bg-emerald-600" : "bg-rose-800 hover:bg-rose-700"}`}>
+              {patchEntry.isPending ? "Saving…" : `Confirm ${confirmResult.toUpperCase()}`}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirmResult(null)} className="font-mono text-xs h-8 text-muted-foreground">
+              Cancel
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-slate-800/40 border border-slate-700/60 rounded-lg px-3 py-2 flex items-center gap-2">
+      <CheckCircle className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+      <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider shrink-0">Mark Result</span>
+      <div className="flex items-center gap-1.5 ml-1">
+        <Button
+          size="sm"
+          onClick={() => setConfirmResult("win")}
+          disabled={pending !== null || patchEntry.isPending}
+          className="font-mono text-xs h-7 px-3 bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 border border-emerald-800/60"
+        >
+          WIN
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => setConfirmResult("loss")}
+          disabled={pending !== null || patchEntry.isPending}
+          className="font-mono text-xs h-7 px-3 bg-rose-900/60 hover:bg-rose-800 text-rose-300 border border-rose-800/60"
+        >
+          LOSS
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => setConfirmResult("partial")}
+          disabled={pending !== null || patchEntry.isPending}
+          className="font-mono text-xs h-7 px-3 bg-amber-900/50 hover:bg-amber-800 text-amber-300 border border-amber-800/50"
+        >
+          PARTIAL
+        </Button>
+      </div>
+      <span className="text-[10px] font-mono text-muted-foreground ml-auto">
+        potential: ${potentialPayout.toFixed(2)}
+      </span>
+    </div>
+  );
 }
 
 function EntryRow({ entry }: { entry: any }) {
@@ -148,6 +269,11 @@ function EntryRow({ entry }: { entry: any }) {
 
       {expanded && (
         <div className="border-t border-slate-800 px-4 py-3 space-y-3">
+          {/* Inline result marking for pending entries */}
+          {entry.result === "pending" && (
+            <MarkResultPanel entry={entry} onDone={() => setExpanded(false)} />
+          )}
+
           {Array.isArray(entry.picks) && entry.picks.length > 0 && (
             <div>
               <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Picks</div>
@@ -168,6 +294,11 @@ function EntryRow({ entry }: { entry: any }) {
                     )}
                     {pick.yourProjection != null && (
                       <span className="text-muted-foreground">proj: {Number(pick.yourProjection).toFixed(1)}</span>
+                    )}
+                    {pick.projectionGap != null && (
+                      <span className={`text-[10px] font-mono ${Number(pick.projectionGap) > 0 ? "text-emerald-500/70" : "text-rose-500/70"}`}>
+                        {Number(pick.projectionGap) > 0 ? "+" : ""}{Number(pick.projectionGap).toFixed(1)} edge
+                      </span>
                     )}
                     <span className={`ml-auto font-bold uppercase ${PICK_RESULT_STYLES[pick.result] ?? "text-muted-foreground"}`}>
                       {pick.result}
@@ -373,6 +504,7 @@ export default function Journal() {
   }, 0);
   const wins = list.filter((e: any) => e.result === "win").length;
   const losses = list.filter((e: any) => e.result === "loss").length;
+  const pending = list.filter((e: any) => e.result === "pending").length;
 
   return (
     <div className="space-y-4 h-full flex flex-col">
@@ -383,6 +515,7 @@ export default function Journal() {
             <span>{list.length} entries</span>
             <span>·</span>
             <span>{wins}W / {losses}L</span>
+            {pending > 0 && <><span>·</span><span className="text-amber-400">{pending} pending</span></>}
             <span>·</span>
             <span className={`font-bold ${pnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
               {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} P&L
