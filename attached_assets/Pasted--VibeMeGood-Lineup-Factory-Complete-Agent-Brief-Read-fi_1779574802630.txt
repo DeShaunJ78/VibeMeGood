@@ -1,0 +1,265 @@
+# VibeMeGood Lineup Factory Complete Agent Brief
+
+## Read first
+
+This brief is an add-on feature brief for the Replit agent building VibeMeGood. It must be read in full before touching code. The Lineup Factory is not a replacement for the existing single-lineup optimizer. It is a new portfolio-construction layer that uses the same data, projections, market intelligence, calibration, and risk controls to generate multiple diversified PrizePicks entries for one slate.
+
+The goal is not merely to increase the chance that at least one lineup cashes. The goal is to maximize risk-adjusted portfolio return while controlling exposure, overlap, correlation, volatility, and bankroll risk.
+
+## Product context
+
+VibeMeGood is a private, single-user decision intelligence terminal built on top of PrizePicks. It is a personal analytics workstation for one serious user, not a public social app or casual picks tool. The platform exists to make the user systematic, data-driven, and less emotional.
+
+The primary long-term proof metric is Closing Line Value, or CLV, trending positive over 90 or more days. CLV is the best available validation that the user is consistently finding stale or soft lines before the market closes. Short-term wins and losses can be variance. Persistent positive CLV suggests the process has edge.
+
+The existing system is assumed to include live PrizePicks lines, sportsbook market comparison, Underdog comparison, projection probabilities, volatility estimates, variance intelligence, optimizer results, result tracking, CLV tracking, probability calibration, behavioral logging, and tilt warnings.
+
+The Lineup Factory should use those existing inputs. It should not invent disconnected logic or duplicate the scoring engine. It should consume the app’s current `market-intel`, projection, optimizer, calibration, CLV, and settings layers.
+
+## What the Lineup Factory is
+
+The Lineup Factory is a dedicated page and backend service that generates a portfolio of multiple lineups for a slate. The existing optimizer finds one good lineup. The Lineup Factory finds a set of lineups that work together.
+
+The unit of optimization changes from:
+
+```text
+Which 4 picks make the best lineup?
+```
+
+to:
+
+```text
+Which 10 lineups collectively produce the best risk-adjusted portfolio?
+```
+
+This matters because one strong lineup can still lose most nights. A portfolio can reduce slate-level variance, but only if the lineups are genuinely diversified. If every lineup uses the same core players, the portfolio is fake diversification.
+
+## Core product correction
+
+Do not optimize only for probability that at least one lineup cashes.
+
+That metric is useful, but incomplete. A portfolio can have a high chance that one lineup hits while still being unprofitable overall. For example, if the user plays ten $25 4-pick Power lineups, total stake is $250. If only one 10x lineup hits, gross return is $250, which is only break-even before considering opportunity cost and risk.
+
+The Lineup Factory must show:
+
+1. Probability at least one lineup cashes.
+2. Probability the portfolio breaks even.
+3. Probability the portfolio finishes profitable.
+4. Expected portfolio return.
+5. Worst-case loss.
+6. Max realistic payout.
+7. Exposure concentration.
+8. Pairwise lineup overlap.
+9. Portfolio correlation risk.
+10. CLV and calibration feedback over time.
+
+The north star is risk-adjusted expected return, not cashing something.
+
+## Supported lineup formats
+
+The Lineup Factory must support all relevant PrizePicks lineup formats used by the app.
+
+### Power Play
+
+All picks must hit for payout. If a player DNPs, the lineup may drop one tier based on PrizePicks rules. Power Play EV is straightforward, but highly sensitive to correlation and overestimated probabilities.
+
+Use:
+
+```text
+P(all hit) = product of individual probabilities, adjusted for correlation
+EV = P(all hit) * grossPayout - stake
+profitEV = EV
+```
+
+Do not use raw product probability if picks are correlated. Apply a correlation adjustment.
+
+### Flex Play
+
+Flex allows partial payout when one or more picks miss, depending on lineup size. The model should calculate exact expected value using outcome-state enumeration or dynamic programming, not a simple binomial approximation unless all picks have the same hit probability.
+
+Use per-pick probabilities:
+
+```text
+EV = sum over all hit/miss states:
+  P(state) * payoutForState(state) - stake
+```
+
+Then adjust for correlation where applicable.
+
+Flex is often better for larger entries because partial payouts reduce total loss probability. However, Flex can still be negative EV if the probabilities are inflated or the payout table is unfavorable.
+
+### Stack lineups
+
+Stacks allow multiple props from the same player in different stat categories. These must not be treated as independent.
+
+Examples:
+
+```text
+WR receptions + WR receiving yards = positive correlation
+WR receiving yards + WR touchdown = positive but weaker correlation
+NBA points + NBA assists for same player = context-dependent
+MLB hitter hits + total bases = strong positive correlation
+Pitcher strikeouts + pitcher earned runs allowed = often negative correlation
+```
+
+Stack lineups require joint probability modeling. If the app does not yet have a full joint distribution model, use conservative correlation adjustments and clearly label the estimate as approximate.
+
+### Team plus player lineups
+
+Team plus player lineups combine one team pick with 2 to 5 player picks. These are Power only.
+
+Team picks should be modeled using market-implied probability where available. Player picks should be selected around the team pick in a way that makes narrative and statistical sense.
+
+Examples:
+
+```text
+Game total OVER pairs positively with player counting-stat OVERS.
+Team spread favorite pairs positively with star player points, rebounds, or rushing volume depending on sport.
+Team total UNDER may conflict with multiple overs from that team.
+```
+
+Team plus player lineups should use correlation intentionally. Do not automatically penalize all same-game relationships. Some correlations are the entire reason to build the lineup.
+
+### Goblin and Demon lines
+
+The model must handle Goblin and Demon lines explicitly.
+
+Goblin lines are lower than normal and often easier to hit, but carry reduced payout. They should not automatically be treated as profitable. The model must check whether the reduced payout still creates positive EV.
+
+Demon lines are higher than normal and carry increased payout. The brief must resolve direction rules before implementation:
+
+```text
+If PrizePicks allows LESS on Demon lines, Demon Under can be modeled as a high-probability contrarian strategy.
+If PrizePicks requires MORE on Demon lines, remove Demon Under from eligible lineup generation.
+```
+
+Do not leave this ambiguous in code. Add a config flag or platform rule check if necessary.
+
+## User inputs
+
+The Lineup Factory page should allow the user to configure:
+
+```text
+Lineup format: Power, Flex, Stack, Team plus Player
+Picks per entry: 2, 3, 4, 5, 6
+Number of entries: 1, 3, 5, 10, 25, custom
+Variance profile: Conservative, Balanced, Aggressive, Chaos, Custom
+Optimization objective: Max EV, Max Profit Probability, Min Drawdown, Balanced Growth, High Ceiling
+Max player exposure: 20%, 30%, 40%, 50%, 70%, unlimited
+Max pick exposure: 20%, 30%, 40%, 50%, 70%, unlimited
+Max team exposure: configurable
+Max game exposure: configurable
+Max pairwise lineup overlap: 25%, 50%, 75%, custom
+Stake per entry: dollar amount
+Total portfolio budget: optional hard cap
+Minimum edge threshold: configurable
+Minimum probability threshold: configurable
+Allow GTD players: yes/no
+Allow single-book market data: yes/no
+Allow stale market data: yes/no
+```
+
+The page should default to conservative settings that protect bankroll and reduce accidental overexposure.
+
+## Scoring every prop
+
+Before generating lineups, score every eligible prop on the slate using the existing model outputs.
+
+Required prop-level inputs:
+
+```text
+PrizePicks line
+Line type: standard, goblin, demon
+Allowed direction
+Market average
+Market data status: available, partial, unavailable, not synced
+Market data age
+Book count
+True edge
+Our projection
+Projection probability over
+Projection probability under
+Projected standard deviation
+Volatility rating
+Line movement score
+Sharp signal
+Injury status
+Fatigue score
+Blowout risk
+Usage delta
+Matchup score
+Weather/environment score
+Calibration bucket
+User observed hit rate where available
+CLV history for similar picks
+```
+
+Each prop should receive:
+
+```ts
+type ScoredProp = {
+  ppLineId: number;
+  playerId: number;
+  playerName: string;
+  team: string;
+  opponent?: string;
+  sport: string;
+  statType: string;
+  direction: "more" | "less";
+  lineType: "standard" | "goblin" | "demon";
+  ppLine: number;
+  hitProbability: number;
+  probabilitySource: "market" | "projection" | "line_type" | "calibrated" | "combined";
+  confidence: "high" | "medium" | "low";
+  expectedValue: number;
+  edgeScore: number;
+  riskScore: number;
+  volatilityRating: "low" | "medium" | "high";
+  marketDataStatus: "available" | "partial" | "unavailable" | "not_synced";
+  marketDataAgeMinutes: number | null;
+  bookCount: number;
+  noPlayReason?: string;
+  reasonCodes: string[];
+};
+```
+
+Every probability shown in the UI must include source and confidence. Never display an unlabeled probability.
+
+## Variance profiles
+
+The Factory should support different construction styles.
+
+### Conservative
+
+Goal: maximize probability of profit and reduce drawdown.
+
+Behavior:
+
+```text
+Favor 2-pick and 3-pick entries.
+Favor low-volatility props.
+Favor fresh market data from multiple books.
+Favor Goblin lines only when EV remains positive after reduced payout.
+Reject GTD players.
+Reject stale or unavailable market data.
+Limit exposure tightly.
+Avoid high-overlap lineups.
+```
+
+### Balanced
+
+Goal: combine EV with reasonable hit probability.
+
+Behavior:
+
+```text
+Use strong standard lines, good Goblins, and Demon LESS only if platform rules allow.
+Allow moderate volatility if market and projection agree.
+Use 3-pick or 4-pick lineups.
+Keep exposure moderate.
+Allow some correlation if positive and intentional.
+```
+
+### Aggressive
+
+Goal: maximize upside while keeping

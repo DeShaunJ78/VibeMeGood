@@ -16,6 +16,7 @@ import {
   Battery,
   Wind,
   FlaskConical,
+  Factory,
 } from "lucide-react";
 import {
   Sidebar,
@@ -41,6 +42,7 @@ const NAV_ITEMS = [
   { title: "Journal", url: "/journal", icon: BookOpen },
   { title: "Review", url: "/review", icon: LineChart },
   { title: "AI Analyst", url: "/ai-chat", icon: Bot },
+  { title: "Lineup Factory", url: "/lineup-factory", icon: Factory },
 ];
 
 const INTEL_ITEMS = [

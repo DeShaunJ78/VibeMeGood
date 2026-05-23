@@ -615,6 +615,179 @@ export interface AnthropicError {
   error: string;
 }
 
+export type LineupFactoryConfigFormat = typeof LineupFactoryConfigFormat[keyof typeof LineupFactoryConfigFormat];
+
+
+export const LineupFactoryConfigFormat = {
+  power: 'power',
+  flex: 'flex',
+  stack: 'stack',
+  team_plus_player: 'team_plus_player',
+} as const;
+
+export type LineupFactoryConfigVarianceProfile = typeof LineupFactoryConfigVarianceProfile[keyof typeof LineupFactoryConfigVarianceProfile];
+
+
+export const LineupFactoryConfigVarianceProfile = {
+  conservative: 'conservative',
+  balanced: 'balanced',
+  aggressive: 'aggressive',
+  chaos: 'chaos',
+  custom: 'custom',
+} as const;
+
+export type LineupFactoryConfigOptimizationObjective = typeof LineupFactoryConfigOptimizationObjective[keyof typeof LineupFactoryConfigOptimizationObjective];
+
+
+export const LineupFactoryConfigOptimizationObjective = {
+  max_ev: 'max_ev',
+  max_profit_prob: 'max_profit_prob',
+  min_drawdown: 'min_drawdown',
+  balanced_growth: 'balanced_growth',
+  high_ceiling: 'high_ceiling',
+} as const;
+
+export interface LineupFactoryConfig {
+  format: LineupFactoryConfigFormat;
+  /**
+     * @minimum 2
+     * @maximum 6
+     */
+  picksPerEntry: number;
+  /**
+     * @minimum 1
+     * @maximum 25
+     */
+  numEntries: number;
+  varianceProfile: LineupFactoryConfigVarianceProfile;
+  optimizationObjective: LineupFactoryConfigOptimizationObjective;
+  maxPlayerExposure: number;
+  maxPickExposure: number;
+  maxTeamExposure: number;
+  maxGameExposure: number;
+  maxPairwiseOverlap: number;
+  stakePerEntry: number;
+  totalBudget?: number;
+  minEdgeThreshold?: number;
+  minProbabilityThreshold?: number;
+  allowGtdPlayers: boolean;
+  allowSingleBookData: boolean;
+  allowStaleMarketData: boolean;
+  demonUnderAllowed: boolean;
+  sport?: string;
+}
+
+export type FactoryScoredPropDirection = typeof FactoryScoredPropDirection[keyof typeof FactoryScoredPropDirection];
+
+
+export const FactoryScoredPropDirection = {
+  more: 'more',
+  less: 'less',
+} as const;
+
+export interface FactoryScoredProp {
+  ppLineId: number;
+  playerId: number;
+  playerName: string;
+  /** @nullable */
+  imageUrl?: string | null;
+  team: string;
+  /** @nullable */
+  teamId?: number | null;
+  /** @nullable */
+  gameId?: number | null;
+  sport: string;
+  statType: string;
+  direction: FactoryScoredPropDirection;
+  lineType: string;
+  ppLine: number;
+  hitProbability: number;
+  probabilitySource: string;
+  confidence: string;
+  expectedValue: number;
+  /** @nullable */
+  edgeScore?: number | null;
+  /** @nullable */
+  riskScore?: number | null;
+  /** @nullable */
+  volatilityRating?: string | null;
+  marketDataStatus: string;
+  bookCount: number;
+  /** @nullable */
+  noPlayReason?: string | null;
+  reasonCodes: string[];
+  compositeScore: number;
+}
+
+export interface FactoryLineupPick {
+  ppLineId: number;
+  playerId: number;
+  playerName: string;
+  /** @nullable */
+  imageUrl?: string | null;
+  statType: string;
+  ppLine: number;
+  direction: string;
+  lineType: string;
+  hitProbability: number;
+  sport: string;
+  /** @nullable */
+  teamId?: number | null;
+  /** @nullable */
+  gameId?: number | null;
+  compositeScore: number;
+  /** @nullable */
+  edgeScore?: number | null;
+  /** @nullable */
+  volatilityRating?: string | null;
+  reasonCodes: string[];
+}
+
+export interface GeneratedLineup {
+  id: number;
+  picks: FactoryLineupPick[];
+  format: string;
+  picksPerEntry: number;
+  ev: number;
+  hitProbability: number;
+  grossPayout: number;
+  stake: number;
+  correlationAdjusted: boolean;
+  /** @nullable */
+  correlationNote?: string | null;
+  diversificationScore: number;
+}
+
+export type PortfolioStatsPlayerExposure = {[key: string]: number};
+
+export type PortfolioStatsPickExposure = {[key: string]: number};
+
+export type PortfolioStatsTeamExposure = {[key: string]: number};
+
+export interface PortfolioStats {
+  totalStake: number;
+  portfolioEV: number;
+  probAtLeastOneCashes: number;
+  probBreakEven: number;
+  probProfitable: number;
+  worstCaseLoss: number;
+  maxPayout: number;
+  avgPairwiseOverlap: number;
+  playerExposure: PortfolioStatsPlayerExposure;
+  pickExposure: PortfolioStatsPickExposure;
+  teamExposure: PortfolioStatsTeamExposure;
+  topPicksByExposure: unknown[];
+}
+
+export interface LineupFactoryResult {
+  lineups: GeneratedLineup[];
+  portfolioStats: PortfolioStats;
+  scoredProps: FactoryScoredProp[];
+  eligiblePropCount: number;
+  filteredPropCount: number;
+  generationConfig: unknown;
+}
+
 export type ListPlayersParams = {
 sport?: string;
 teamId?: number;

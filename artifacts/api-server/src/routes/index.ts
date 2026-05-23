@@ -28,6 +28,7 @@ import matchupRouter from "./matchup";
 import debugRouter from "./debug";
 import varianceRouter from "./variance";
 import userSettingsRouter from "./user-settings";
+import lineupFactoryRouter from "./lineup-factory";
 
 const router: IRouter = Router();
 
@@ -60,5 +61,6 @@ router.use(matchupRouter);
 router.use(debugRouter);
 router.use(varianceRouter);
 router.use(userSettingsRouter);
+router.use(lineupFactoryRouter);
 
 export default router;

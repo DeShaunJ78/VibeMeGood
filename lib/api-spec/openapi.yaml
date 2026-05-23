@@ -45,6 +45,8 @@ tags:
     description: Manual data sync operations
   - name: anthropic
     description: Anthropic AI chat operations
+  - name: lineupFactory
+    description: Lineup portfolio factory operations
 
 paths:
   /healthz:
@@ -1053,6 +1055,24 @@ paths:
           content:
             text/event-stream: {}
 
+  # ─── LINEUP FACTORY ─────────────────────────────────────────────────
+  /lineup-factory/generate:
+    post:
+      operationId: generateLineupFactory
+      tags: [lineupFactory]
+      summary: Generate a portfolio of diversified PrizePicks lineups
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LineupFactoryConfig" }
+      responses:
+        "200":
+          description: Generated lineups and portfolio analytics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LineupFactoryResult" }
+
 components:
   schemas:
     HealthStatus:
@@ -1667,3 +1687,122 @@ components:
       properties:
         error: { type: string }
       required: [error]
+
+    # ─── LINEUP FACTORY ──────────────────────────────────────────────
+    LineupFactoryConfig:
+      type: object
+      properties:
+        format: { type: string, enum: [power, flex, stack, team_plus_player] }
+        picksPerEntry: { type: integer, minimum: 2, maximum: 6 }
+        numEntries: { type: integer, minimum: 1, maximum: 25 }
+        varianceProfile: { type: string, enum: [conservative, balanced, aggressive, chaos, custom] }
+        optimizationObjective: { type: string, enum: [max_ev, max_profit_prob, min_drawdown, balanced_growth, high_ceiling] }
+        maxPlayerExposure: { type: number }
+        maxPickExposure: { type: number }
+        maxTeamExposure: { type: number }
+        maxGameExposure: { type: number }
+        maxPairwiseOverlap: { type: number }
+        stakePerEntry: { type: number }
+        totalBudget: { type: number }
+        minEdgeThreshold: { type: number }
+        minProbabilityThreshold: { type: number }
+        allowGtdPlayers: { type: boolean }
+        allowSingleBookData: { type: boolean }
+        allowStaleMarketData: { type: boolean }
+        demonUnderAllowed: { type: boolean }
+        sport: { type: string }
+      required: [format, picksPerEntry, numEntries, varianceProfile, optimizationObjective, maxPlayerExposure, maxPickExposure, maxTeamExposure, maxGameExposure, maxPairwiseOverlap, stakePerEntry, allowGtdPlayers, allowSingleBookData, allowStaleMarketData, demonUnderAllowed]
+
+    FactoryScoredProp:
+      type: object
+      properties:
+        ppLineId: { type: integer }
+        playerId: { type: integer }
+        playerName: { type: string }
+        imageUrl: { type: ["string", "null"] }
+        team: { type: string }
+        teamId: { type: ["integer", "null"] }
+        gameId: { type: ["integer", "null"] }
+        sport: { type: string }
+        statType: { type: string }
+        direction: { type: string, enum: [more, less] }
+        lineType: { type: string }
+        ppLine: { type: number }
+        hitProbability: { type: number }
+        probabilitySource: { type: string }
+        confidence: { type: string }
+        expectedValue: { type: number }
+        edgeScore: { type: ["number", "null"] }
+        riskScore: { type: ["number", "null"] }
+        volatilityRating: { type: ["string", "null"] }
+        marketDataStatus: { type: string }
+        bookCount: { type: integer }
+        noPlayReason: { type: ["string", "null"] }
+        reasonCodes: { type: array, items: { type: string } }
+        compositeScore: { type: number }
+      required: [ppLineId, playerId, playerName, team, sport, statType, direction, lineType, ppLine, hitProbability, probabilitySource, confidence, expectedValue, bookCount, marketDataStatus, reasonCodes, compositeScore]
+
+    FactoryLineupPick:
+      type: object
+      properties:
+        ppLineId: { type: integer }
+        playerId: { type: integer }
+        playerName: { type: string }
+        imageUrl: { type: ["string", "null"] }
+        statType: { type: string }
+        ppLine: { type: number }
+        direction: { type: string }
+        lineType: { type: string }
+        hitProbability: { type: number }
+        sport: { type: string }
+        teamId: { type: ["integer", "null"] }
+        gameId: { type: ["integer", "null"] }
+        compositeScore: { type: number }
+        edgeScore: { type: ["number", "null"] }
+        volatilityRating: { type: ["string", "null"] }
+        reasonCodes: { type: array, items: { type: string } }
+      required: [ppLineId, playerId, playerName, statType, ppLine, direction, lineType, hitProbability, sport, compositeScore, reasonCodes]
+
+    GeneratedLineup:
+      type: object
+      properties:
+        id: { type: integer }
+        picks: { type: array, items: { $ref: "#/components/schemas/FactoryLineupPick" } }
+        format: { type: string }
+        picksPerEntry: { type: integer }
+        ev: { type: number }
+        hitProbability: { type: number }
+        grossPayout: { type: number }
+        stake: { type: number }
+        correlationAdjusted: { type: boolean }
+        correlationNote: { type: ["string", "null"] }
+        diversificationScore: { type: number }
+      required: [id, picks, format, picksPerEntry, ev, hitProbability, grossPayout, stake, correlationAdjusted, diversificationScore]
+
+    PortfolioStats:
+      type: object
+      properties:
+        totalStake: { type: number }
+        portfolioEV: { type: number }
+        probAtLeastOneCashes: { type: number }
+        probBreakEven: { type: number }
+        probProfitable: { type: number }
+        worstCaseLoss: { type: number }
+        maxPayout: { type: number }
+        avgPairwiseOverlap: { type: number }
+        playerExposure: { type: object, additionalProperties: { type: number } }
+        pickExposure: { type: object, additionalProperties: { type: number } }
+        teamExposure: { type: object, additionalProperties: { type: number } }
+        topPicksByExposure: { type: array, items: {} }
+      required: [totalStake, portfolioEV, probAtLeastOneCashes, probBreakEven, probProfitable, worstCaseLoss, maxPayout, avgPairwiseOverlap, playerExposure, pickExposure, teamExposure, topPicksByExposure]
+
+    LineupFactoryResult:
+      type: object
+      properties:
+        lineups: { type: array, items: { $ref: "#/components/schemas/GeneratedLineup" } }
+        portfolioStats: { $ref: "#/components/schemas/PortfolioStats" }
+        scoredProps: { type: array, items: { $ref: "#/components/schemas/FactoryScoredProp" } }
+        eligiblePropCount: { type: integer }
+        filteredPropCount: { type: integer }
+        generationConfig: {}
+      required: [lineups, portfolioStats, scoredProps, eligiblePropCount, filteredPropCount, generationConfig]

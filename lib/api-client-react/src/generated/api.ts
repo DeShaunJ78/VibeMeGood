@@ -47,6 +47,8 @@ import type {
   InjuryInput,
   LineupConfirmation,
   LineupConfirmationInput,
+  LineupFactoryConfig,
+  LineupFactoryResult,
   ListAlertsParams,
   ListDataPullLogsParams,
   ListEntriesParams,
@@ -4935,5 +4937,76 @@ export const useSendAnthropicMessage = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getSendAnthropicMessageMutationOptions(options));
+    }
+
+export const getGenerateLineupFactoryUrl = () => {
+
+
+
+
+  return `/api/lineup-factory/generate`
+}
+
+/**
+ * @summary Generate a portfolio of diversified PrizePicks lineups
+ */
+export const generateLineupFactory = async (lineupFactoryConfig: LineupFactoryConfig, options?: RequestInit): Promise<LineupFactoryResult> => {
+
+  return customFetch<LineupFactoryResult>(getGenerateLineupFactoryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      lineupFactoryConfig,)
+  }
+);}
+
+
+
+
+export const getGenerateLineupFactoryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateLineupFactory>>, TError,{data: BodyType<LineupFactoryConfig>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateLineupFactory>>, TError,{data: BodyType<LineupFactoryConfig>}, TContext> => {
+
+const mutationKey = ['generateLineupFactory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateLineupFactory>>, {data: BodyType<LineupFactoryConfig>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  generateLineupFactory(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateLineupFactoryMutationResult = NonNullable<Awaited<ReturnType<typeof generateLineupFactory>>>
+    export type GenerateLineupFactoryMutationBody = BodyType<LineupFactoryConfig>
+    export type GenerateLineupFactoryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Generate a portfolio of diversified PrizePicks lineups
+ */
+export const useGenerateLineupFactory = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateLineupFactory>>, TError,{data: BodyType<LineupFactoryConfig>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateLineupFactory>>,
+        TError,
+        {data: BodyType<LineupFactoryConfig>},
+        TContext
+      > => {
+      return useMutation(getGenerateLineupFactoryMutationOptions(options));
     }
 

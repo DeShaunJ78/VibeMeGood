@@ -1374,3 +1374,112 @@ export const SendAnthropicMessageBody = zod.object({
 })
 
 
+/**
+ * @summary Generate a portfolio of diversified PrizePicks lineups
+ */
+export const generateLineupFactoryBodyPicksPerEntryMin = 2;
+export const generateLineupFactoryBodyPicksPerEntryMax = 6;
+
+export const generateLineupFactoryBodyNumEntriesMax = 25;
+
+
+
+export const GenerateLineupFactoryBody = zod.object({
+  "format": zod.enum(['power', 'flex', 'stack', 'team_plus_player']),
+  "picksPerEntry": zod.number().min(generateLineupFactoryBodyPicksPerEntryMin).max(generateLineupFactoryBodyPicksPerEntryMax),
+  "numEntries": zod.number().min(1).max(generateLineupFactoryBodyNumEntriesMax),
+  "varianceProfile": zod.enum(['conservative', 'balanced', 'aggressive', 'chaos', 'custom']),
+  "optimizationObjective": zod.enum(['max_ev', 'max_profit_prob', 'min_drawdown', 'balanced_growth', 'high_ceiling']),
+  "maxPlayerExposure": zod.number(),
+  "maxPickExposure": zod.number(),
+  "maxTeamExposure": zod.number(),
+  "maxGameExposure": zod.number(),
+  "maxPairwiseOverlap": zod.number(),
+  "stakePerEntry": zod.number(),
+  "totalBudget": zod.number().optional(),
+  "minEdgeThreshold": zod.number().optional(),
+  "minProbabilityThreshold": zod.number().optional(),
+  "allowGtdPlayers": zod.boolean(),
+  "allowSingleBookData": zod.boolean(),
+  "allowStaleMarketData": zod.boolean(),
+  "demonUnderAllowed": zod.boolean(),
+  "sport": zod.string().optional()
+})
+
+export const GenerateLineupFactoryResponse = zod.object({
+  "lineups": zod.array(zod.object({
+  "id": zod.number(),
+  "picks": zod.array(zod.object({
+  "ppLineId": zod.number(),
+  "playerId": zod.number(),
+  "playerName": zod.string(),
+  "imageUrl": zod.string().nullish(),
+  "statType": zod.string(),
+  "ppLine": zod.number(),
+  "direction": zod.string(),
+  "lineType": zod.string(),
+  "hitProbability": zod.number(),
+  "sport": zod.string(),
+  "teamId": zod.number().nullish(),
+  "gameId": zod.number().nullish(),
+  "compositeScore": zod.number(),
+  "edgeScore": zod.number().nullish(),
+  "volatilityRating": zod.string().nullish(),
+  "reasonCodes": zod.array(zod.string())
+})),
+  "format": zod.string(),
+  "picksPerEntry": zod.number(),
+  "ev": zod.number(),
+  "hitProbability": zod.number(),
+  "grossPayout": zod.number(),
+  "stake": zod.number(),
+  "correlationAdjusted": zod.boolean(),
+  "correlationNote": zod.string().nullish(),
+  "diversificationScore": zod.number()
+})),
+  "portfolioStats": zod.object({
+  "totalStake": zod.number(),
+  "portfolioEV": zod.number(),
+  "probAtLeastOneCashes": zod.number(),
+  "probBreakEven": zod.number(),
+  "probProfitable": zod.number(),
+  "worstCaseLoss": zod.number(),
+  "maxPayout": zod.number(),
+  "avgPairwiseOverlap": zod.number(),
+  "playerExposure": zod.record(zod.string(), zod.number()),
+  "pickExposure": zod.record(zod.string(), zod.number()),
+  "teamExposure": zod.record(zod.string(), zod.number()),
+  "topPicksByExposure": zod.array(zod.unknown())
+}),
+  "scoredProps": zod.array(zod.object({
+  "ppLineId": zod.number(),
+  "playerId": zod.number(),
+  "playerName": zod.string(),
+  "imageUrl": zod.string().nullish(),
+  "team": zod.string(),
+  "teamId": zod.number().nullish(),
+  "gameId": zod.number().nullish(),
+  "sport": zod.string(),
+  "statType": zod.string(),
+  "direction": zod.enum(['more', 'less']),
+  "lineType": zod.string(),
+  "ppLine": zod.number(),
+  "hitProbability": zod.number(),
+  "probabilitySource": zod.string(),
+  "confidence": zod.string(),
+  "expectedValue": zod.number(),
+  "edgeScore": zod.number().nullish(),
+  "riskScore": zod.number().nullish(),
+  "volatilityRating": zod.string().nullish(),
+  "marketDataStatus": zod.string(),
+  "bookCount": zod.number(),
+  "noPlayReason": zod.string().nullish(),
+  "reasonCodes": zod.array(zod.string()),
+  "compositeScore": zod.number()
+})),
+  "eligiblePropCount": zod.number(),
+  "filteredPropCount": zod.number(),
+  "generationConfig": zod.unknown()
+})
+
+

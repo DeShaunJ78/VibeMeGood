@@ -18,6 +18,7 @@ import Streaks from "@/pages/streaks";
 import Clv from "@/pages/clv";
 import Matchup from "@/pages/matchup";
 import Guide from "@/pages/guide";
+import LineupFactory from "@/pages/lineup-factory";
 import StabilityRadar from "@/pages/variance/stability";
 import FatigueTracker from "@/pages/variance/fatigue";
 import EnvironmentBoard from "@/pages/variance/environment";
@@ -98,6 +99,7 @@ function Router() {
         <Route path="/streaks" component={Streaks} />
         <Route path="/clv" component={Clv} />
         <Route path="/matchup" component={Matchup} />
+        <Route path="/lineup-factory" component={LineupFactory} />
         <Route path="/guide" component={Guide} />
         <Route path="/settings" component={Settings} />
         <Route path="/variance/stability" component={StabilityRadar} />
