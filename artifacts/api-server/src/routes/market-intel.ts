@@ -4,7 +4,7 @@ import {
   ppLinesTable, externalLinesTable, propScoresTable, playersTable,
   ourProjectionsTable, playerStreaksTable, lineMoveEventsTable, syncRunsTable,
 } from "@workspace/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, or, isNull, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -51,7 +51,16 @@ router.get("/market-intel", async (req, res) => {
         const extLines = await db
           .select()
           .from(externalLinesTable)
-          .where(eq(externalLinesTable.ppLineId, row.line.id));
+          .where(
+            or(
+              eq(externalLinesTable.ppLineId, row.line.id),
+              and(
+                isNull(externalLinesTable.ppLineId),
+                eq(externalLinesTable.playerId, row.line.playerId),
+                eq(externalLinesTable.statType, row.line.statType),
+              ),
+            ),
+          );
 
         const bookLines: Record<string, number> = {};
         for (const l of extLines) {

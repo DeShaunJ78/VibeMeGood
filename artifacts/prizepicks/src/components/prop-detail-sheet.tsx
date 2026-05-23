@@ -10,7 +10,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, ReferenceLine,
 } from "recharts";
-import { Plus, Minus, Zap, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Activity, Database } from "lucide-react";
+import { Plus, Minus, Zap, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Activity, Database, Wind, CloudRain } from "lucide-react";
 
 interface PropDetailSheetProps {
   ppLineId: number | null;
@@ -184,13 +184,23 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
               <div className="flex items-start justify-between">
                 <div>
                   <SheetTitle className="text-xl font-bold">{data.player.fullName}</SheetTitle>
-                  <SheetDescription className="flex items-center gap-2 mt-1 font-mono text-xs">
+                  <SheetDescription className="flex items-center gap-2 mt-1 font-mono text-xs flex-wrap">
                     <span className="text-muted-foreground">{data.player.sport} · {data.player.position}</span>
                     {data.game && (
                       <>
                         <span className="text-slate-600">·</span>
                         <span className="text-primary">{new Date(data.game.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                       </>
+                    )}
+                    {data.game?.metadata?.weather?.isOutdoor && (
+                      <span className="flex items-center gap-1 bg-sky-900/50 border border-sky-700/40 text-sky-300 px-1.5 py-0.5 rounded text-[9px]">
+                        <Wind className="w-2.5 h-2.5" />
+                        {data.game.metadata.weather.windSpeed} mph {data.game.metadata.weather.windDir}
+                        {" · "}{data.game.metadata.weather.temp}°F
+                      </span>
+                    )}
+                    {data.game?.metadata?.homePitcher && (
+                      <span className="text-slate-400 text-[9px]">SP: {data.game.metadata.homePitcher}</span>
                     )}
                   </SheetDescription>
                 </div>

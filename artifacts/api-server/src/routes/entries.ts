@@ -1,9 +1,74 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { entriesTable, entryPicksTable, playersTable, ppLinesTable, clvRecordsTable } from "@workspace/db/schema";
-import { eq, and, gte, inArray, type SQL } from "drizzle-orm";
+import {
+  entriesTable, entryPicksTable, playersTable, ppLinesTable, clvRecordsTable,
+  behavioralLogsTable, userSettingsTable, type InsertEntry,
+} from "@workspace/db/schema";
+import { eq, and, gte, inArray, desc, type SQL } from "drizzle-orm";
+import { broadcast } from "../lib/sse";
+
+function getTimeOfDay(): string {
+  const h = new Date().getHours();
+  if (h < 6)  return "night";
+  if (h < 12) return "morning";
+  if (h < 18) return "afternoon";
+  return "evening";
+}
+
+async function getMinutesSinceLastLoss(): Promise<number | null> {
+  const [lastLoss] = await db
+    .select({ closedAt: entriesTable.closedAt, submittedAt: entriesTable.submittedAt })
+    .from(entriesTable)
+    .where(eq(entriesTable.result, "loss"))
+    .orderBy(desc(entriesTable.id))
+    .limit(1);
+  if (!lastLoss) return null;
+  const t = lastLoss.closedAt ?? lastLoss.submittedAt;
+  if (!t) return null;
+  return Math.floor((Date.now() - new Date(t).getTime()) / 60_000);
+}
+
+async function getRecentAverageStake(n: number): Promise<number> {
+  const recent = await db
+    .select({ stake: entriesTable.stake })
+    .from(entriesTable)
+    .orderBy(desc(entriesTable.id))
+    .limit(n);
+  if (!recent.length) return 0;
+  return recent.reduce((sum, e) => sum + Number(e.stake), 0) / recent.length;
+}
+
+async function getTodayLoss(today: string): Promise<number> {
+  const losses = await db
+    .select({ stake: entriesTable.stake })
+    .from(entriesTable)
+    .where(and(eq(entriesTable.result, "loss"), eq(entriesTable.entryDate, today)));
+  return losses.reduce((sum, e) => sum + Number(e.stake), 0);
+}
 
 const router = Router();
+
+router.get("/entries/loss-limit-status", async (req, res): Promise<void> => {
+  try {
+    const userId = (req.query.userId as string) ?? "local";
+    const [settings] = await db
+      .select({ dailyLossLimit: userSettingsTable.dailyLossLimit })
+      .from(userSettingsTable)
+      .where(eq(userSettingsTable.userId, userId))
+      .limit(1);
+    const limit = settings?.dailyLossLimit ? Number(settings.dailyLossLimit) : null;
+    if (limit === null) {
+      res.json({ exceeded: false, totalLoss: 0, limit: null });
+      return;
+    }
+    const today = new Date().toISOString().split("T")[0];
+    const totalLoss = await getTodayLoss(today);
+    res.json({ exceeded: totalLoss >= limit, totalLoss, limit });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 router.get("/entries", async (req, res) => {
   try {
@@ -47,9 +112,59 @@ router.get("/entries", async (req, res) => {
   }
 });
 
-router.post("/entries", async (req, res) => {
+router.post("/entries", async (req, res): Promise<void> => {
   try {
-    const [entry] = await db.insert(entriesTable).values(req.body).returning();
+    const body = req.body as Record<string, unknown>;
+    const userId = (body.userId as string) ?? "local";
+
+    // Strip non-schema keys before insert
+    const { userId: _u, overrideLossLimit: _o, ...entryData } = body;
+    const [entry] = await db.insert(entriesTable).values(entryData as InsertEntry).returning();
+
+    // Async behavioral logging — non-fatal
+    void (async () => {
+      try {
+        const [settings] = await db
+          .select({ unitSize: userSettingsTable.unitSize })
+          .from(userSettingsTable)
+          .where(eq(userSettingsTable.userId, userId))
+          .limit(1);
+        const unitSize   = settings?.unitSize ? Number(settings.unitSize) : 25;
+        const stake      = Number(entry.stake);
+        const minutesSinceLastLoss = await getMinutesSinceLastLoss();
+        const recentAvgStake       = await getRecentAverageStake(10);
+        const stakeMultiple        = unitSize > 0 ? stake / unitSize : null;
+
+        await db.insert(behavioralLogsTable).values({
+          userId,
+          entryId:              entry.id,
+          timeOfDay:            getTimeOfDay(),
+          minutesSinceLastLoss: minutesSinceLastLoss ?? undefined,
+          stakeMultipleOfUnit:  stakeMultiple !== null ? String(stakeMultiple) : undefined,
+          deviatedFromOptimizer:    false,
+          picksChangedFromOptimizer: 0,
+        });
+
+        if (minutesSinceLastLoss !== null && minutesSinceLastLoss < 15) {
+          broadcast("tilt_warning", {
+            message: `You placed this entry ${minutesSinceLastLoss} minute${minutesSinceLastLoss === 1 ? "" : "s"} after your last loss. Tilt is the #1 killer of bankrolls.`,
+            severity: "warning",
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        if (recentAvgStake > 0 && stake >= recentAvgStake * 2) {
+          broadcast("stake_escalation", {
+            message: `This stake ($${stake}) is ${(stake / recentAvgStake).toFixed(1)}x your recent average ($${recentAvgStake.toFixed(0)}). Confirm this is intentional.`,
+            severity: "warning",
+            timestamp: new Date().toISOString(),
+          });
+        }
+      } catch (logErr) {
+        req.log.warn({ err: logErr }, "Behavioral logging failed (non-fatal)");
+      }
+    })();
+
     res.status(201).json(entry);
   } catch (err) {
     req.log.error(err);

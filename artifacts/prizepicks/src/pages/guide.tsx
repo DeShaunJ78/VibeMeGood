@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { BookOpen, ChevronRight } from "lucide-react";
+import { useEffect, useRef, useState, useMemo } from "react";
+import { BookOpen, ChevronRight, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 const SECTIONS = [
   { id: "what-is",        title: "What Is VibeMeGood?" },
@@ -71,7 +72,14 @@ function QR({ situation, action }: { situation: string; action: string }) {
 
 export default function Guide() {
   const [active, setActive] = useState(SECTIONS[0].id);
+  const [search, setSearch] = useState("");
   const contentRef = useRef<HTMLDivElement>(null);
+
+  const filteredSections = useMemo(() => {
+    if (!search.trim()) return SECTIONS;
+    const q = search.toLowerCase();
+    return SECTIONS.filter(s => s.title.toLowerCase().includes(q));
+  }, [search]);
 
   useEffect(() => {
     if (!localStorage.getItem("hasSeenGuide")) {
@@ -105,12 +113,26 @@ export default function Guide() {
     <div className="flex h-full overflow-hidden">
       {/* TOC sidebar */}
       <nav className="w-52 shrink-0 border-r border-slate-800 overflow-y-auto py-4">
-        <div className="flex items-center gap-2 px-4 mb-4">
+        <div className="flex items-center gap-2 px-4 mb-3">
           <BookOpen className="w-4 h-4 text-primary" />
           <span className="text-xs font-mono font-bold text-foreground uppercase tracking-wider">User Guide</span>
         </div>
+        <div className="px-3 mb-3">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+            <Input
+              type="search"
+              placeholder="Search sections…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pl-7 h-7 text-[11px] font-mono bg-slate-900 border-slate-700 focus-visible:ring-primary/50"
+            />
+          </div>
+        </div>
         <ul className="space-y-0.5">
-          {SECTIONS.map(s => (
+          {filteredSections.length === 0 ? (
+            <li className="px-4 py-2 text-[11px] text-muted-foreground font-mono">No sections match</li>
+          ) : filteredSections.map(s => (
             <li key={s.id}>
               <button
                 onClick={() => scrollTo(s.id)}

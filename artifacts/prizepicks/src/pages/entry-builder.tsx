@@ -1,12 +1,17 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useCreateEntry } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useEntry } from "@/lib/entry-context";
-import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown } from "lucide-react";
+import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown, ShieldAlert, AlertTriangle } from "lucide-react";
 
 import type { EntryPick } from "@/lib/entry-context";
 
@@ -86,6 +91,12 @@ function computeEV(
   return { pWin, ev, evPct: (ev / stake) * 100, hasAllData, legData };
 }
 
+interface LossLimitState {
+  exceeded: boolean;
+  totalLoss: number;
+  limit: number;
+}
+
 export default function EntryBuilder() {
   const { toast } = useToast();
   const [stake, setStake] = useState<string>("25");
@@ -93,9 +104,18 @@ export default function EntryBuilder() {
   const [notes, setNotes] = useState<string>("");
   const { picks, removePick, updateDirection, clearPicks } = useEntry();
   const createEntry = useCreateEntry();
+  const [lossLimitDialog, setLossLimitDialog] = useState<LossLimitState | null>(null);
 
   const stakeNum = parseFloat(stake) || 0;
   const n = picks.length;
+
+  // Detect same-team picks (correlation risk)
+  const teamGroups = picks.reduce<Record<string, EntryPick[]>>((acc, p) => {
+    if (!p.teamAbbr) return acc;
+    acc[p.teamAbbr] = [...(acc[p.teamAbbr] ?? []), p];
+    return acc;
+  }, {});
+  const correlatedTeams = Object.entries(teamGroups).filter(([, ps]) => ps.length >= 2);
   const multiplier = playstyle === "power" ? (POWER_MULTIPLIERS[n] ?? 0) : 0;
   const powerPayout = playstyle === "power" ? stakeNum * multiplier : 0;
   const flexPayouts = playstyle === "flex" && n >= 2 ? FLEX_PAYOUTS[n] ?? {} : {};
@@ -107,11 +127,7 @@ export default function EntryBuilder() {
     : null;
   const activeEV = playstyle === "power" ? evResultPower : evResultFlex;
 
-  async function handleSave() {
-    if (picks.length < 2) {
-      toast({ title: "Need more picks", description: "Minimum 2 picks required.", variant: "destructive" });
-      return;
-    }
+  const doSave = useCallback(async () => {
     try {
       await createEntry.mutateAsync({
         data: {
@@ -130,9 +146,30 @@ export default function EntryBuilder() {
     } catch {
       toast({ title: "Failed to save", description: "Could not log entry.", variant: "destructive" });
     }
+  }, [createEntry, playstyle, picks.length, stakeNum, multiplier, powerPayout, notes, toast, clearPicks]);
+
+  async function handleSave() {
+    if (picks.length < 2) {
+      toast({ title: "Need more picks", description: "Minimum 2 picks required.", variant: "destructive" });
+      return;
+    }
+    // Pre-flight: check daily loss limit
+    try {
+      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+      const res = await fetch(`${base}/api/entries/loss-limit-status`);
+      if (res.ok) {
+        const status = await res.json() as LossLimitState;
+        if (status.exceeded) {
+          setLossLimitDialog(status);
+          return;
+        }
+      }
+    } catch { /* network error — proceed */ }
+    await doSave();
   }
 
   return (
+    <>
     <div className="space-y-6 h-full flex flex-col">
       <div className="flex items-center justify-between border-b border-border pb-4 shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">Entry Builder</h1>
@@ -173,6 +210,19 @@ export default function EntryBuilder() {
               </div>
             ) : (
               <div className="divide-y divide-slate-800">
+                {correlatedTeams.length > 0 && (
+                  <div className="mx-3 mt-3 mb-1 flex items-start gap-2 bg-amber-950/40 border border-amber-700/50 rounded-lg px-3 py-2.5 text-xs font-mono text-amber-300">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400" />
+                    <div>
+                      <span className="font-bold">Teammate correlation risk</span>
+                      {correlatedTeams.map(([team, ps]) => (
+                        <div key={team} className="text-amber-400/80 mt-0.5">
+                          {ps.length} {team} picks — shared possessions reduce leg independence
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {picks.map((pick, i) => (
                   <div key={pick.ppLineId} className="px-4 py-3 flex items-center gap-3">
                     <div className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-mono font-bold text-muted-foreground shrink-0">
@@ -346,6 +396,16 @@ export default function EntryBuilder() {
                   </div>
 
                   <div className="border-t border-slate-800 pt-3 space-y-2">
+                    {/* Probability chain */}
+                    <div className="text-[10px] font-mono text-muted-foreground leading-relaxed">
+                      {activeEV.legData.map((l, i) => (
+                        <span key={i}>
+                          {l.pHit != null ? `${(l.pHit * 100).toFixed(0)}%` : "?%"}
+                          {i < activeEV.legData.length - 1 ? " × " : ""}
+                        </span>
+                      ))}
+                      <span className="text-foreground font-bold ml-1">= {(activeEV.pWin * 100).toFixed(1)}%</span>
+                    </div>
                     {/* Combined P(win) */}
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] font-mono text-muted-foreground uppercase">P(win this entry)</span>
@@ -371,6 +431,26 @@ export default function EntryBuilder() {
                         </span>
                       </div>
                     </div>
+                    {/* Kelly Criterion */}
+                    {(() => {
+                      const b = (playstyle === "power" ? (multiplier - 1) : null);
+                      if (b == null || b <= 0) return null;
+                      const kellyFrac = (activeEV.pWin * b - (1 - activeEV.pWin)) / b;
+                      const quarterKelly = Math.max(0, kellyFrac * 0.25);
+                      const bankroll = 500;
+                      const kellyStake = quarterKelly * bankroll;
+                      return (
+                        <div className="flex justify-between items-center border-t border-slate-800/60 pt-2">
+                          <span className="text-[10px] font-mono text-muted-foreground uppercase">Kelly Stake</span>
+                          <div className="text-right">
+                            <span className={`font-mono font-bold text-sm ${kellyStake > 0 ? "text-violet-400" : "text-slate-500"}`}>
+                              ${kellyStake.toFixed(2)}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-mono ml-1">(¼K · $500)</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {!activeEV.hasAllData && (
@@ -385,6 +465,45 @@ export default function EntryBuilder() {
         </div>
       </div>
     </div>
+
+    {/* Loss Limit Confirmation Dialog */}
+    <AlertDialog open={!!lossLimitDialog} onOpenChange={(open) => { if (!open) { setLossLimitDialog(null); } }}>
+      <AlertDialogContent className="bg-slate-900 border-red-800/60">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2 text-red-400">
+            <ShieldAlert className="w-5 h-5" />
+            Daily Loss Limit Reached
+          </AlertDialogTitle>
+          <AlertDialogDescription className="text-slate-300 font-mono text-sm space-y-2">
+            <span className="block">
+              You have lost <span className="text-red-400 font-bold">${lossLimitDialog?.totalLoss?.toFixed(2)}</span> today,
+              which meets your daily limit of <span className="font-bold text-foreground">${lossLimitDialog?.limit?.toFixed(2)}</span>.
+            </span>
+            <span className="block text-slate-400">
+              Rule 2: Set a daily loss limit and stick to it. No exceptions. Tilt is the #1 killer of bankrolls.
+            </span>
+            <span className="block text-amber-400 font-semibold">
+              Override and log this entry anyway?
+            </span>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel className="border-slate-700 text-muted-foreground hover:text-foreground">
+            Stop — I'm done for today
+          </AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-red-700 hover:bg-red-600 text-white font-mono text-xs"
+            onClick={async () => {
+              setLossLimitDialog(null);
+              await doSave();
+            }}
+          >
+            Override — Log Anyway
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 

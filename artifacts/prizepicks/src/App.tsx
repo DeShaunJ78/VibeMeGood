@@ -3,6 +3,7 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useToast } from "@/hooks/use-toast";
 import NotFound from "@/pages/not-found";
 import { Layout } from "@/components/layout";
 import Dashboard from "@/pages/dashboard";
@@ -26,6 +27,7 @@ export type SSENotification = { type: "goblin" | "move"; playerName?: string; st
 
 function SSEListener() {
   const qc = useQueryClient();
+  const { toast } = useToast();
 
   useEffect(() => {
     const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -38,10 +40,30 @@ function SSEListener() {
       }
     });
 
+    es.addEventListener("tilt_warning", (e) => {
+      const data = JSON.parse(e.data) as { message: string };
+      toast({
+        title: "⚠ Tilt Warning",
+        description: data.message,
+        variant: "destructive",
+        duration: 10000,
+      });
+    });
+
+    es.addEventListener("stake_escalation", (e) => {
+      const data = JSON.parse(e.data) as { message: string };
+      toast({
+        title: "⚠ Stake Escalation",
+        description: data.message,
+        variant: "destructive",
+        duration: 10000,
+      });
+    });
+
     es.addEventListener("heartbeat", () => { /* keep-alive */ });
 
     return () => es.close();
-  }, [qc]);
+  }, [qc, toast]);
 
   return null;
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   useGetSlate, getGetSlateQueryKey,
   useAddToWatchlist, useRemoveFromWatchlist,
@@ -11,11 +11,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge } from "@/components/ui/badges";
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
 import { TeamPicksBoard } from "@/components/team-picks-board";
-import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useEntry, type EntryPick } from "@/lib/entry-context";
 
 type OurProjection = {
   value: number;
@@ -175,12 +177,34 @@ function WatchToggle({ row, slateParams }: { row: any; slateParams: Record<strin
   );
 }
 
+const POWER_MULTIPLIERS: Record<number, number> = { 2: 3, 3: 6, 4: 10, 5: 20, 6: 40 };
+
+interface OptResult {
+  ppLineId: number;
+  playerId: number;
+  playerName: string;
+  teamAbbr: string | null;
+  statType: string;
+  lineValue: number;
+  lineType: string;
+  pOver: number;
+  ev: number;
+  edgeScore: number | null;
+  actionTag: string | null;
+  ourProjection: OurProjection | null;
+}
+
 export default function SlateBoard() {
   const [tab, setTab] = useState<"player" | "team">("player");
   const [sport, setSport] = useState<string>("all");
   const [lineTypeFilter, setLineTypeFilter] = useState<string>("all");
   const [minEdge, setMinEdge] = useState<string>("");
   const [selectedPropId, setSelectedPropId] = useState<number | null>(null);
+  const [optimizerOpen, setOptimizerOpen] = useState(false);
+  const [optPickCount, setOptPickCount] = useState(4);
+  const [optResults, setOptResults] = useState<OptResult[]>([]);
+  const [optLoaded, setOptLoaded] = useState(false);
+  const { addPick, hasPick } = useEntry();
 
   const slateParams = {
     sport: sport !== "all" ? sport : undefined,
@@ -271,6 +295,60 @@ export default function SlateBoard() {
   const playCount = playerRows.filter(r => r.actionTag === "PLAY").length;
   const notSynced = !marketIntel || marketIntel.length === 0;
 
+  const runOptimizer = useCallback(() => {
+    const multiplier = POWER_MULTIPLIERS[optPickCount] ?? 10;
+    const goblinProps = playerRows
+      .filter(r => r.lineType === "goblin" && r.ourProjection?.pOver != null && r.ourProjection.pOver > 50)
+      .sort((a, b) => (b.ourProjection?.pOver ?? 0) - (a.ourProjection?.pOver ?? 0))
+      .slice(0, optPickCount);
+
+    const results: OptResult[] = goblinProps.map(r => {
+      const pOver = (r.ourProjection?.pOver ?? 50) / 100;
+      const stake = 25;
+      const ev = pOver * multiplier * stake - stake;
+      return {
+        ppLineId: r.ppLineId,
+        playerId: r.playerId,
+        playerName: r.playerName,
+        teamAbbr: r.teamAbbr ?? null,
+        statType: r.statType,
+        lineValue: r.lineValue,
+        lineType: r.lineType,
+        pOver: r.ourProjection?.pOver ?? 50,
+        ev,
+        edgeScore: r.edgeScore ?? null,
+        actionTag: r.actionTag ?? null,
+        ourProjection: r.ourProjection ?? null,
+      };
+    });
+
+    setOptResults(results);
+    setOptLoaded(true);
+    setOptimizerOpen(true);
+  }, [playerRows, optPickCount]);
+
+  function loadOptimizerToEntry() {
+    for (const r of optResults) {
+      if (!hasPick(r.ppLineId)) {
+        addPick({
+          ppLineId: r.ppLineId,
+          playerId: r.playerId,
+          playerName: r.playerName,
+          teamAbbr: r.teamAbbr,
+          statType: r.statType,
+          lineValue: r.lineValue,
+          lineType: r.lineType,
+          direction: "more",
+          yourProjection: r.ourProjection?.value ?? null,
+          pOver: r.pOver,
+          edgeScore: r.edgeScore,
+          actionTag: r.actionTag,
+        } satisfies EntryPick);
+      }
+    }
+    setOptimizerOpen(false);
+  }
+
   return (
     <div className="space-y-4 h-full flex flex-col">
       {/* Header */}
@@ -341,6 +419,13 @@ export default function SlateBoard() {
               onChange={e => setMinEdge(e.target.value)}
               className="w-24 bg-slate-900 border-slate-800 font-mono text-sm"
             />
+            <Button
+              onClick={runOptimizer}
+              size="sm"
+              className="font-mono text-xs bg-violet-700 hover:bg-violet-600 text-white gap-1.5"
+            >
+              <Zap className="w-3.5 h-3.5" /> Optimizer
+            </Button>
             <ForceSyncButton />
           </div>
         )}
@@ -512,6 +597,108 @@ export default function SlateBoard() {
         open={!!selectedPropId}
         onOpenChange={open => !open && setSelectedPropId(null)}
       />
+
+      {/* Optimizer Dialog */}
+      <Dialog open={optimizerOpen} onOpenChange={setOptimizerOpen}>
+        <DialogContent className="bg-slate-900 border-slate-700 max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-mono text-sm uppercase tracking-wider">
+              <Zap className="w-4 h-4 text-violet-400" />
+              Optimizer — Goblin Hunter
+            </DialogTitle>
+            <DialogDescription className="text-xs font-mono text-muted-foreground">
+              Strategy: Goblin OVER only · Power Play · Top {optPickCount} picks by P(Over)
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center gap-3 mb-2">
+            <span className="text-xs font-mono text-muted-foreground">Pick count:</span>
+            {[2, 3, 4, 5, 6].map(n => (
+              <button
+                key={n}
+                onClick={() => { setOptPickCount(n); setOptLoaded(false); }}
+                className={`px-2.5 py-1 rounded text-xs font-mono transition-colors ${
+                  optPickCount === n
+                    ? "bg-violet-700 text-white"
+                    : "bg-slate-800 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+            <Button
+              size="sm"
+              onClick={runOptimizer}
+              className="ml-auto font-mono text-xs bg-violet-700 hover:bg-violet-600 gap-1"
+            >
+              <Zap className="w-3 h-3" /> Run
+            </Button>
+          </div>
+
+          {optLoaded && (
+            optResults.length === 0 ? (
+              <div className="py-6 text-center text-xs font-mono text-muted-foreground">
+                No Goblin OVER picks available. Try syncing props first.
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  {optResults.map((r, i) => {
+                    const multiplier = POWER_MULTIPLIERS[optResults.length] ?? 10;
+                    const pChain = optResults.slice(0, i + 1).reduce((acc, x) => acc * (x.pOver / 100), 1);
+                    return (
+                      <div key={r.ppLineId} className="flex items-center gap-2 bg-slate-800/60 rounded px-3 py-2">
+                        <span className="w-5 text-xs font-mono text-slate-500">{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold text-foreground truncate">{r.playerName}</div>
+                          <div className="text-[10px] text-muted-foreground font-mono">{r.statType} OVER {r.lineValue}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xs font-mono font-bold text-emerald-400">{r.pOver.toFixed(1)}%</div>
+                          <div className="text-[10px] text-muted-foreground font-mono">P(Over)</div>
+                        </div>
+                        <div className="text-center ml-2">
+                          <div className={`text-xs font-mono font-bold ${r.ev > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                            {r.ev >= 0 ? "+" : ""}${r.ev.toFixed(2)}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground font-mono">EV@$25</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Combined chain */}
+                <div className="bg-slate-800/40 rounded px-3 py-2 text-xs font-mono text-center">
+                  <span className="text-muted-foreground">
+                    {optResults.map(r => `${r.pOver.toFixed(0)}%`).join(" × ")}
+                  </span>
+                  {" = "}
+                  <span className="text-foreground font-bold">
+                    {(optResults.reduce((acc, r) => acc * (r.pOver / 100), 1) * 100).toFixed(1)}%
+                  </span>
+                  <span className="text-muted-foreground ml-3">
+                    · EV {(() => {
+                      const mult = POWER_MULTIPLIERS[optResults.length] ?? 10;
+                      const p = optResults.reduce((acc, r) => acc * (r.pOver / 100), 1);
+                      const ev = p * mult * 25 - 25;
+                      return `${ev >= 0 ? "+" : ""}$${ev.toFixed(2)}`;
+                    })()}
+                  </span>
+                </div>
+
+                <Button
+                  onClick={loadOptimizerToEntry}
+                  className="w-full font-mono text-xs bg-primary hover:bg-primary/90 gap-2"
+                >
+                  <ArrowRight className="w-3.5 h-3.5" />
+                  Load {optResults.length} picks into Entry Builder
+                </Button>
+              </>
+            )
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

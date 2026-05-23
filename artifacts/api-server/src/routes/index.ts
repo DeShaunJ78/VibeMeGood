@@ -25,6 +25,7 @@ import marketIntelRouter from "./market-intel";
 import streaksRouter from "./streaks";
 import clvRouter from "./clv";
 import matchupRouter from "./matchup";
+import debugRouter from "./debug";
 
 const router: IRouter = Router();
 
@@ -54,5 +55,6 @@ router.use(marketIntelRouter);
 router.use(streaksRouter);
 router.use(clvRouter);
 router.use(matchupRouter);
+router.use(debugRouter);
 
 export default router;
