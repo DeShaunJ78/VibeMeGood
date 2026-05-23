@@ -1,9 +1,11 @@
 import { db } from "@workspace/db";
 import {
-  externalLinesTable, ppLinesTable, playersTable, propScoresTable, lineMoveEventsTable,
+  externalLinesTable, ppLinesTable, playersTable, propScoresTable,
+  lineMoveEventsTable, ourProjectionsTable,
 } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { logger } from "../logger";
+import { computeAllProjections } from "../projection/compute";
 
 const ODDS_BASE = process.env.ODDS_API_BASE || "https://api.the-odds-api.com/v4";
 const ODDS_KEY = process.env.ODDS_API_KEY || "";
@@ -29,7 +31,9 @@ const STAT_MARKETS: Record<string, string> = {
 
 export async function syncExternalOdds(): Promise<number> {
   if (!ODDS_KEY) {
-    logger.warn("ODDS_API_KEY not set — skipping external odds sync");
+    logger.warn("ODDS_API_KEY not set — running projection engine only");
+    await computeAllProjections();
+    await recalcPropScores();
     return 0;
   }
 
@@ -88,7 +92,6 @@ export async function syncExternalOdds(): Promise<number> {
 
               const lineVal = outcome.point.toString();
 
-              // Check for existing and record move event if changed
               const [existing] = await db.select().from(externalLinesTable)
                 .where(and(
                   eq(externalLinesTable.ppLineId, match.line.id),
@@ -112,7 +115,6 @@ export async function syncExternalOdds(): Promise<number> {
                 });
               }
 
-              // Upsert external line
               await db.insert(externalLinesTable).values({
                 playerId: match.player.id,
                 ppLineId: match.line.id,
@@ -124,12 +126,7 @@ export async function syncExternalOdds(): Promise<number> {
                 pulledAt: new Date(),
               }).onConflictDoUpdate({
                 target: [externalLinesTable.ppLineId, externalLinesTable.bookName],
-                set: {
-                  lineValue: lineVal,
-                  overLine: lineVal,
-                  underLine: lineVal,
-                  pulledAt: new Date(),
-                },
+                set: { lineValue: lineVal, overLine: lineVal, underLine: lineVal, pulledAt: new Date() },
               });
               processed++;
             }
@@ -142,7 +139,8 @@ export async function syncExternalOdds(): Promise<number> {
     }
   }
 
-  // Recalculate prop scores after odds update
+  // Run projection engine first so prop scores can factor in pOver + noPlayReason
+  await computeAllProjections();
   await recalcPropScores();
   return processed;
 }
@@ -156,57 +154,118 @@ export async function recalcPropScores(): Promise<void> {
 
   for (const { line, player } of lines) {
     try {
+      // --- Market edge ---
       const extLines = await db.select()
         .from(externalLinesTable)
         .where(eq(externalLinesTable.ppLineId, line.id));
 
-      let edgeScore = 0;
+      let marketEdge = 0;
       let marketSupportScore = 50;
-      let trueEdge: number | null = null;
+      let marketAvg: number | null = null;
+      let bookCount = 0;
 
-      if (extLines.length >= 2) {
+      if (extLines.length >= 1) {
         const vals = extLines
           .map(l => parseFloat((l.lineValue || l.overLine).toString()))
           .filter(v => !isNaN(v));
-        if (vals.length >= 2) {
-          const marketAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
+        if (vals.length >= 1) {
+          bookCount = vals.length;
+          marketAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
           const ppLine = parseFloat(line.lineValue.toString());
-          trueEdge = (-( ppLine - marketAvg) / marketAvg) * 100;
-          edgeScore = trueEdge;
-          marketSupportScore = Math.max(0, Math.min(100, 50 + trueEdge * 3));
+          marketEdge = (-(ppLine - marketAvg) / marketAvg) * 100;
+          marketSupportScore = Math.max(0, Math.min(100, 50 + marketEdge * 3));
         }
       }
 
-      const lineBonus = line.lineType === "goblin" ? 12 : line.lineType === "demon" ? -12 : 0;
-      const finalScore = edgeScore + lineBonus;
-      const actionTag = finalScore >= 5 ? "PLAY" : finalScore <= -4 ? "PASS" : "WATCH";
-
-      // Upsert prop score — check existing first since no unique constraint yet
-      const [existingScore] = await db.select()
-        .from(propScoresTable)
-        .where(eq(propScoresTable.ppLineId, line.id))
+      // --- Projection data ---
+      const [proj] = await db.select()
+        .from(ourProjectionsTable)
+        .where(and(
+          eq(ourProjectionsTable.playerId, line.playerId),
+          eq(ourProjectionsTable.statType, line.statType),
+        ))
         .limit(1);
+
+      const noPlayReason = proj?.noPlayReason ?? null;
+      const pOver = proj?.pOver ? parseFloat(proj.pOver.toString()) : null;
+      const dataQualityScore = proj?.dataQualityScore ?? null;
+      const sourceLabel = proj?.sourceLabel ?? "prior_only";
+
+      // --- Score computation ---
+      const lineBonus =
+        line.lineType === "goblin" ? 8 :
+        line.lineType === "demon" ? -8 : 0;
+
+      // Projection confirmation bonus: if our model agrees with market edge, boost confidence
+      let projConfirmBonus = 0;
+      if (pOver !== null && marketEdge !== 0) {
+        if (pOver > 55 && marketEdge > 0) projConfirmBonus = 3;   // model + market both bullish
+        if (pOver < 45 && marketEdge < 0) projConfirmBonus = 3;   // both bearish
+        if (pOver > 55 && marketEdge < 0) projConfirmBonus = -5;  // conflict — reduce confidence
+        if (pOver < 45 && marketEdge > 0) projConfirmBonus = -5;
+      }
+
+      const finalScore = marketEdge + lineBonus + projConfirmBonus;
+
+      // --- Action tag — NO-PLAY gates first ---
+      let actionTag: string;
+      if (noPlayReason) {
+        actionTag = "NO-PLAY";
+      } else if (finalScore >= 4 && (pOver === null || pOver >= 52) && (dataQualityScore === null || dataQualityScore >= 50)) {
+        actionTag = "PLAY";
+      } else if (finalScore <= -3) {
+        actionTag = "PASS";
+      } else {
+        actionTag = "WATCH";
+      }
+
+      // --- Reasoning blob (stored in jsonb for AI explainability) ---
+      const reasoning = {
+        marketEdge: Math.round(marketEdge * 10) / 10,
+        bookCount,
+        marketAvg,
+        ppLine: parseFloat(line.lineValue.toString()),
+        lineType: line.lineType,
+        lineBonus,
+        projConfirmBonus,
+        pOver,
+        noPlayReason,
+        dataQualityScore,
+        sourceLabel,
+        projectedValue: proj?.projectedValue ?? null,
+        stdDev: proj?.stdDev ?? null,
+        shrinkageFactor: proj?.shrinkageFactor ?? null,
+        sport: player.sport,
+      };
 
       const scorePayload = {
         ppLineId: line.id,
         playerId: line.playerId,
         statType: line.statType,
         marketSupportScore: marketSupportScore.toString(),
-        edgeScore: edgeScore.toString(),
-        stabilityScore: "50",
+        edgeScore: marketEdge.toString(),
+        stabilityScore: dataQualityScore ? dataQualityScore.toString() : "50",
         riskScore: line.lineType === "demon" ? "70" : "30",
         finalScore: finalScore.toString(),
         actionTag,
+        reasoning,
         scoredAt: new Date(),
       };
+
+      const [existingScore] = await db.select()
+        .from(propScoresTable)
+        .where(eq(propScoresTable.ppLineId, line.id))
+        .limit(1);
 
       if (existingScore) {
         await db.update(propScoresTable)
           .set({
             marketSupportScore: scorePayload.marketSupportScore,
             edgeScore: scorePayload.edgeScore,
+            stabilityScore: scorePayload.stabilityScore,
             finalScore: scorePayload.finalScore,
             actionTag,
+            reasoning,
             scoredAt: new Date(),
           })
           .where(eq(propScoresTable.id, existingScore.id));
@@ -215,7 +274,6 @@ export async function recalcPropScores(): Promise<void> {
       }
 
       void player;
-      void trueEdge;
     } catch (e) {
       logger.error({ err: e, lineId: line.id }, "Prop score calc error");
     }

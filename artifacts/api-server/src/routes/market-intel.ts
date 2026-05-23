@@ -38,7 +38,7 @@ router.get("/market-intel", async (req, res) => {
       )
       .where(eq(ppLinesTable.isActive, true));
 
-    // Get last odds sync run to determine marketDataStatus
+    // Last odds sync for marketDataStatus
     const [lastOddsRun] = await db
       .select()
       .from(syncRunsTable)
@@ -64,7 +64,7 @@ router.get("/market-intel", async (req, res) => {
         const ppLine = parseFloat(row.line.lineValue.toString());
         const trueEdge = marketAvg ? (-(ppLine - marketAvg) / marketAvg) * 100 : null;
 
-        // marketDataStatus — never show edge score based on guesswork
+        // marketDataStatus — never show edge scores based on guesswork
         let marketDataStatus: "available" | "partial" | "unavailable" | "not_synced";
         if (vals.length >= 2) {
           const ageMins = lastOddsRun?.finishedAt
@@ -86,6 +86,24 @@ router.get("/market-intel", async (req, res) => {
           .orderBy(desc(lineMoveEventsTable.capturedAt))
           .limit(5);
 
+        // Projection distribution — full output
+        const proj = row.proj;
+        const noPlayReason = proj?.noPlayReason ?? null;
+        const pOver = proj?.pOver ? parseFloat(proj.pOver.toString()) : null;
+        const dqScore = proj?.dataQualityScore ?? null;
+
+        // Projection staleness check
+        const isStale = proj?.expiresAt ? new Date() > proj.expiresAt : false;
+        const effectiveNoPlay = noPlayReason ?? (isStale ? "stale_projection" : null);
+
+        // Projection source label — show what powered this
+        const sourceLabel = isStale
+          ? `${proj?.sourceLabel ?? "prior_only"} (stale)`
+          : (proj?.sourceLabel ?? null);
+
+        // Reasoning blob from prop score
+        const scoreReasoning = (row.score?.reasoning as Record<string, unknown> | null) ?? null;
+
         return {
           ppLineId: row.line.id,
           playerId: row.player.id,
@@ -95,28 +113,42 @@ router.get("/market-intel", async (req, res) => {
           statType: row.line.statType,
           lineValue: ppLine,
           lineType: row.line.lineType,
+
+          // Market
           marketAvg: marketAvg ? Math.round(marketAvg * 100) / 100 : null,
           trueEdge: trueEdge ? Math.round(trueEdge * 10) / 10 : null,
           bookLines,
           marketDataStatus,
-          // Only show edge score when market data is actually available
+          bookCount: vals.length,
+
+          // Scores — only show when data available
           edgeScore: marketDataStatus !== "not_synced" && row.score
             ? parseFloat(row.score.finalScore?.toString() || "0")
             : null,
-          actionTag: marketDataStatus !== "not_synced" ? (row.score?.actionTag || null) : null,
-          ourProjection: row.proj
-            ? {
-                value: parseFloat(row.proj.projectedValue.toString()),
-                confidence: row.proj.confidence,
-                gamesUsed: row.proj.gamesUsed,
-              }
-            : null,
-          streak: row.streak
-            ? {
-                count: Math.abs(row.streak.currentStreak || 0),
-                type: row.streak.streakType,
-              }
-            : null,
+          actionTag: row.score?.actionTag ?? null,
+
+          // Projection distribution
+          ourProjection: proj ? {
+            value: parseFloat(proj.projectedValue.toString()),
+            stdDev: proj.stdDev ? parseFloat(proj.stdDev.toString()) : null,
+            pOver,
+            percentileAtLine: proj.percentileAtLine ? parseFloat(proj.percentileAtLine.toString()) : null,
+            noPlayReason: effectiveNoPlay,
+            dataQualityScore: dqScore,
+            sourceLabel,
+            confidence: proj.confidence,
+            gamesUsed: proj.gamesUsed,
+            shrinkageFactor: proj.shrinkageFactor ? parseFloat(proj.shrinkageFactor.toString()) : null,
+            isStale,
+          } : null,
+
+          // Streak
+          streak: row.streak ? {
+            count: Math.abs(row.streak.currentStreak ?? 0),
+            type: row.streak.streakType,
+          } : null,
+
+          // Line movement
           recentMoves: recentMoves.map(m => ({
             book: m.bookName,
             from: m.prevLine,
@@ -124,10 +156,14 @@ router.get("/market-intel", async (req, res) => {
             direction: m.moveDirection,
             at: m.capturedAt,
           })),
+
+          // Full reasoning for explainability
+          scoring: scoreReasoning,
         };
       }),
     );
 
+    // Filters
     const { sport, actionTag, lineType, minEdgeScore } = req.query as Record<string, string>;
     let filtered = result;
     if (sport) filtered = filtered.filter(r => r.sport === sport);
@@ -139,7 +175,15 @@ router.get("/market-intel", async (req, res) => {
       );
     }
 
-    res.json(filtered.sort((a, b) => (b.edgeScore ?? 0) - (a.edgeScore ?? 0)));
+    // Sort: NO-PLAY to bottom, then by edge score desc
+    filtered.sort((a, b) => {
+      const aNoPlay = a.actionTag === "NO-PLAY" ? 1 : 0;
+      const bNoPlay = b.actionTag === "NO-PLAY" ? 1 : 0;
+      if (aNoPlay !== bNoPlay) return aNoPlay - bNoPlay;
+      return (b.edgeScore ?? 0) - (a.edgeScore ?? 0);
+    });
+
+    res.json(filtered);
   } catch (err) {
     logger.error(err);
     res.status(500).json({ error: "Internal server error" });

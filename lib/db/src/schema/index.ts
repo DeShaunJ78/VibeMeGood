@@ -28,3 +28,4 @@ export * from "./session-logs";
 export * from "./behavioral-logs";
 export * from "./line-move-events";
 export * from "./sync-runs";
+export * from "./player-game-logs";

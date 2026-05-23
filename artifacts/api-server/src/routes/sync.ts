@@ -5,7 +5,8 @@ import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { broadcastSyncStatus } from "../lib/sse";
 import { syncPpLines } from "../lib/sync/prizepicks";
-import { syncExternalOdds } from "../lib/sync/external-odds";
+import { syncExternalOdds, recalcPropScores } from "../lib/sync/external-odds";
+import { computeAllProjections } from "../lib/projection/compute";
 
 const router = Router();
 
@@ -61,8 +62,9 @@ async function runSync(
 }
 
 async function syncProjectionsImpl(): Promise<number> {
-  // Projections are Week 2 — stub returns 0 without crashing
-  return 0;
+  const n = await computeAllProjections();
+  await recalcPropScores();
+  return n;
 }
 
 async function syncInjuriesImpl(): Promise<number> {
