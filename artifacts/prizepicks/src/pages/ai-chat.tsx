@@ -2,8 +2,72 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Send, Plus, Trash2, MessageSquare, Bot } from "lucide-react";
+import { Send, Plus, Trash2, MessageSquare, Bot, Database } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+
+function MdLine({ text }: { text: string }) {
+  // Bold: **text**
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.startsWith("**") && p.endsWith("**")
+          ? <strong key={i} className="text-foreground font-semibold">{p.slice(2, -2)}</strong>
+          : <span key={i}>{p}</span>
+      )}
+    </>
+  );
+}
+
+function MarkdownMessage({ content }: { content: string }) {
+  const lines = content.split("\n");
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (line.startsWith("### ")) {
+      elements.push(
+        <div key={i} className="font-semibold text-primary text-xs uppercase tracking-wider mt-2 mb-0.5">
+          <MdLine text={line.slice(4)} />
+        </div>
+      );
+    } else if (line.startsWith("## ")) {
+      elements.push(
+        <div key={i} className="font-bold text-sm text-foreground mt-3 mb-1">
+          <MdLine text={line.slice(3)} />
+        </div>
+      );
+    } else if (line.match(/^[-•*] /)) {
+      elements.push(
+        <div key={i} className="flex gap-1.5 ml-2">
+          <span className="text-primary mt-px shrink-0">•</span>
+          <span><MdLine text={line.slice(2)} /></span>
+        </div>
+      );
+    } else if (line.match(/^\d+\. /)) {
+      const num = line.match(/^(\d+)\. /)?.[1];
+      elements.push(
+        <div key={i} className="flex gap-1.5 ml-2">
+          <span className="text-primary shrink-0 w-4 text-right">{num}.</span>
+          <span><MdLine text={line.replace(/^\d+\. /, "")} /></span>
+        </div>
+      );
+    } else if (line.match(/^---+$/) || line.match(/^===+$/)) {
+      elements.push(<hr key={i} className="border-slate-700 my-2" />);
+    } else if (line === "") {
+      elements.push(<div key={i} className="h-1.5" />);
+    } else {
+      elements.push(
+        <div key={i}><MdLine text={line} /></div>
+      );
+    }
+    i++;
+  }
+
+  return <div className="space-y-0.5 leading-relaxed">{elements}</div>;
+}
 
 interface Conversation { id: number; title: string; createdAt: string; }
 interface Message { id: number; conversationId: number; role: string; content: string; createdAt: string; }
@@ -140,11 +204,31 @@ export default function AiChat() {
         {/* Chat area */}
         <div className="flex flex-col bg-slate-900 min-h-0">
           {!activeId ? (
-            <div className="flex-1 flex items-center justify-center text-center p-8">
-              <div>
-                <Bot className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+            <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6">
+              <div className="text-center">
+                <Bot className="w-12 h-12 text-slate-600 mx-auto mb-3" />
                 <p className="text-sm font-mono text-muted-foreground">Select a conversation or start a new one.</p>
-                <p className="text-xs text-slate-500 font-mono mt-2">Ask about props, line value, injury impact, correlation risk, or anything analytics.</p>
+              </div>
+              <div className="w-full max-w-md space-y-2">
+                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider text-center mb-3 flex items-center justify-center gap-1.5">
+                  <Database className="w-3 h-3" />
+                  Context auto-loaded each turn
+                </div>
+                {[
+                  "Which player has the highest P(Over) today?",
+                  "What props are on my watchlist right now?",
+                  "Who is injured or GTD today that I should avoid?",
+                  "Analyze my recent performance and suggest a strategy.",
+                  "Which pending entry has the most risk?",
+                ].map(prompt => (
+                  <button
+                    key={prompt}
+                    onClick={newConversation}
+                    className="w-full text-left px-3 py-2 bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 hover:border-primary/40 rounded text-xs font-mono text-slate-300 transition-colors"
+                  >
+                    {prompt}
+                  </button>
+                ))}
               </div>
             </div>
           ) : (
@@ -156,10 +240,13 @@ export default function AiChat() {
                     <Skeleton className="h-24 bg-slate-800 w-4/5 ml-auto" />
                   </div>
                 ) : messages.length === 0 ? (
-                  <div className="h-full flex items-center justify-center">
+                  <div className="h-full flex flex-col items-center justify-center gap-4 p-6">
                     <div className="text-center">
                       <Bot className="w-8 h-8 text-slate-600 mx-auto mb-2" />
                       <p className="text-xs text-muted-foreground font-mono">Ask anything about today's slate.</p>
+                      <p className="text-[10px] text-slate-600 font-mono mt-1">
+                        Claude has live access to model picks, watchlist, injuries & recent P&L.
+                      </p>
                     </div>
                   </div>
                 ) : (
@@ -175,7 +262,9 @@ export default function AiChat() {
                             <Bot className="w-3 h-3" /> Claude
                           </div>
                         )}
-                        {msg.content}
+                        {msg.role === "assistant"
+                          ? <MarkdownMessage content={msg.content} />
+                          : msg.content}
                       </div>
                     </div>
                   ))

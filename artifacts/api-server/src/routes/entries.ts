@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { entriesTable, entryPicksTable, playersTable } from "@workspace/db/schema";
+import { entriesTable, entryPicksTable, playersTable, ppLinesTable, clvRecordsTable } from "@workspace/db/schema";
 import { eq, and, gte, inArray, type SQL } from "drizzle-orm";
 
 const router = Router();
@@ -151,6 +151,47 @@ router.patch("/entries/:entryId/picks/:pickId", async (req, res): Promise<void> 
       res.status(404).json({ error: "Pick not found" });
       return;
     }
+
+    // Auto-record CLV when a pick result is first set to hit or miss
+    const newResult = (req.body as Record<string, unknown>).result as string | undefined;
+    if ((newResult === "hit" || newResult === "miss") && pick.playerId && pick.statType) {
+      try {
+        const [currentLine] = await db
+          .select({ lineValue: ppLinesTable.lineValue })
+          .from(ppLinesTable)
+          .where(and(
+            eq(ppLinesTable.playerId, pick.playerId),
+            eq(ppLinesTable.statType, pick.statType),
+            eq(ppLinesTable.isActive, true),
+          ))
+          .limit(1);
+
+        if (currentLine) {
+          const lockedLine  = Number(pick.lineValue);
+          const closingLine = Number(currentLine.lineValue);
+          const lineMove    = closingLine - lockedLine;
+          // Positive CLV = line moved in bettor's favour
+          const clv         = pick.direction === "more" ? lineMove : -lineMove;
+
+          await db.insert(clvRecordsTable).values({
+            entryPickId: pick.id,
+            ppLineId:    pick.ppLineId,
+            lockedLine:  String(lockedLine),
+            closingLine: String(closingLine),
+            clv:         String(clv),
+            direction:   pick.direction,
+          });
+
+          // Persist closingLine + clv back onto the pick row
+          await db.update(entryPicksTable)
+            .set({ closingLine: String(closingLine), clv: String(clv) })
+            .where(eq(entryPicksTable.id, pick.id));
+        }
+      } catch (clvErr) {
+        req.log.warn({ err: clvErr }, "CLV auto-record failed (non-fatal)");
+      }
+    }
+
     res.json(pick);
   } catch (err) {
     req.log.error(err);
