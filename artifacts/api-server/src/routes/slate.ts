@@ -3,7 +3,8 @@ import { db } from "@workspace/db";
 import {
   ppLinesTable, propScoresTable, projectionsTable, playersTable,
   teamsTable, gamesTable, watchlistItemsTable, externalLinesTable,
-  ppLineHistoryTable, injuriesTable, lineupConfirmationsTable
+  ppLineHistoryTable, injuriesTable, lineupConfirmationsTable,
+  ourProjectionsTable, playerGameLogsTable,
 } from "@workspace/db/schema";
 import { eq, and, inArray, desc } from "drizzle-orm";
 
@@ -121,7 +122,7 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
     const [player] = await db.select().from(playersTable).where(eq(playersTable.id, line.playerId));
     const [score] = await db.select().from(propScoresTable).where(eq(propScoresTable.ppLineId, lineId));
 
-    const [lineHistory, projection, externalLines, injuries, lineupConfs] = await Promise.all([
+    const [lineHistory, projection, externalLines, injuries, lineupConfs, ourProj, recentGames] = await Promise.all([
       db.select().from(ppLineHistoryTable).where(eq(ppLineHistoryTable.ppLineId, lineId)).orderBy(ppLineHistoryTable.capturedAt),
       db.select().from(projectionsTable)
         .where(and(eq(projectionsTable.playerId, line.playerId), eq(projectionsTable.statType, line.statType))),
@@ -132,6 +133,13 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
         ? db.select().from(lineupConfirmationsTable)
             .where(and(eq(lineupConfirmationsTable.playerId, line.playerId), eq(lineupConfirmationsTable.gameId, line.gameId)))
         : [],
+      db.select().from(ourProjectionsTable)
+        .where(and(eq(ourProjectionsTable.playerId, line.playerId), eq(ourProjectionsTable.statType, line.statType)))
+        .limit(1),
+      db.select().from(playerGameLogsTable)
+        .where(and(eq(playerGameLogsTable.playerId, line.playerId), eq(playerGameLogsTable.statType, line.statType)))
+        .orderBy(desc(playerGameLogsTable.gameDate))
+        .limit(10),
     ]);
 
     const watchlistRows = await db.select().from(watchlistItemsTable)
@@ -141,12 +149,32 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
       ? (await db.select().from(gamesTable).where(eq(gamesTable.id, line.gameId)))[0] ?? null
       : null;
 
+    const op = ourProj[0] ?? null;
+    const isStale = op?.expiresAt ? new Date() > op.expiresAt : false;
+
     res.json({
       ppLine: line,
       player,
       game,
       lineHistory,
       projection: projection[0] ?? null,
+      ourProjection: op ? {
+        value: parseFloat(op.projectedValue.toString()),
+        stdDev: op.stdDev ? parseFloat(op.stdDev.toString()) : null,
+        pOver: op.pOver ? parseFloat(op.pOver.toString()) : null,
+        percentileAtLine: op.percentileAtLine ? parseFloat(op.percentileAtLine.toString()) : null,
+        dataQualityScore: op.dataQualityScore,
+        shrinkageFactor: op.shrinkageFactor ? parseFloat(op.shrinkageFactor.toString()) : null,
+        noPlayReason: op.noPlayReason ?? null,
+        sourceLabel: isStale ? `${op.sourceLabel} (stale)` : op.sourceLabel,
+        confidence: op.confidence,
+        gamesUsed: op.gamesUsed,
+        isStale,
+      } : null,
+      recentGames: recentGames.map(g => ({
+        date: g.gameDate,
+        value: parseFloat(g.value.toString()),
+      })).reverse(),
       externalLines,
       propScore: score ?? null,
       injuries,

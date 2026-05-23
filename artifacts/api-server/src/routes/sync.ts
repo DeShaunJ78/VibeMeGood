@@ -7,6 +7,7 @@ import { broadcastSyncStatus } from "../lib/sse";
 import { syncPpLines } from "../lib/sync/prizepicks";
 import { syncExternalOdds, recalcPropScores } from "../lib/sync/external-odds";
 import { computeAllProjections } from "../lib/projection/compute";
+import { computeStreaks } from "../lib/sync/streaks";
 
 const router = Router();
 
@@ -64,6 +65,7 @@ async function runSync(
 async function syncProjectionsImpl(): Promise<number> {
   const n = await computeAllProjections();
   await recalcPropScores();
+  await computeStreaks();
   return n;
 }
 

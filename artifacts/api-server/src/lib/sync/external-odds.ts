@@ -6,6 +6,7 @@ import {
 import { eq, and } from "drizzle-orm";
 import { logger } from "../logger";
 import { computeAllProjections } from "../projection/compute";
+import { computeStreaks } from "./streaks";
 
 const ODDS_BASE = process.env.ODDS_API_BASE || "https://api.the-odds-api.com/v4";
 const ODDS_KEY = process.env.ODDS_API_KEY || "";
@@ -34,6 +35,7 @@ export async function syncExternalOdds(): Promise<number> {
     logger.warn("ODDS_API_KEY not set — running projection engine only");
     await computeAllProjections();
     await recalcPropScores();
+    await computeStreaks();
     return 0;
   }
 

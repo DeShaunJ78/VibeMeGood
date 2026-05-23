@@ -6,13 +6,31 @@ import { Badge } from "@/components/ui/badge";
 import { LineTypeBadge, ActionTagBadge } from "./ui/badges";
 import { ScoreBar } from "./ui/score-bar";
 import { useEntry } from "@/lib/entry-context";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { Plus, Minus, Zap, TrendingUp, TrendingDown, AlertTriangle, CheckCircle } from "lucide-react";
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  BarChart, Bar, Cell, ReferenceLine,
+} from "recharts";
+import { Plus, Minus, Zap, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Activity, Database } from "lucide-react";
 
 interface PropDetailSheetProps {
   ppLineId: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+interface OurProjection {
+  value: number;
+  stdDev: number | null;
+  pOver: number | null;
+  percentileAtLine: number | null;
+  dataQualityScore: number | null;
+  shrinkageFactor: number | null;
+  noPlayReason: string | null;
+  sourceLabel: string | null;
+  confidence: string | null;
+  gamesUsed: number | null;
+  isStale: boolean;
+  reasoning: Record<string, unknown> | null;
 }
 
 interface PropDetail {
@@ -21,11 +39,32 @@ interface PropDetail {
   game: any;
   lineHistory: any[];
   projection: any | null;
+  ourProjection: OurProjection | null;
+  recentGames: { date: string; value: number }[];
   externalLines: any[];
   propScore: any | null;
   injuries: any[];
   lineupConfirmation: any | null;
   isWatched: boolean;
+}
+
+function pOverColor(pct: number | null): string {
+  if (pct === null) return "text-muted-foreground";
+  if (pct >= 60) return "text-emerald-400";
+  if (pct >= 54) return "text-lime-400";
+  if (pct >= 50) return "text-yellow-400";
+  if (pct >= 42) return "text-orange-400";
+  return "text-rose-400";
+}
+
+function confidenceBadgeClass(conf: string | null): string {
+  switch (conf) {
+    case "high":      return "bg-emerald-900/50 text-emerald-300 border-emerald-700/50";
+    case "medium":    return "bg-indigo-900/50 text-indigo-300 border-indigo-700/50";
+    case "low":       return "bg-amber-900/50 text-amber-300 border-amber-700/50";
+    case "very_low":  return "bg-rose-900/50 text-rose-300 border-rose-700/50";
+    default:          return "bg-slate-800 text-slate-400 border-slate-700";
+  }
 }
 
 export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailSheetProps) {
@@ -64,7 +103,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
         lineValue: Number(data.ppLine.lineValue),
         lineType: data.ppLine.lineType,
         direction,
-        yourProjection: data.projection ? Number(data.projection.projectedValue) : null,
+        yourProjection: data.ourProjection?.value ?? (data.projection ? Number(data.projection.projectedValue) : null),
         edgeScore: data.propScore ? Number(data.propScore.edgeScore) : null,
         actionTag: data.propScore?.actionTag ?? null,
       });
@@ -109,13 +148,23 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
   }
 
   const lineValue = data ? Number(data.ppLine.lineValue) : 0;
-  const projection = data?.projection ? Number(data.projection.projectedValue) : null;
-  const gap = projection != null ? projection - lineValue : null;
+
+  // Prefer our projection value for gap display
+  const projValue = data?.ourProjection?.value ?? (data?.projection ? Number(data.projection.projectedValue) : null);
+  const gap = projValue != null ? projValue - lineValue : null;
 
   const historyChartData = data?.lineHistory.map((h: any) => ({
     time: new Date(h.capturedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     value: Number(h.lineValue),
   })) ?? [];
+
+  const recentGamesData = (data?.recentGames ?? []).map((g, i) => ({
+    label: `G${i + 1}`,
+    value: g.value,
+  }));
+
+  const op = data?.ourProjection ?? null;
+  const pOver = op?.pOver ?? null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -152,7 +201,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
             </SheetHeader>
 
             <div className="flex-1 overflow-y-auto">
-              {/* The Line + Projection */}
+              {/* The Line + Our Projection */}
               <div className="p-5 grid grid-cols-2 gap-3 border-b border-slate-800/50">
                 <div className="bg-slate-900 border border-slate-800 p-4 rounded-lg text-center">
                   <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1">PP Line</div>
@@ -162,7 +211,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
                 <div className="bg-slate-900 border border-slate-800 p-4 rounded-lg text-center">
                   <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1">Our Projection</div>
                   <div className={`text-4xl font-bold font-mono ${gap != null && gap > 0 ? "text-emerald-400" : gap != null && gap < 0 ? "text-rose-400" : "text-primary"}`}>
-                    {projection?.toFixed(1) ?? "—"}
+                    {projValue?.toFixed(1) ?? "—"}
                   </div>
                   <div className={`text-xs font-mono mt-1 ${gap != null && gap > 0 ? "text-emerald-400" : gap != null && gap < 0 ? "text-rose-400" : "text-muted-foreground"}`}>
                     {gap != null ? `${gap > 0 ? "+" : ""}${gap.toFixed(1)} gap` : "No projection"}
@@ -194,6 +243,119 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
                   {isPicked ? <><Minus className="w-3.5 h-3.5 mr-1" /> REMOVE</> : <><Plus className="w-3.5 h-3.5 mr-1" /> ADD TO ENTRY</>}
                 </Button>
               </div>
+
+              {/* ── Model Distribution Panel ── */}
+              {op && (
+                <div className="px-5 py-4 border-b border-slate-800/50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Activity className="w-3 h-3 text-indigo-400" />
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Model Distribution</div>
+                    {op.confidence && (
+                      <Badge className={`text-[9px] font-mono ml-auto px-1.5 py-0 h-4 ${confidenceBadgeClass(op.confidence)}`}>
+                        {op.confidence.replace("_", " ").toUpperCase()}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* P(Over) + Std Dev */}
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div className="col-span-2 bg-slate-900 border border-slate-800 p-3 rounded-lg text-center">
+                      <div className="text-[10px] font-mono text-muted-foreground mb-0.5">P(OVER LINE)</div>
+                      <div className={`text-3xl font-bold font-mono ${pOverColor(pOver)}`}>
+                        {pOver != null ? `${pOver.toFixed(1)}%` : "—"}
+                      </div>
+                      {op.percentileAtLine != null && (
+                        <div className="text-[9px] font-mono text-muted-foreground mt-1">
+                          line at {op.percentileAtLine.toFixed(0)}th pct
+                        </div>
+                      )}
+                    </div>
+                    <div className="bg-slate-900 border border-slate-800 p-3 rounded-lg text-center">
+                      <div className="text-[10px] font-mono text-muted-foreground mb-0.5">σ / STD</div>
+                      <div className="text-2xl font-bold font-mono text-slate-300">
+                        {op.stdDev != null ? `±${op.stdDev.toFixed(1)}` : "—"}
+                      </div>
+                      <div className="text-[9px] font-mono text-muted-foreground mt-1">spread</div>
+                    </div>
+                  </div>
+
+                  {/* Data Quality bar */}
+                  {op.dataQualityScore != null && (
+                    <div className="mb-3">
+                      <ScoreBar label="Data Quality" value={op.dataQualityScore} colorClass="bg-indigo-500" />
+                    </div>
+                  )}
+
+                  {/* Meta info row */}
+                  <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground flex-wrap">
+                    <div className="flex items-center gap-1">
+                      <Database className="w-2.5 h-2.5" />
+                      <span>{op.sourceLabel ?? "prior_only"}</span>
+                      {op.gamesUsed != null && <span className="text-slate-600">({op.gamesUsed}g)</span>}
+                    </div>
+                    {op.shrinkageFactor != null && (
+                      <span className="text-slate-600">shrink {(op.shrinkageFactor * 100).toFixed(0)}%→prior</span>
+                    )}
+                    {op.isStale && <span className="text-amber-400">stale</span>}
+                  </div>
+
+                  {/* No-play gate warning */}
+                  {op.noPlayReason && (
+                    <div className="mt-2 flex items-center gap-1.5 text-[10px] font-mono text-amber-400 bg-amber-950/30 border border-amber-800/40 px-2 py-1.5 rounded">
+                      <AlertTriangle className="w-3 h-3 shrink-0" />
+                      <span>NO-PLAY: {op.noPlayReason.replace(/_/g, " ")}</span>
+                    </div>
+                  )}
+
+                  {/* Reasoning blob */}
+                  {op.reasoning && typeof op.reasoning === "object" && (
+                    <div className="mt-2 text-[9px] font-mono text-slate-500 space-y-0.5">
+                      {Object.entries(op.reasoning as Record<string, unknown>).map(([k, v]) =>
+                        typeof v === "string" ? (
+                          <div key={k}>· {v}</div>
+                        ) : Array.isArray(v) && v.length > 0 ? (
+                          v.map((s, i) => <div key={`${k}-${i}`}>· {String(s)}</div>)
+                        ) : null
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Recent Games Bar Chart ── */}
+              {recentGamesData.length > 0 && (
+                <div className="px-5 py-4 border-b border-slate-800/50">
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-3">
+                    Last {recentGamesData.length} Games vs {lineValue} Line
+                  </div>
+                  <div className="h-28">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={recentGamesData} margin={{ top: 4, right: 4, left: -22, bottom: 2 }}>
+                        <XAxis dataKey="label" fontSize={9} stroke="#475569" tickLine={false} axisLine={false} />
+                        <YAxis fontSize={10} stroke="#475569" tickLine={false} axisLine={false} domain={[0, "auto"]} />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: "#020617", borderColor: "#1e293b", fontFamily: "monospace", fontSize: 11 }}
+                          formatter={(val: number) => [val.toFixed(1), data.ppLine.statType]}
+                        />
+                        <ReferenceLine y={lineValue} stroke="#0ea5e9" strokeDasharray="4 2" strokeWidth={1.5} />
+                        <Bar dataKey="value" radius={[2, 2, 0, 0]}>
+                          {recentGamesData.map((entry, i) => (
+                            <Cell key={i} fill={entry.value > lineValue ? "#10b981" : "#f43f5e"} fillOpacity={0.8} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex justify-between text-[9px] font-mono text-muted-foreground mt-1">
+                    <span className="text-slate-600">← older</span>
+                    <span className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-sm bg-emerald-500/70" /> over
+                      <span className="inline-block w-2 h-2 rounded-sm bg-rose-500/70" /> under
+                    </span>
+                    <span className="text-slate-600">recent →</span>
+                  </div>
+                </div>
+              )}
 
               {/* Score Breakdown */}
               {data.propScore && (
@@ -228,28 +390,6 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
                         <Line type="monotone" dataKey="value" stroke="#0ea5e9" strokeWidth={2} dot={{ fill: "#0ea5e9", r: 3 }} />
                       </LineChart>
                     </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {/* Projection Range */}
-              {data.projection && (
-                <div className="px-5 py-4 border-b border-slate-800/50">
-                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-3">Projection Range</div>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    {[
-                      { label: "Floor", value: data.projection.floorValue, color: "text-rose-400" },
-                      { label: "Median", value: data.projection.medianValue, color: "text-primary" },
-                      { label: "Ceiling", value: data.projection.ceilingValue, color: "text-emerald-400" },
-                    ].map(({ label, value, color }) => (
-                      <div key={label} className="bg-slate-900 border border-slate-800 p-2 rounded">
-                        <div className="text-[10px] font-mono text-muted-foreground">{label}</div>
-                        <div className={`text-lg font-bold font-mono ${color}`}>{Number(value).toFixed(1)}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-2 text-[10px] font-mono text-muted-foreground text-right">
-                    Confidence: {(Number(data.projection.confidenceScore) * 100).toFixed(0)}% · Source: {data.projection.projectionSource}
                   </div>
                 </div>
               )}
