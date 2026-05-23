@@ -1,9 +1,9 @@
 import { db } from "@workspace/db";
 import {
   playerGameLogsTable, ourProjectionsTable, ppLinesTable, playersTable,
-  injuriesTable, matchupHistoryTable,
+  injuriesTable, matchupHistoryTable, gamesTable,
 } from "@workspace/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { pOverLine, percentileAtLine, volatilityPct } from "./normal-dist";
 import {
   getPrior, minGamesForConfidence,
@@ -249,9 +249,25 @@ export async function computeAllProjections(): Promise<number> {
     .innerJoin(playersTable, eq(ppLinesTable.playerId, playersTable.id))
     .where(eq(ppLinesTable.isActive, true));
 
+  // Pre-fetch games for opponent team ID lookup
+  const gameIds = [...new Set(
+    activeLines.filter(r => r.line.gameId).map(r => r.line.gameId as number),
+  )];
+  const games = gameIds.length
+    ? await db.select().from(gamesTable).where(inArray(gamesTable.id, gameIds))
+    : [];
+  const gameMap = Object.fromEntries(games.map(g => [g.id, g]));
+
   let computed = 0;
 
   for (const { line, player } of activeLines) {
+    // Resolve opponent from game context
+    let opponentTeamId: number | null = null;
+    if (line.gameId && gameMap[line.gameId] && player.teamId) {
+      const g = gameMap[line.gameId];
+      opponentTeamId = g.homeTeamId === player.teamId ? g.awayTeamId : g.homeTeamId;
+    }
+
     try {
       const result = await computeProjection(
         line.playerId,
@@ -259,7 +275,7 @@ export async function computeAllProjections(): Promise<number> {
         parseFloat(line.lineValue.toString()),
         line.lineType,
         player.sport,
-        null, // opponent lookup requires game context — Week 3
+        opponentTeamId,
       );
 
       const payload = {

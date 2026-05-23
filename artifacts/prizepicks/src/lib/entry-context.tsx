@@ -10,6 +10,7 @@ export interface EntryPick {
   lineType: string;
   direction: "more" | "less";
   yourProjection: number | null;
+  pOver: number | null;
   edgeScore: number | null;
   actionTag: string | null;
 }

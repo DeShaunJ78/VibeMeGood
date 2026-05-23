@@ -3,9 +3,9 @@ import { db } from "@workspace/db";
 import {
   gamesTable, injuriesTable, ppLinesTable, ppLineHistoryTable,
   propScoresTable, watchlistItemsTable, alertsTable, entriesTable,
-  playersTable, teamsTable
+  playersTable, teamsTable, ourProjectionsTable,
 } from "@workspace/db/schema";
-import { eq, and, gte, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, gte, desc, sql, inArray, isNotNull } from "drizzle-orm";
 
 const router = Router();
 
@@ -32,7 +32,11 @@ router.get("/dashboard/summary", async (req, res) => {
     const linePlayerIds = activeLines.map(l => l.playerId);
     const allPlayerIds = [...new Set([...linePlayerIds, ...injuryPlayerIds])];
 
-    const [lineScores, allPlayers, allTeams, allHistory] = await Promise.all([
+    const playerLinePlayerIds = activeLines
+      .filter(l => l.pickCategory === "player")
+      .map(l => l.playerId);
+
+    const [lineScores, allPlayers, allTeams, allHistory, modelProjections] = await Promise.all([
       lineIds.length ? db.select().from(propScoresTable).where(inArray(propScoresTable.ppLineId, lineIds)) : [],
       allPlayerIds.length ? db.select().from(playersTable).where(inArray(playersTable.id, allPlayerIds)) : [],
       db.select().from(teamsTable),
@@ -41,6 +45,19 @@ router.get("/dashboard/summary", async (req, res) => {
             .where(inArray(ppLineHistoryTable.ppLineId, lineIds))
             .orderBy(desc(ppLineHistoryTable.capturedAt))
         : [],
+      playerLinePlayerIds.length
+        ? db.select({
+            playerId: ourProjectionsTable.playerId,
+            statType: ourProjectionsTable.statType,
+            pOver: ourProjectionsTable.pOver,
+            noPlayReason: ourProjectionsTable.noPlayReason,
+          })
+          .from(ourProjectionsTable)
+          .where(and(
+            inArray(ourProjectionsTable.playerId, playerLinePlayerIds),
+            isNotNull(ourProjectionsTable.pOver),
+          ))
+        : ([] as Array<{ playerId: number | null; statType: string; pOver: string | null; noPlayReason: string | null }>),
     ]);
 
     const playerMap = Object.fromEntries(allPlayers.map(p => [p.id, p]));
@@ -141,6 +158,24 @@ router.get("/dashboard/summary", async (req, res) => {
       ? activeScoredLines.reduce((sum, s) => sum + Number(s!.edgeScore), 0) / activeScoredLines.length
       : null;
 
+    // Model intelligence KPIs
+    const playPropsCount = activeScoredLines.filter(s => s?.actionTag === "PLAY").length;
+    const gatedPropsCount = activeScoredLines.filter(s => s?.actionTag === "NO-PLAY").length;
+    const projsForAvg = modelProjections.filter(p => !p.noPlayReason && p.pOver !== null);
+    const avgModelPOver = projsForAvg.length
+      ? projsForAvg.reduce((sum, p) => sum + parseFloat(p.pOver!.toString()), 0) / projsForAvg.length
+      : null;
+    // Average P(over) on PLAY props only
+    const playPropPlayerIds = new Set(
+      activeScoredLines.filter(s => s?.actionTag === "PLAY").map(s => s!.playerId),
+    );
+    const playProjections = modelProjections.filter(
+      p => p.playerId !== null && playPropPlayerIds.has(p.playerId),
+    );
+    const avgPlayPOver = playProjections.length
+      ? playProjections.reduce((sum, p) => sum + parseFloat(p.pOver!.toString()), 0) / playProjections.length
+      : null;
+
     const dataFreshness = {
       ppLines: activeLines.length > 0 ? Math.min(...activeLines.map(l => l.updatedAt.getTime())) : null,
       injuries: recentInjuries.length > 0 ? recentInjuries[0].reportedAt.getTime() : null,
@@ -157,6 +192,11 @@ router.get("/dashboard/summary", async (req, res) => {
       averageEdgeScore: avgEdgeScore,
       unreadAlertsCount: Number(unreadAlertsResult[0]?.count ?? 0),
       dataFreshness,
+      // Model intelligence
+      playPropsCount,
+      gatedPropsCount,
+      avgModelPOver: avgModelPOver ? Math.round(avgModelPOver * 10) / 10 : null,
+      avgPlayPOver: avgPlayPOver ? Math.round(avgPlayPOver * 10) / 10 : null,
     });
   } catch (err) {
     req.log.error(err);

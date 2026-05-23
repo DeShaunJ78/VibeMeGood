@@ -3,7 +3,7 @@ import { useGetDashboardSummary } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
-import { AlertTriangle, Activity, Eye, Target, TrendingUp } from "lucide-react";
+import { AlertTriangle, Activity, Eye, Target, TrendingUp, Cpu, ShieldOff, BarChart2 } from "lucide-react";
 import { LineTypeBadge, ActionTagBadge } from "@/components/ui/badges";
 
 function StatCard({
@@ -56,7 +56,7 @@ export default function Dashboard() {
         </>
       ) : (
         <>
-          {/* KPI row */}
+          {/* KPI row — data */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard label="Active Props"    value={data.activePropsCount}                           icon={Activity}      iconClass="text-primary"      />
             <StatCard label="Watched"         value={data.watchlistCount}                             icon={Eye}           iconClass="text-amber-500"    />
@@ -67,6 +67,38 @@ export default function Dashboard() {
               value={<span className="text-rose-500">{data.unreadAlertsCount}</span>}
               icon={AlertTriangle}
               iconClass="text-rose-500"
+            />
+          </div>
+
+          {/* KPI row — model intelligence */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              label="PLAY Props"
+              value={<span className="text-emerald-400">{(data as any).playPropsCount ?? "—"}</span>}
+              icon={Cpu}
+              iconClass="text-emerald-500"
+              subLabel="model-rated actionable"
+            />
+            <StatCard
+              label="Gated / NO-PLAY"
+              value={<span className="text-rose-400">{(data as any).gatedPropsCount ?? "—"}</span>}
+              icon={ShieldOff}
+              iconClass="text-rose-500"
+              subLabel="insufficient data quality"
+            />
+            <StatCard
+              label="Avg P(Over)"
+              value={(data as any).avgModelPOver != null ? `${(data as any).avgModelPOver}%` : "—"}
+              icon={BarChart2}
+              iconClass="text-sky-400"
+              subLabel="across all qualified props"
+            />
+            <StatCard
+              label="PLAY Avg P(Over)"
+              value={(data as any).avgPlayPOver != null ? `${(data as any).avgPlayPOver}%` : "—"}
+              icon={TrendingUp}
+              iconClass="text-violet-400"
+              subLabel="model confidence on PLAYs"
             />
           </div>
 

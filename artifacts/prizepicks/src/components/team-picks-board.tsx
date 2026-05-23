@@ -119,7 +119,7 @@ export function TeamPicksBoard({ rows, isLoading, onSelectProp }: Props) {
                             onClick={() => isPicked ? removePick(row.ppLineId) : addPick({
                               ppLineId: row.ppLineId, playerId: row.playerId, playerName: row.teamAbbr ?? "Team",
                               teamAbbr: row.teamAbbr ?? null, statType: row.statType, lineValue: row.lineValue,
-                              lineType: row.lineType, direction: "more", yourProjection: null, edgeScore: null, actionTag: null,
+                              lineType: row.lineType, direction: "more", yourProjection: null, pOver: null, edgeScore: null, actionTag: null,
                             })}
                           >
                             <TrendingUp className="w-3 h-3 mr-1" /> OVER
@@ -131,7 +131,7 @@ export function TeamPicksBoard({ rows, isLoading, onSelectProp }: Props) {
                             onClick={() => addPick({
                               ppLineId: row.ppLineId + 10000, playerId: row.playerId, playerName: row.teamAbbr ?? "Team",
                               teamAbbr: row.teamAbbr ?? null, statType: row.statType, lineValue: row.lineValue,
-                              lineType: row.lineType, direction: "less", yourProjection: null, edgeScore: null, actionTag: null,
+                              lineType: row.lineType, direction: "less", yourProjection: null, pOver: null, edgeScore: null, actionTag: null,
                             })}
                           >
                             <TrendingDown className="w-3 h-3 mr-1" /> UNDER
@@ -145,7 +145,7 @@ export function TeamPicksBoard({ rows, isLoading, onSelectProp }: Props) {
                           onClick={() => isPicked ? removePick(row.ppLineId) : addPick({
                             ppLineId: row.ppLineId, playerId: row.playerId, playerName: row.teamAbbr ?? "Team",
                             teamAbbr: row.teamAbbr ?? null, statType: "Win", lineValue: row.lineValue,
-                            lineType: row.lineType, direction: "more", yourProjection: null, edgeScore: null, actionTag: null,
+                            lineType: row.lineType, direction: "more", yourProjection: null, pOver: null, edgeScore: null, actionTag: null,
                           })}
                         >
                           {isPicked ? <Minus className="w-3 h-3 mr-1" /> : <Plus className="w-3 h-3 mr-1" />}

@@ -104,6 +104,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
         lineType: data.ppLine.lineType,
         direction,
         yourProjection: data.ourProjection?.value ?? (data.projection ? Number(data.projection.projectedValue) : null),
+        pOver: data.ourProjection?.pOver ?? null,
         edgeScore: data.propScore ? Number(data.propScore.edgeScore) : null,
         actionTag: data.propScore?.actionTag ?? null,
       });

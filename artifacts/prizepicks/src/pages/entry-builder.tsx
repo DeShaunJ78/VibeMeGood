@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useEntry } from "@/lib/entry-context";
-import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile } from "lucide-react";
+import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown } from "lucide-react";
+
+import type { EntryPick } from "@/lib/entry-context";
 
 // Real PrizePicks payout multipliers
 const POWER_MULTIPLIERS: Record<number, number> = { 2: 3, 3: 6, 4: 10, 5: 20, 6: 40 };
@@ -17,6 +19,72 @@ const FLEX_PAYOUTS: Record<number, Record<string, number>> = {
   5: { "5/5": 20, "4/5": 4, "3/5": 1 },
   6: { "6/6": 40, "5/6": 6, "4/6": 1.5 },
 };
+
+// ── EV computation helpers ──────────────────────────────────────────────────
+
+function abbreviateName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return parts.length === 1 ? name : `${parts[0][0]}. ${parts.slice(1).join(" ")}`;
+}
+
+function legPHit(pick: EntryPick): number | null {
+  if (pick.pOver == null) return null;
+  return pick.direction === "more" ? pick.pOver / 100 : 1 - pick.pOver / 100;
+}
+
+interface EVResult {
+  pWin: number;
+  ev: number;
+  evPct: number;
+  hasAllData: boolean;
+  legData: Array<{ name: string; statType: string; direction: "more" | "less"; pHit: number | null }>;
+}
+
+function computeEV(
+  picks: EntryPick[],
+  playstyle: "power" | "flex",
+  payout: number,
+  stake: number,
+  flexPayouts: Record<string, number>,
+): EVResult | null {
+  if (picks.length < 2 || stake <= 0) return null;
+
+  const legData = picks.map(p => ({
+    name: abbreviateName(p.playerName),
+    statType: p.statType,
+    direction: p.direction,
+    pHit: legPHit(p),
+  }));
+
+  const hasAllData = legData.every(l => l.pHit !== null);
+
+  if (playstyle === "power") {
+    const pWin = legData.reduce((acc, l) => acc * (l.pHit ?? 0.5), 1);
+    const ev = pWin * payout - stake;
+    return { pWin, ev, evPct: (ev / stake) * 100, hasAllData, legData };
+  }
+
+  // FLEX: exact per-combination DP
+  const n = picks.length;
+  let dp = new Array(n + 1).fill(0) as number[];
+  dp[0] = 1;
+  for (let i = 0; i < n; i++) {
+    const p = legData[i].pHit ?? 0.5;
+    const next = new Array(n + 1).fill(0) as number[];
+    for (let k = 0; k <= i; k++) {
+      next[k] += dp[k] * (1 - p);
+      next[k + 1] += dp[k] * p;
+    }
+    dp = next;
+  }
+  let ev = -stake;
+  let pWin = 0;
+  for (let k = 0; k <= n; k++) {
+    const mult = flexPayouts[`${k}/${n}`] ?? 0;
+    if (mult > 0) { ev += dp[k] * mult * stake; pWin += dp[k]; }
+  }
+  return { pWin, ev, evPct: (ev / stake) * 100, hasAllData, legData };
+}
 
 export default function EntryBuilder() {
   const { toast } = useToast();
@@ -31,6 +99,13 @@ export default function EntryBuilder() {
   const multiplier = playstyle === "power" ? (POWER_MULTIPLIERS[n] ?? 0) : 0;
   const powerPayout = playstyle === "power" ? stakeNum * multiplier : 0;
   const flexPayouts = playstyle === "flex" && n >= 2 ? FLEX_PAYOUTS[n] ?? {} : {};
+  const evResultPower = playstyle === "power" && n >= 2
+    ? computeEV(picks, "power", powerPayout, stakeNum, {})
+    : null;
+  const evResultFlex = playstyle === "flex" && n >= 2
+    ? computeEV(picks, "flex", 0, stakeNum, flexPayouts)
+    : null;
+  const activeEV = playstyle === "power" ? evResultPower : evResultFlex;
 
   async function handleSave() {
     if (picks.length < 2) {
@@ -183,7 +258,7 @@ export default function EntryBuilder() {
           </Card>
 
           {/* Payout Math */}
-          <Card className="bg-slate-900 border-slate-800 flex-1">
+          <Card className="bg-slate-900 border-slate-800 shrink-0">
             <CardHeader className="pb-2 pt-4">
               <CardTitle className="text-sm font-mono uppercase tracking-wider flex items-center gap-2">
                 <Zap className="w-4 h-4 text-amber-400" /> Payout Calculator
@@ -231,6 +306,78 @@ export default function EntryBuilder() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Model Edge — EV Intelligence */}
+          <Card className="bg-slate-900 border-slate-800 flex-1">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-mono uppercase tracking-wider flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-violet-400" /> Model Edge
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {n < 2 ? (
+                <div className="text-center py-4 text-xs text-muted-foreground font-mono">Add 2+ picks to see EV</div>
+              ) : activeEV === null ? (
+                <div className="text-center py-4 text-xs text-muted-foreground font-mono">Computing…</div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Per-leg breakdown */}
+                  <div className="space-y-1.5">
+                    {activeEV.legData.map((leg, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs font-mono">
+                        <span className="text-slate-500 w-4 shrink-0">{i + 1}</span>
+                        <span className="flex-1 truncate text-slate-300">{leg.name} <span className="text-slate-500">{leg.statType}</span></span>
+                        {leg.direction === "more"
+                          ? <ArrowUp className="w-3 h-3 text-emerald-400 shrink-0" />
+                          : <ArrowDown className="w-3 h-3 text-rose-400 shrink-0" />}
+                        <span className={`w-12 text-right shrink-0 font-bold ${
+                          leg.pHit == null ? "text-slate-500" :
+                          leg.pHit >= 0.6 ? "text-emerald-400" :
+                          leg.pHit >= 0.5 ? "text-amber-400" : "text-rose-400"
+                        }`}>
+                          {leg.pHit != null ? `${(leg.pHit * 100).toFixed(0)}%` : "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="border-t border-slate-800 pt-3 space-y-2">
+                    {/* Combined P(win) */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-mono text-muted-foreground uppercase">P(win this entry)</span>
+                      <span className={`font-mono font-bold text-sm ${
+                        activeEV.pWin >= 0.25 ? "text-emerald-400" :
+                        activeEV.pWin >= 0.12 ? "text-amber-400" : "text-rose-400"
+                      }`}>
+                        {(activeEV.pWin * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    {/* EV */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-mono text-muted-foreground uppercase">Expected Value</span>
+                      <div className="text-right">
+                        <span className={`font-mono font-bold ${
+                          activeEV.ev > 0 ? "text-emerald-400" :
+                          activeEV.evPct > -20 ? "text-amber-400" : "text-rose-400"
+                        }`}>
+                          {activeEV.ev >= 0 ? "+" : ""}${activeEV.ev.toFixed(2)}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-mono ml-1">
+                          ({activeEV.evPct >= 0 ? "+" : ""}{activeEV.evPct.toFixed(0)}%)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {!activeEV.hasAllData && (
+                    <p className="text-[10px] font-mono text-amber-500/70 mt-1">
+                      ⚠ Some legs lack model data — using 50% fallback
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
