@@ -72,7 +72,7 @@ function MarkdownMessage({ content }: { content: string }) {
 interface Conversation { id: number; title: string; createdAt: string; }
 interface Message { id: number; conversationId: number; role: string; content: string; createdAt: string; }
 
-const BASE = "/api";
+const BASE = `${(import.meta.env.BASE_URL as string).replace(/\/$/, "")}/api`;
 
 async function apiGet(path: string) {
   const r = await fetch(`${BASE}${path}`);

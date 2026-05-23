@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { db } from "@workspace/db";
 import { userSettingsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
@@ -6,6 +7,21 @@ import { eq } from "drizzle-orm";
 const router = Router();
 
 const DEFAULT_USER_ID = "default";
+
+const UserSettingsSchema = z.object({
+  bankroll: z.number().positive().optional(),
+  unitSize: z.number().positive().optional(),
+  kellyFraction: z.number().min(0.05).max(1).optional(),
+  dailyLossLimit: z.number().positive().nullable().optional(),
+  varianceIntelEnabled: z.boolean().optional(),
+  showFatigueSignal: z.boolean().optional(),
+  showBlowoutRisk: z.boolean().optional(),
+  showUsageDelta: z.boolean().optional(),
+  showMatchupScore: z.boolean().optional(),
+  showEnvironmentScore: z.boolean().optional(),
+  optimizerMode: z.string().optional(),
+  experimentalMode: z.boolean().optional(),
+}).passthrough();
 
 router.get("/user-settings", async (req, res) => {
   try {
@@ -25,6 +41,11 @@ router.get("/user-settings", async (req, res) => {
 
 router.patch("/user-settings", async (req, res) => {
   try {
+    const validation = UserSettingsSchema.safeParse(req.body);
+    if (!validation.success) {
+      res.status(400).json({ error: "Invalid input", issues: validation.error.issues });
+      return;
+    }
     const patch = req.body as Partial<typeof userSettingsTable.$inferInsert>;
     // Ensure record exists
     const [existing] = await db.select({ id: userSettingsTable.id })

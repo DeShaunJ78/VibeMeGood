@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useCreateEntry } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useEntry } from "@/lib/entry-context";
-import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown, ShieldAlert, AlertTriangle } from "lucide-react";
+import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown, ShieldAlert, AlertTriangle, ClipboardCheck } from "lucide-react";
+import { Link } from "wouter";
 
 import type { EntryPick } from "@/lib/entry-context";
 
@@ -105,6 +106,15 @@ export default function EntryBuilder() {
   const { picks, removePick, updateDirection, clearPicks } = useEntry();
   const createEntry = useCreateEntry();
   const [lossLimitDialog, setLossLimitDialog] = useState<LossLimitState | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+    fetch(`${base}/api/entries?result=pending`)
+      .then(r => r.json())
+      .then(data => setPendingCount(Array.isArray(data) ? data.length : 0))
+      .catch(() => {});
+  }, []);
 
   const stakeNum = parseFloat(stake) || 0;
   const n = picks.length;
@@ -464,6 +474,25 @@ export default function EntryBuilder() {
           </Card>
         </div>
       </div>
+
+      {pendingCount > 0 && (
+        <div className="p-3 bg-amber-950/30 border border-amber-700/40 rounded-lg flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
+              <ClipboardCheck className="w-3.5 h-3.5" />
+              {pendingCount} pending {pendingCount === 1 ? "entry" : "entries"} need results
+            </div>
+            <div className="text-xs text-amber-200/60 mt-0.5">
+              Grade your picks in Journal to track CLV and calibrate your model
+            </div>
+          </div>
+          <Link href="/journal">
+            <Button size="sm" variant="outline" className="border-amber-700/50 text-amber-300 hover:bg-amber-950/40 font-mono text-xs shrink-0">
+              Mark Results →
+            </Button>
+          </Link>
+        </div>
+      )}
     </div>
 
     {/* Loss Limit Confirmation Dialog */}

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   useGetSlate, getGetSlateQueryKey,
   useAddToWatchlist, useRemoveFromWatchlist,
@@ -12,10 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge } from "@/components/ui/badges";
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
 import { TeamPicksBoard } from "@/components/team-picks-board";
-import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight } from "lucide-react";
+import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useEntry, type EntryPick } from "@/lib/entry-context";
 import { VarianceBadge } from "@/components/ui/variance-badge";
@@ -85,30 +86,53 @@ function useMarketIntel(params: Record<string, string | undefined>) {
 
 function ForceSyncButton() {
   const [syncing, setSyncing] = useState(false);
+  const [syncStep, setSyncStep] = useState<string | null>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
-  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+
+  useEffect(() => {
+    if (!syncing) return;
+    const es = new EventSource(`${base}/api/events`);
+    es.addEventListener("sync_status", (e) => {
+      const { job, status } = JSON.parse(e.data) as { job: string; status: string };
+      if (status === "running") setSyncStep(`${job}…`);
+      if (job === "all" && status === "success") {
+        setSyncing(false);
+        setSyncStep(null);
+        void qc.invalidateQueries();
+        es.close();
+      }
+      if (status === "error") setSyncStep(`${job} failed`);
+    });
+    return () => es.close();
+  }, [syncing, base, qc]);
 
   async function forceSync() {
     setSyncing(true);
+    setSyncStep("starting…");
     try {
       await fetch(`${base}/api/sync/all`, { method: "POST" });
-      toast({ title: "Sync started", description: "Pulling live props + computing projections…" });
-      setTimeout(() => { qc.invalidateQueries(); setSyncing(false); }, 15000);
     } catch {
       toast({ title: "Sync failed", variant: "destructive" });
       setSyncing(false);
+      setSyncStep(null);
     }
   }
 
   return (
-    <Button
-      size="sm" variant="outline" onClick={forceSync} disabled={syncing}
-      className="gap-1.5 font-mono text-xs border-primary/30 text-primary hover:bg-primary/10"
-    >
-      <RefreshCw className={`w-3 h-3 ${syncing ? "animate-spin" : ""}`} />
-      {syncing ? "Syncing…" : "Force Sync"}
-    </Button>
+    <div className="flex flex-col items-end gap-0.5">
+      <Button
+        size="sm" variant="outline" onClick={forceSync} disabled={syncing}
+        className="gap-1.5 font-mono text-xs border-primary/30 text-primary hover:bg-primary/10"
+      >
+        <RefreshCw className={`w-3 h-3 ${syncing ? "animate-spin" : ""}`} />
+        {syncing ? "Syncing…" : "Force Sync"}
+      </Button>
+      {syncStep && (
+        <span className="text-[10px] font-mono text-muted-foreground">{syncStep}</span>
+      )}
+    </div>
   );
 }
 
@@ -214,8 +238,11 @@ export default function SlateBoard() {
   const [sport, setSport] = useState<string>("all");
   const [lineTypeFilter, setLineTypeFilter] = useState<string>("all");
   const [minEdge, setMinEdge] = useState<string>("");
+  const [filterOpen, setFilterOpen] = useState(false);
   const [selectedPropId, setSelectedPropId] = useState<number | null>(null);
   const [optimizerOpen, setOptimizerOpen] = useState(false);
+
+  const activeFilterCount = [sport !== "all" && sport, lineTypeFilter !== "all" && lineTypeFilter, minEdge].filter(Boolean).length;
   const [optPickCount, setOptPickCount] = useState(4);
   const [optResults, setOptResults] = useState<OptResult[]>([]);
   const [optLoaded, setOptLoaded] = useState(false);
@@ -391,60 +418,75 @@ export default function SlateBoard() {
         </div>
 
         {tab === "player" && (
-          <div className="flex items-center gap-2">
-            {watchCount > 0 && (
-              <Badge className="font-mono text-xs bg-amber-900/40 text-amber-300 border border-amber-700/40 px-2 py-0.5">
-                <Eye className="w-3 h-3 mr-1 inline" />{watchCount} watched
-              </Badge>
-            )}
-            {playCount > 0 && (
-              <Badge className="font-mono text-xs bg-emerald-900/40 text-emerald-300 border border-emerald-700/40 px-2 py-0.5">
-                {playCount} PLAY
-              </Badge>
-            )}
-            {noPlayCount > 0 && (
-              <Badge className="font-mono text-xs bg-rose-900/40 text-rose-300 border border-rose-700/40 px-2 py-0.5">
-                {noPlayCount} gated
-              </Badge>
-            )}
-            <Select value={sport} onValueChange={setSport}>
-              <SelectTrigger className="w-28 bg-slate-900 border-slate-800 font-mono text-sm">
-                <SelectValue placeholder="Sport" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sports</SelectItem>
-                <SelectItem value="NBA">NBA</SelectItem>
-                <SelectItem value="NFL">NFL</SelectItem>
-                <SelectItem value="MLB">MLB</SelectItem>
-                <SelectItem value="NHL">NHL</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={lineTypeFilter} onValueChange={setLineTypeFilter}>
-              <SelectTrigger className="w-28 bg-slate-900 border-slate-800 font-mono text-sm">
-                <SelectValue placeholder="Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="goblin">Goblin</SelectItem>
-                <SelectItem value="demon">Demon</SelectItem>
-                <SelectItem value="standard">Standard</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              placeholder="Min Edge"
-              value={minEdge}
-              onChange={e => setMinEdge(e.target.value)}
-              className="w-24 bg-slate-900 border-slate-800 font-mono text-sm"
-            />
-            <Button
-              onClick={runOptimizer}
-              size="sm"
-              className="font-mono text-xs bg-violet-700 hover:bg-violet-600 text-white gap-1.5"
-            >
-              <Zap className="w-3.5 h-3.5" /> Optimizer
-            </Button>
-            <ForceSyncButton />
-          </div>
+          <>
+            {/* Mobile: filter toggle + sync button */}
+            <div className="md:hidden flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setFilterOpen(true)} className="gap-1.5 font-mono text-xs border-slate-700 text-muted-foreground">
+                <Filter className="w-3.5 h-3.5" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className="bg-primary text-primary-foreground rounded-full w-4 h-4 text-[10px] flex items-center justify-center font-bold">{activeFilterCount}</span>
+                )}
+              </Button>
+              <ForceSyncButton />
+            </div>
+
+            {/* Desktop: full filter row */}
+            <div className="hidden md:flex items-center gap-2">
+              {watchCount > 0 && (
+                <Badge className="font-mono text-xs bg-amber-900/40 text-amber-300 border border-amber-700/40 px-2 py-0.5">
+                  <Eye className="w-3 h-3 mr-1 inline" />{watchCount} watched
+                </Badge>
+              )}
+              {playCount > 0 && (
+                <Badge className="font-mono text-xs bg-emerald-900/40 text-emerald-300 border border-emerald-700/40 px-2 py-0.5">
+                  {playCount} PLAY
+                </Badge>
+              )}
+              {noPlayCount > 0 && (
+                <Badge className="font-mono text-xs bg-rose-900/40 text-rose-300 border border-rose-700/40 px-2 py-0.5">
+                  {noPlayCount} gated
+                </Badge>
+              )}
+              <Select value={sport} onValueChange={setSport}>
+                <SelectTrigger className="w-28 bg-slate-900 border-slate-800 font-mono text-sm">
+                  <SelectValue placeholder="Sport" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sports</SelectItem>
+                  <SelectItem value="NBA">NBA</SelectItem>
+                  <SelectItem value="NFL">NFL</SelectItem>
+                  <SelectItem value="MLB">MLB</SelectItem>
+                  <SelectItem value="NHL">NHL</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={lineTypeFilter} onValueChange={setLineTypeFilter}>
+                <SelectTrigger className="w-28 bg-slate-900 border-slate-800 font-mono text-sm">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="goblin">Goblin</SelectItem>
+                  <SelectItem value="demon">Demon</SelectItem>
+                  <SelectItem value="standard">Standard</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                placeholder="Min Edge"
+                value={minEdge}
+                onChange={e => setMinEdge(e.target.value)}
+                className="w-24 bg-slate-900 border-slate-800 font-mono text-sm"
+              />
+              <Button
+                onClick={runOptimizer}
+                size="sm"
+                className="font-mono text-xs bg-violet-700 hover:bg-violet-600 text-white gap-1.5"
+              >
+                <Zap className="w-3.5 h-3.5" /> Optimizer
+              </Button>
+              <ForceSyncButton />
+            </div>
+          </>
         )}
       </div>
 
@@ -466,18 +508,18 @@ export default function SlateBoard() {
                   <TableHead className="w-8 font-mono text-xs" />
                   <TableHead className="w-14 font-mono text-xs">Sport</TableHead>
                   <TableHead className="font-mono text-xs">Player</TableHead>
-                  <TableHead className="w-12 font-mono text-xs">Team</TableHead>
-                  <TableHead className="w-12 font-mono text-xs">Opp</TableHead>
+                  <TableHead className="hidden md:table-cell w-12 font-mono text-xs">Team</TableHead>
+                  <TableHead className="hidden md:table-cell w-12 font-mono text-xs">Opp</TableHead>
                   <TableHead className="w-28 font-mono text-xs">Stat</TableHead>
                   <TableHead className="w-16 font-mono text-xs text-right">PP Line</TableHead>
                   <TableHead className="w-20 font-mono text-xs text-center">Type</TableHead>
-                  <TableHead className="w-16 font-mono text-xs text-right">Mkt Avg</TableHead>
-                  <TableHead className="w-22 font-mono text-xs text-right">True Edge</TableHead>
-                  <TableHead className="w-28 font-mono text-xs text-right">Our Proj</TableHead>
+                  <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-right">Mkt Avg</TableHead>
+                  <TableHead className="hidden lg:table-cell w-22 font-mono text-xs text-right">True Edge</TableHead>
+                  <TableHead className="hidden lg:table-cell w-28 font-mono text-xs text-right">Our Proj</TableHead>
                   <TableHead className="w-20 font-mono text-xs text-center">P(Over)</TableHead>
-                  <TableHead className="w-14 font-mono text-xs text-center">Streak</TableHead>
+                  <TableHead className="hidden md:table-cell w-14 font-mono text-xs text-center">Streak</TableHead>
                   <TableHead className="w-24 font-mono text-xs text-center">Action</TableHead>
-                  {varianceEnabled && <TableHead className="w-22 font-mono text-xs text-center">Volatility</TableHead>}
+                  {varianceEnabled && <TableHead className="hidden lg:table-cell w-22 font-mono text-xs text-center">Volatility</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -522,14 +564,14 @@ export default function SlateBoard() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{row.teamAbbr ?? "—"}</TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{row.opponentAbbr ?? "—"}</TableCell>
+                        <TableCell className="hidden md:table-cell font-mono text-xs text-muted-foreground">{row.teamAbbr ?? "—"}</TableCell>
+                        <TableCell className="hidden md:table-cell font-mono text-xs text-muted-foreground">{row.opponentAbbr ?? "—"}</TableCell>
                         <TableCell className="font-mono text-xs">{row.statType}</TableCell>
                         <TableCell className="font-mono text-sm font-bold text-right text-cyan-400">{row.lineValue}</TableCell>
                         <TableCell className="text-center"><LineTypeBadge type={row.lineType} /></TableCell>
 
                         {/* Market avg */}
-                        <TableCell className="font-mono text-xs text-right">
+                        <TableCell className="hidden lg:table-cell font-mono text-xs text-right">
                           {row.marketDataStatus === "not_synced" ? (
                             <span className="text-slate-600">—</span>
                           ) : row.marketAvg != null ? (
@@ -540,7 +582,7 @@ export default function SlateBoard() {
                         </TableCell>
 
                         {/* True edge */}
-                        <TableCell className="font-mono text-xs text-right">
+                        <TableCell className="hidden lg:table-cell font-mono text-xs text-right">
                           {row.marketDataStatus === "not_synced" ? (
                             <span className="text-slate-600 text-[10px]">no data</span>
                           ) : row.trueEdge != null ? (
@@ -554,7 +596,7 @@ export default function SlateBoard() {
                         </TableCell>
 
                         {/* Our projection */}
-                        <TableCell className="text-right">
+                        <TableCell className="hidden lg:table-cell text-right">
                           <ProjectionCell proj={proj} ppLine={row.lineValue} />
                         </TableCell>
 
@@ -567,7 +609,7 @@ export default function SlateBoard() {
                         </TableCell>
 
                         {/* Streak */}
-                        <TableCell className="text-center font-mono text-xs">
+                        <TableCell className="hidden md:table-cell text-center font-mono text-xs">
                           {row.streak && row.streak.count >= 2 ? (
                             <span className={row.streak.type === "over" ? "text-emerald-400" : "text-rose-400"}>
                               {row.streak.count}{row.streak.type === "over" ? "↑" : "↓"}
@@ -601,7 +643,7 @@ export default function SlateBoard() {
 
                         {/* Variance Volatility Badge */}
                         {varianceEnabled && (
-                          <TableCell className="text-center">
+                          <TableCell className="hidden lg:table-cell text-center">
                             {row.variance?.volatilityRating ? (
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -631,6 +673,58 @@ export default function SlateBoard() {
       ) : (
         <TeamPicksBoard rows={teamRows} isLoading={isLoading} onSelectProp={setSelectedPropId} />
       )}
+
+      {/* Mobile filter drawer */}
+      <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
+        <SheetContent side="bottom" className="h-auto pb-8 bg-slate-900 border-slate-700">
+          <SheetHeader>
+            <SheetTitle className="font-mono text-sm">Filters</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <label className="text-xs font-mono text-muted-foreground mb-1.5 block uppercase">Sport</label>
+              <Select value={sport} onValueChange={setSport}>
+                <SelectTrigger className="w-full bg-slate-950 border-slate-700 font-mono text-sm">
+                  <SelectValue placeholder="Sport" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sports</SelectItem>
+                  <SelectItem value="NBA">NBA</SelectItem>
+                  <SelectItem value="NFL">NFL</SelectItem>
+                  <SelectItem value="MLB">MLB</SelectItem>
+                  <SelectItem value="NHL">NHL</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-mono text-muted-foreground mb-1.5 block uppercase">Line Type</label>
+              <Select value={lineTypeFilter} onValueChange={setLineTypeFilter}>
+                <SelectTrigger className="w-full bg-slate-950 border-slate-700 font-mono text-sm">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="goblin">Goblin</SelectItem>
+                  <SelectItem value="demon">Demon</SelectItem>
+                  <SelectItem value="standard">Standard</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-mono text-muted-foreground mb-1.5 block uppercase">Min Edge</label>
+              <Input
+                placeholder="e.g. 5"
+                value={minEdge}
+                onChange={e => setMinEdge(e.target.value)}
+                className="bg-slate-950 border-slate-700 font-mono text-sm"
+              />
+            </div>
+            <Button size="sm" onClick={() => setFilterOpen(false)} className="w-full font-mono text-xs">
+              Apply Filters
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <PropDetailSheet
         ppLineId={selectedPropId}

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { db } from "@workspace/db";
 import {
   entriesTable, entryPicksTable, playersTable, ppLinesTable, clvRecordsTable,
@@ -47,6 +48,21 @@ async function getTodayLoss(today: string): Promise<number> {
 }
 
 const router = Router();
+
+const CreateEntrySchema = z.object({
+  stake: z.number().positive().max(10000),
+  entryType: z.enum(["power", "flex"]),
+  pickCount: z.number().int().min(2).max(6),
+  entryDate: z.string().optional(),
+  notes: z.string().max(500).optional().nullable(),
+  displayedPayoutMultiplier: z.number().nullable().optional(),
+  potentialPayout: z.number().nullable().optional(),
+});
+
+const PickResultSchema = z.object({
+  result: z.enum(["hit", "miss", "dnp"]),
+  closingLine: z.number().positive().optional(),
+}).passthrough();
 
 router.get("/entries/loss-limit-status", async (req, res): Promise<void> => {
   try {
@@ -117,8 +133,15 @@ router.post("/entries", async (req, res): Promise<void> => {
     const body = req.body as Record<string, unknown>;
     const userId = (body.userId as string) ?? "local";
 
-    // Strip non-schema keys before insert
-    const { userId: _u, overrideLossLimit: _o, ...entryData } = body;
+    // Strip non-schema keys before validation
+    const { userId: _u, overrideLossLimit: _o, ...entryBody } = body;
+    const parsed = CreateEntrySchema.safeParse(entryBody);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
+      return;
+    }
+
+    const entryData = entryBody;
     const [entry] = await db.insert(entriesTable).values(entryData as InsertEntry).returning();
 
     // Async behavioral logging — non-fatal
@@ -254,24 +277,35 @@ router.post("/entries/:entryId/picks", async (req, res) => {
 });
 
 router.patch("/entries/:entryId/picks/:pickId", async (req, res): Promise<void> => {
-  try {
-    const [pick] = await db.update(entryPicksTable)
-      .set(req.body)
-      .where(and(
-        eq(entryPicksTable.id, Number(req.params.pickId)),
-        eq(entryPicksTable.entryId, Number(req.params.entryId)),
-      ))
-      .returning();
-    if (!pick) {
-      res.status(404).json({ error: "Pick not found" });
-      return;
-    }
+  const pickId  = Number(req.params.pickId);
+  const entryId = Number(req.params.entryId);
 
-    // Auto-record CLV when a pick result is first set to hit or miss
-    const newResult = (req.body as Record<string, unknown>).result as string | undefined;
-    if ((newResult === "hit" || newResult === "miss") && pick.playerId && pick.statType) {
-      try {
-        const [currentLine] = await db
+  const parsed = PickResultSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
+    return;
+  }
+
+  try {
+    let resultPick: typeof entryPicksTable.$inferSelect | null = null;
+
+    await db.transaction(async (tx) => {
+      const [pick] = await tx.update(entryPicksTable)
+        .set(req.body as Record<string, unknown>)
+        .where(and(
+          eq(entryPicksTable.id, pickId),
+          eq(entryPicksTable.entryId, entryId),
+        ))
+        .returning();
+
+      if (!pick) return; // resultPick stays null → 404
+
+      resultPick = pick;
+
+      // Auto-record CLV when result is first set to hit or miss
+      const newResult = parsed.data.result;
+      if ((newResult === "hit" || newResult === "miss") && pick.playerId && pick.statType) {
+        const [currentLine] = await tx
           .select({ lineValue: ppLinesTable.lineValue })
           .from(ppLinesTable)
           .where(and(
@@ -285,10 +319,9 @@ router.patch("/entries/:entryId/picks/:pickId", async (req, res): Promise<void> 
           const lockedLine  = Number(pick.lineValue);
           const closingLine = Number(currentLine.lineValue);
           const lineMove    = closingLine - lockedLine;
-          // Positive CLV = line moved in bettor's favour
           const clv         = pick.direction === "more" ? lineMove : -lineMove;
 
-          await db.insert(clvRecordsTable).values({
+          await tx.insert(clvRecordsTable).values({
             entryPickId: pick.id,
             ppLineId:    pick.ppLineId,
             lockedLine:  String(lockedLine),
@@ -297,17 +330,21 @@ router.patch("/entries/:entryId/picks/:pickId", async (req, res): Promise<void> 
             direction:   pick.direction,
           });
 
-          // Persist closingLine + clv back onto the pick row
-          await db.update(entryPicksTable)
+          await tx.update(entryPicksTable)
             .set({ closingLine: String(closingLine), clv: String(clv) })
             .where(eq(entryPicksTable.id, pick.id));
+
+          resultPick = { ...pick, closingLine: String(closingLine), clv: String(clv) };
         }
-      } catch (clvErr) {
-        req.log.warn({ err: clvErr }, "CLV auto-record failed (non-fatal)");
       }
+    });
+
+    if (!resultPick) {
+      res.status(404).json({ error: "Pick not found" });
+      return;
     }
 
-    res.json(pick);
+    res.json(resultPick);
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });

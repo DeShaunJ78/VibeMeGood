@@ -104,9 +104,10 @@ router.post("/sync/all", async (req, res) => {
   broadcastSyncStatus("all", "running");
 
   const jobs: Array<{ name: string; provider: string; fn: () => Promise<number> }> = [
-    { name: "pp-lines", provider: "prizepicks", fn: syncPpLines },
+    { name: "pp-lines",    provider: "prizepicks",  fn: syncPpLines },
     { name: "external-odds", provider: "the-odds-api", fn: syncExternalOdds },
-    { name: "variance", provider: "internal", fn: computeAllVarianceScores },
+    { name: "projections", provider: "nba-stats",   fn: syncProjectionsImpl },
+    { name: "variance",    provider: "internal",    fn: computeAllVarianceScores },
   ];
 
   for (const job of jobs) {
