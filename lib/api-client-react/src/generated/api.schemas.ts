@@ -316,6 +316,11 @@ export interface SlateRow {
   actionTag?: string | null;
   isWatched: boolean;
   updatedAt: string;
+  pickCategory?: string;
+  /** @nullable */
+  teamPickType?: string | null;
+  /** @nullable */
+  teamId?: number | null;
 }
 
 export interface PropDetail {
@@ -554,6 +559,12 @@ export interface ReviewStats {
   totalPnl: number;
   /** @nullable */
   overallHitRate?: number | null;
+  /** @nullable */
+  pickHitRate?: number | null;
+  /** @nullable */
+  avgClv?: number | null;
+  hitRateByPickCount?: unknown;
+  hitRateByEntryType?: unknown;
 }
 
 export interface DataHealth {

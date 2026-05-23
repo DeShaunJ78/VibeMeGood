@@ -39,4 +39,9 @@ export interface SlateRow {
   actionTag?: string | null;
   isWatched: boolean;
   updatedAt: Date;
+  pickCategory?: string;
+  /** @nullable */
+  teamPickType?: string | null;
+  /** @nullable */
+  teamId?: number | null;
 }

@@ -1360,6 +1360,9 @@ components:
         actionTag: { type: ["string", "null"] }
         isWatched: { type: boolean }
         updatedAt: { type: string, format: date-time }
+        pickCategory: { type: string }
+        teamPickType: { type: ["string", "null"] }
+        teamId: { type: ["integer", "null"] }
       required: [ppLineId, playerId, playerName, sport, statType, lineValue, lineType, directionalityType, isWatched, updatedAt]
 
     # ─── PROP DETAIL ────────────────────────────────────────────────
@@ -1591,6 +1594,10 @@ components:
         totalEntries: { type: integer }
         totalPnl: { type: number }
         overallHitRate: { type: ["number", "null"] }
+        pickHitRate: { type: ["number", "null"] }
+        avgClv: { type: ["number", "null"] }
+        hitRateByPickCount: {}
+        hitRateByEntryType: {}
       required: [totalEntries, totalPnl]
 
     DataHealth:

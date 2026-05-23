@@ -20,4 +20,10 @@ export interface ReviewStats {
   totalPnl: number;
   /** @nullable */
   overallHitRate?: number | null;
+  /** @nullable */
+  pickHitRate?: number | null;
+  /** @nullable */
+  avgClv?: number | null;
+  hitRateByPickCount?: unknown;
+  hitRateByEntryType?: unknown;
 }

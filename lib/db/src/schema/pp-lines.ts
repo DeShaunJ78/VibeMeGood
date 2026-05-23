@@ -14,6 +14,9 @@ export const ppLinesTable = pgTable("pp_lines", {
   openedAt: timestamp("opened_at").notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  pickCategory: text("pick_category").notNull().default("player"), // player | team | culture
+  teamPickType: text("team_pick_type"), // moneyline | spread | total | future (for team picks)
+  teamId: integer("team_id"), // for team picks: which team this pick is on
   sourceSnapshotId: integer("source_snapshot_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

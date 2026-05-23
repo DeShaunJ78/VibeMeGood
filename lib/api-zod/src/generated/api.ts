@@ -605,7 +605,10 @@ export const GetSlateResponseItem = zod.object({
   "finalScore": zod.number().nullish(),
   "actionTag": zod.string().nullish(),
   "isWatched": zod.boolean(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "pickCategory": zod.string().optional(),
+  "teamPickType": zod.string().nullish(),
+  "teamId": zod.number().nullish()
 })
 export const GetSlateResponse = zod.array(GetSlateResponseItem)
 
@@ -1152,7 +1155,10 @@ export const GetDashboardSummaryResponse = zod.object({
   "finalScore": zod.number().nullish(),
   "actionTag": zod.string().nullish(),
   "isWatched": zod.boolean(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "pickCategory": zod.string().optional(),
+  "teamPickType": zod.string().nullish(),
+  "teamId": zod.number().nullish()
 })),
   "watchlistCount": zod.number(),
   "activePropsCount": zod.number(),
@@ -1183,7 +1189,11 @@ export const GetReviewStatsResponse = zod.object({
   "bottomCategories": zod.array(zod.unknown()).optional(),
   "totalEntries": zod.number(),
   "totalPnl": zod.number(),
-  "overallHitRate": zod.number().nullish()
+  "overallHitRate": zod.number().nullish(),
+  "pickHitRate": zod.number().nullish(),
+  "avgClv": zod.number().nullish(),
+  "hitRateByPickCount": zod.unknown().optional(),
+  "hitRateByEntryType": zod.unknown().optional()
 })
 
 

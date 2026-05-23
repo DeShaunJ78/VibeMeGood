@@ -12,6 +12,8 @@ import EntryBuilder from "@/pages/entry-builder";
 import Journal from "@/pages/journal";
 import Review from "@/pages/review";
 import Settings from "@/pages/settings";
+import AiChat from "@/pages/ai-chat";
+import { EntryProvider } from "@/lib/entry-context";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +27,7 @@ function Router() {
         <Route path="/entry-builder" component={EntryBuilder} />
         <Route path="/journal" component={Journal} />
         <Route path="/review" component={Review} />
+        <Route path="/ai-chat" component={AiChat} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
@@ -40,9 +43,11 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
+        <EntryProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+        </EntryProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

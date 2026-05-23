@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, numeric, timestamp, date } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, numeric, timestamp, date, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -16,6 +16,9 @@ export const entriesTable = pgTable("entries", {
   emotionalState: text("emotional_state"),
   submittedAt: timestamp("submitted_at"),
   closedAt: timestamp("closed_at"),
+  earlyExitEligible: boolean("early_exit_eligible").notNull().default(false),
+  earlyExitValue: numeric("early_exit_value"),
+  earlyExitUsed: boolean("early_exit_used").notNull().default(false),
 });
 
 export const insertEntrySchema = createInsertSchema(entriesTable).omit({ id: true });

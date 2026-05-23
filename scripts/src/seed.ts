@@ -10,7 +10,6 @@ import { sql } from "drizzle-orm";
 async function seed() {
   console.log("Seeding database...");
 
-  // Clear existing data in dependency order
   await db.execute(sql`TRUNCATE TABLE
     alerts, watchlist_items, entry_picks, entries, prop_scores,
     lineup_confirmations, injuries, projections, external_lines,
@@ -46,7 +45,6 @@ async function seed() {
   console.log(`Inserted ${teams.length} teams`);
 
   // ---- Players ----
-  const now = new Date();
   const playerDefs = [
     { sport: "NBA", fullName: "Jayson Tatum", firstName: "Jayson", lastName: "Tatum", teamId: teamsByAbbr["BOS"].id, position: "SF", status: "active" },
     { sport: "NBA", fullName: "Jaylen Brown", firstName: "Jaylen", lastName: "Brown", teamId: teamsByAbbr["BOS"].id, position: "SG", status: "active" },
@@ -74,7 +72,7 @@ async function seed() {
   const playersByName = Object.fromEntries(players.map(p => [p.fullName, p]));
   console.log(`Inserted ${players.length} players`);
 
-  // ---- Games (today) ----
+  // ---- Games ----
   const today = new Date();
   today.setHours(19, 30, 0, 0);
   const todayPlus1 = new Date(today.getTime() + 3600000);
@@ -90,34 +88,53 @@ async function seed() {
   const games = await db.insert(gamesTable).values(gameDefs).returning();
   console.log(`Inserted ${games.length} games`);
 
-  // ---- PP Lines ----
+  // ---- PP Lines: Player Picks ----
   const openedAt = new Date(Date.now() - 3600000 * 4);
-  const lineDefs = [
-    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "points", directionalityType: "over_under", lineValue: "27.5", lineType: "standard", isActive: true, openedAt },
-    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "rebounds", directionalityType: "over_under", lineValue: "8.5", lineType: "standard", isActive: true, openedAt },
-    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "assists", directionalityType: "over_under", lineValue: "4.5", lineType: "demon", isActive: true, openedAt },
-    { playerId: playersByName["Jaylen Brown"].id, gameId: games[0].id, statType: "points", directionalityType: "over_under", lineValue: "22.5", lineType: "standard", isActive: true, openedAt },
-    { playerId: playersByName["Jimmy Butler"].id, gameId: games[0].id, statType: "points", directionalityType: "over_under", lineValue: "20.5", lineType: "goblin", isActive: true, openedAt },
-    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "points", directionalityType: "over_under", lineValue: "29.5", lineType: "standard", isActive: true, openedAt },
-    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "rebounds", directionalityType: "over_under", lineValue: "12.5", lineType: "standard", isActive: true, openedAt },
-    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "assists", directionalityType: "over_under", lineValue: "9.5", lineType: "demon", isActive: true, openedAt },
-    { playerId: playersByName["Kevin Durant"].id, gameId: games[1].id, statType: "points", directionalityType: "over_under", lineValue: "25.5", lineType: "standard", isActive: true, openedAt },
-    { playerId: playersByName["Devin Booker"].id, gameId: games[1].id, statType: "points", directionalityType: "over_under", lineValue: "24.5", lineType: "standard", isActive: true, openedAt },
-    { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, statType: "points", directionalityType: "over_under", lineValue: "30.5", lineType: "standard", isActive: true, openedAt },
-    { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, statType: "rebounds", directionalityType: "over_under", lineValue: "11.5", lineType: "standard", isActive: true, openedAt },
-    { playerId: playersByName["Donovan Mitchell"].id, gameId: games[2].id, statType: "points", directionalityType: "over_under", lineValue: "26.5", lineType: "standard", isActive: true, openedAt },
-    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "points", directionalityType: "over_under", lineValue: "26.5", lineType: "standard", isActive: true, openedAt },
-    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "threes_made", directionalityType: "over_under", lineValue: "4.5", lineType: "demon", isActive: true, openedAt },
-    { playerId: playersByName["LeBron James"].id, gameId: games[3].id, statType: "points", directionalityType: "over_under", lineValue: "23.5", lineType: "goblin", isActive: true, openedAt },
-    { playerId: playersByName["LeBron James"].id, gameId: games[3].id, statType: "assists", directionalityType: "over_under", lineValue: "7.5", lineType: "standard", isActive: true, openedAt },
-    { playerId: playersByName["Jamal Murray"].id, gameId: games[1].id, statType: "points", directionalityType: "over_under", lineValue: "21.5", lineType: "standard", isActive: true, openedAt },
+  const playerLineDefs = [
+    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "points", directionalityType: "over_under", lineValue: "27.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "rebounds", directionalityType: "over_under", lineValue: "8.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "assists", directionalityType: "over_under", lineValue: "4.5", lineType: "demon", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Jaylen Brown"].id, gameId: games[0].id, statType: "points", directionalityType: "over_under", lineValue: "22.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Jimmy Butler"].id, gameId: games[0].id, statType: "points", directionalityType: "over_under", lineValue: "20.5", lineType: "goblin", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "points", directionalityType: "over_under", lineValue: "29.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "rebounds", directionalityType: "over_under", lineValue: "12.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "assists", directionalityType: "over_under", lineValue: "9.5", lineType: "demon", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Kevin Durant"].id, gameId: games[1].id, statType: "points", directionalityType: "over_under", lineValue: "25.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Devin Booker"].id, gameId: games[1].id, statType: "points", directionalityType: "over_under", lineValue: "24.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, statType: "points", directionalityType: "over_under", lineValue: "30.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, statType: "rebounds", directionalityType: "over_under", lineValue: "11.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Donovan Mitchell"].id, gameId: games[2].id, statType: "points", directionalityType: "over_under", lineValue: "26.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "points", directionalityType: "over_under", lineValue: "26.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "threes_made", directionalityType: "over_under", lineValue: "4.5", lineType: "demon", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["LeBron James"].id, gameId: games[3].id, statType: "points", directionalityType: "over_under", lineValue: "23.5", lineType: "goblin", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["LeBron James"].id, gameId: games[3].id, statType: "assists", directionalityType: "over_under", lineValue: "7.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Jamal Murray"].id, gameId: games[1].id, statType: "points", directionalityType: "over_under", lineValue: "21.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
   ];
 
-  const lines = await db.insert(ppLinesTable).values(lineDefs).returning();
-  console.log(`Inserted ${lines.length} pp_lines`);
+  // ---- PP Lines: Team Picks (PrizePicks Teams — moneylines, totals, spreads) ----
+  // Team picks use playerId of a "dummy" player — we repurpose first player but set pickCategory=team
+  // The actual team info is carried via teamId + teamPickType + statType label
+  const teamLineDefs = [
+    // BOS vs MIA — Team Totals
+    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "Team Total Points", directionalityType: "over_under", lineValue: "112.5", lineType: "standard", pickCategory: "team", teamPickType: "total", teamId: teamsByAbbr["BOS"].id, isActive: true, openedAt },
+    { playerId: playersByName["Jimmy Butler"].id, gameId: games[0].id, statType: "Team Total Points", directionalityType: "over_under", lineValue: "103.5", lineType: "standard", pickCategory: "team", teamPickType: "total", teamId: teamsByAbbr["MIA"].id, isActive: true, openedAt },
+    // BOS Moneyline
+    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "Win Moneyline", directionalityType: "yes_no", lineValue: "0.5", lineType: "standard", pickCategory: "team", teamPickType: "moneyline", teamId: teamsByAbbr["BOS"].id, isActive: true, openedAt },
+    // DEN vs PHX — Spread & Total
+    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "Spread Cover", directionalityType: "yes_no", lineValue: "-4.5", lineType: "standard", pickCategory: "team", teamPickType: "spread", teamId: teamsByAbbr["DEN"].id, isActive: true, openedAt },
+    { playerId: playersByName["Kevin Durant"].id, gameId: games[1].id, statType: "Spread Cover", directionalityType: "yes_no", lineValue: "+4.5", lineType: "standard", pickCategory: "team", teamPickType: "spread", teamId: teamsByAbbr["PHX"].id, isActive: true, openedAt },
+    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "Team Total Points", directionalityType: "over_under", lineValue: "113.5", lineType: "standard", pickCategory: "team", teamPickType: "total", teamId: teamsByAbbr["DEN"].id, isActive: true, openedAt },
+    // GSW vs LAL
+    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "Team Total Points", directionalityType: "over_under", lineValue: "119.5", lineType: "standard", pickCategory: "team", teamPickType: "total", teamId: teamsByAbbr["GSW"].id, isActive: true, openedAt },
+    { playerId: playersByName["LeBron James"].id, gameId: games[3].id, statType: "Win Moneyline", directionalityType: "yes_no", lineValue: "0.5", lineType: "standard", pickCategory: "team", teamPickType: "moneyline", teamId: teamsByAbbr["LAL"].id, isActive: true, openedAt },
+  ];
+
+  const lines = await db.insert(ppLinesTable).values([...playerLineDefs, ...teamLineDefs]).returning();
+  const playerLines = lines.filter(l => l.pickCategory === "player");
+  console.log(`Inserted ${lines.length} pp_lines (${playerLines.length} player, ${lines.length - playerLines.length} team picks)`);
 
   // ---- Line History ----
-  const historyDefs = lines.flatMap(line => {
+  const historyDefs = playerLines.flatMap(line => {
     const base = Number(line.lineValue);
     const openVal = (base - 0.5 + Math.round(Math.random()) * 0.5).toFixed(1);
     const midVal = (base + (Math.random() > 0.5 ? 0.5 : 0)).toFixed(1);
@@ -166,9 +183,9 @@ async function seed() {
   await db.insert(projectionsTable).values(projDefs);
   console.log(`Inserted ${projDefs.length} projections`);
 
-  // ---- Prop Scores ----
+  // ---- Prop Scores (player lines only) ----
   const scoredAt = new Date();
-  const scoreDefs = lines.map((line, i) => {
+  const scoreDefs = playerLines.map((line, i) => {
     const projDef = projDefs.find(p => p.playerId === line.playerId && p.statType === line.statType);
     const proj = projDef ? Number(projDef.projectedValue) : Number(line.lineValue);
     const gap = proj - Number(line.lineValue);
@@ -179,16 +196,10 @@ async function seed() {
     const final = (edge * 0.4 + stability * 0.3 + market * 0.2 + (100 - risk) * 0.1);
     const actionTag = final >= 65 ? "PLAY" : final >= 48 ? "WATCH" : "PASS";
     return {
-      playerId: line.playerId,
-      gameId: line.gameId,
-      statType: line.statType,
-      ppLineId: line.id,
-      edgeScore: String(Math.round(edge)),
-      stabilityScore: String(Math.round(stability)),
-      marketSupportScore: String(Math.round(market)),
-      riskScore: String(Math.round(risk)),
-      finalScore: String(Math.round(final)),
-      actionTag,
+      playerId: line.playerId, gameId: line.gameId, statType: line.statType, ppLineId: line.id,
+      edgeScore: String(Math.round(edge)), stabilityScore: String(Math.round(stability)),
+      marketSupportScore: String(Math.round(market)), riskScore: String(Math.round(risk)),
+      finalScore: String(Math.round(final)), actionTag,
       reasoning: {
         edgeReason: gap > 0 ? `Projection exceeds line by ${gap.toFixed(1)}` : `Line exceeds projection by ${Math.abs(gap).toFixed(1)}`,
         stabilityNote: stability > 70 ? "High historical consistency" : "Moderate variance",
@@ -202,91 +213,82 @@ async function seed() {
   console.log(`Inserted ${scoreDefs.length} prop scores`);
 
   // ---- Injuries ----
-  const injuryDefs = [
+  await db.insert(injuriesTable).values([
     { playerId: playersByName["Jimmy Butler"].id, gameId: games[0].id, sport: "NBA", status: "questionable", note: "Knee soreness — limited in practice. GTD for tonight.", source: "ESPN", reportedAt: new Date(Date.now() - 3600000 * 2) },
     { playerId: playersByName["Jaylen Brown"].id, gameId: games[0].id, sport: "NBA", status: "healthy", note: "No injury designation. Full practice.", source: "beat_reporter", reportedAt: new Date(Date.now() - 3600000 * 1) },
     { playerId: playersByName["Jamal Murray"].id, gameId: games[1].id, sport: "NBA", status: "gtd", note: "Ankle — missed last two practices, still game-time decision.", source: "team_report", reportedAt: new Date(Date.now() - 3600000 * 3) },
-  ];
-  await db.insert(injuriesTable).values(injuryDefs);
-  console.log(`Inserted ${injuryDefs.length} injuries`);
+  ]);
+  console.log("Inserted 3 injuries");
 
   // ---- Lineup Confirmations ----
-  const lineupDefs = [
+  await db.insert(lineupConfirmationsTable).values([
     { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, isStarting: true, expectedMinutes: "36.5", minutesFloor: "30.0", minutesCeiling: "42.0", confirmedAt: new Date(Date.now() - 1800000), source: "rotowire" },
     { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, isStarting: true, expectedMinutes: "35.0", minutesFloor: "30.0", minutesCeiling: "40.0", confirmedAt: new Date(Date.now() - 1800000), source: "rotowire" },
     { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, isStarting: true, expectedMinutes: "33.5", minutesFloor: "28.0", minutesCeiling: "38.0", confirmedAt: new Date(Date.now() - 1800000), source: "rotowire" },
     { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, isStarting: true, expectedMinutes: "34.0", minutesFloor: "29.0", minutesCeiling: "39.0", confirmedAt: new Date(Date.now() - 1800000), source: "rotowire" },
-  ];
-  await db.insert(lineupConfirmationsTable).values(lineupDefs);
-  console.log(`Inserted ${lineupDefs.length} lineup confirmations`);
+  ]);
+  console.log("Inserted 4 lineup confirmations");
 
   // ---- Watchlist ----
-  const watchDefs = [
+  await db.insert(watchlistItemsTable).values([
     { playerId: playersByName["Nikola Jokic"].id, statType: "points", directionPreference: "more", note: "Triple-double equity, elite consistency vs PHX" },
     { playerId: playersByName["Jayson Tatum"].id, statType: "points", directionPreference: "more", note: "Strong matchup vs Butler-less MIA if Butler sits" },
     { playerId: playersByName["Giannis Antetokounmpo"].id, statType: "rebounds", directionPreference: "more", note: "Volume rebounding vs small CLE front" },
-  ];
-  await db.insert(watchlistItemsTable).values(watchDefs);
-  console.log(`Inserted ${watchDefs.length} watchlist items`);
+  ]);
+  console.log("Inserted 3 watchlist items");
 
   // ---- Alerts ----
   await db.insert(alertsTable).values([
-    { type: "injury_update", severity: "warning", title: "Jimmy Butler GTD", message: "Butler questionable with knee soreness. Monitor through tipoff. Could affect MIA team total.", isRead: false },
+    { type: "injury_update", severity: "warning", title: "Jimmy Butler GTD", message: "Butler questionable with knee soreness. Monitor through tipoff. Could affect MIA team total under.", isRead: false },
     { type: "line_move", severity: "info", title: "Jokic Points Line Up +0.5", message: "DEN-PHX Jokic points moved from 29.0 to 29.5 — sharp money on Over.", isRead: false },
     { type: "lineup_confirmed", severity: "info", title: "Giannis Confirmed Starter", message: "Antetokounmpo confirmed active and starting vs CLE.", isRead: true },
-    { type: "sync_success", severity: "info", title: "Lines Refreshed", message: "PP lines snapshot completed. 18 active lines tracked.", isRead: true },
+    { type: "sync_success", severity: "info", title: "Lines Refreshed", message: "PP lines snapshot completed. 18 player picks + 8 team picks tracked.", isRead: true },
   ]);
   console.log("Inserted alerts");
 
   // ---- Historical Entries ----
   const entryDefs = [
-    { entryDate: "2026-05-20", entryType: "power", pickCount: 3, stake: "20", displayedPayoutMultiplier: "6", potentialPayout: "120", actualPayout: "120", result: "win", notes: "Jokic monster + two easy ALT lines. Clean sweep.", emotionalState: "confident" },
-    { entryDate: "2026-05-21", entryType: "flex", pickCount: 4, stake: "20", displayedPayoutMultiplier: "0", potentialPayout: "60", actualPayout: "30", result: "partial", notes: "3/4. Butler DNP killed the Tatum leg — correlation risk was worth it.", emotionalState: "neutral" },
-    { entryDate: "2026-05-22", entryType: "power", pickCount: 2, stake: "10", displayedPayoutMultiplier: "3", potentialPayout: "30", actualPayout: "0", result: "loss", notes: "Curry threes missed badly. Bad beat night.", emotionalState: "frustrated" },
-    { entryDate: "2026-05-22", entryType: "power", pickCount: 3, stake: "15", displayedPayoutMultiplier: "6", potentialPayout: "90", actualPayout: "90", result: "win", notes: "Evening game — Giannis and Donovan both went off.", emotionalState: "confident" },
-    { entryDate: "2026-05-23", entryType: "power", pickCount: 3, stake: "20", result: "pending", notes: "Building for tonight — waiting on Butler status." },
+    { entryDate: "2026-05-20", entryType: "power", pickCount: 3, stake: "20", displayedPayoutMultiplier: "6", potentialPayout: "120", actualPayout: "120", result: "win", notes: "Jokic monster + two easy ALT lines. Clean sweep.", emotionalState: "confident", earlyExitEligible: false },
+    { entryDate: "2026-05-21", entryType: "flex", pickCount: 4, stake: "20", displayedPayoutMultiplier: "0", potentialPayout: "60", actualPayout: "30", result: "partial", notes: "3/4. Butler DNP killed the Tatum leg — correlation risk was worth it.", emotionalState: "neutral", earlyExitEligible: false },
+    { entryDate: "2026-05-22", entryType: "power", pickCount: 2, stake: "10", displayedPayoutMultiplier: "3", potentialPayout: "30", actualPayout: "0", result: "loss", notes: "Curry threes missed badly. Bad beat night.", emotionalState: "frustrated", earlyExitEligible: false },
+    { entryDate: "2026-05-22", entryType: "power", pickCount: 3, stake: "15", displayedPayoutMultiplier: "6", potentialPayout: "90", actualPayout: "90", result: "win", notes: "Evening game — Giannis and Donovan both went off.", emotionalState: "confident", earlyExitEligible: false },
+    { entryDate: "2026-05-23", entryType: "power", pickCount: 3, stake: "20", result: "pending", notes: "Building for tonight — waiting on Butler status.", earlyExitEligible: true, earlyExitValue: "14.50" },
   ];
   const entries = await db.insert(entriesTable).values(entryDefs).returning();
   console.log(`Inserted ${entries.length} entries`);
 
   // ---- Entry Picks ----
-  const pickDefs = [
-    // Entry 1 (win)
+  await db.insert(entryPicksTable).values([
     { entryId: entries[0].id, playerId: playersByName["Nikola Jokic"].id, statType: "points", direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.2", projectionGap: "1.7", result: "hit", closingLine: "29.5", clv: "0.5" },
     { entryId: entries[0].id, playerId: playersByName["Jayson Tatum"].id, statType: "rebounds", direction: "more", lineValue: "8.5", lineType: "standard", yourProjection: "9.2", projectionGap: "0.7", result: "hit", closingLine: "8.5", clv: "0.0" },
     { entryId: entries[0].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "points", direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9", result: "hit", closingLine: "31.0", clv: "-0.5" },
-    // Entry 2 (partial)
     { entryId: entries[1].id, playerId: playersByName["Jayson Tatum"].id, statType: "points", direction: "more", lineValue: "27.5", lineType: "standard", yourProjection: "29.8", projectionGap: "2.3", result: "hit", closingLine: "27.5", clv: "0.0" },
     { entryId: entries[1].id, playerId: playersByName["Kevin Durant"].id, statType: "points", direction: "more", lineValue: "25.5", lineType: "standard", yourProjection: "27.8", projectionGap: "2.3", result: "hit", closingLine: "25.5", clv: "0.0" },
     { entryId: entries[1].id, playerId: playersByName["Jimmy Butler"].id, statType: "points", direction: "more", lineValue: "20.5", lineType: "goblin", yourProjection: "17.3", projectionGap: "-3.2", result: "dnp", closingLine: null, clv: null },
     { entryId: entries[1].id, playerId: playersByName["Devin Booker"].id, statType: "points", direction: "more", lineValue: "24.5", lineType: "standard", yourProjection: "22.1", projectionGap: "-2.4", result: "miss", closingLine: "24.5", clv: "0.0" },
-    // Entry 3 (loss)
     { entryId: entries[2].id, playerId: playersByName["Stephen Curry"].id, statType: "threes_made", direction: "more", lineValue: "4.5", lineType: "demon", yourProjection: "5.2", projectionGap: "0.7", result: "miss", closingLine: "4.5", clv: "0.0" },
     { entryId: entries[2].id, playerId: playersByName["LeBron James"].id, statType: "assists", direction: "more", lineValue: "7.5", lineType: "standard", yourProjection: "8.4", projectionGap: "0.9", result: "miss", closingLine: "7.5", clv: "0.0" },
-    // Entry 4 (win)
     { entryId: entries[3].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "points", direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9", result: "hit", closingLine: "30.5", clv: "0.0" },
     { entryId: entries[3].id, playerId: playersByName["Donovan Mitchell"].id, statType: "points", direction: "more", lineValue: "26.5", lineType: "standard", yourProjection: "28.5", projectionGap: "2.0", result: "hit", closingLine: "26.5", clv: "0.0" },
     { entryId: entries[3].id, playerId: playersByName["Nikola Jokic"].id, statType: "assists", direction: "more", lineValue: "9.5", lineType: "demon", yourProjection: "8.9", projectionGap: "-0.6", result: "hit", closingLine: "9.5", clv: "0.0" },
-    // Entry 5 (pending)
     { entryId: entries[4].id, playerId: playersByName["Nikola Jokic"].id, statType: "points", direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.2", projectionGap: "1.7", result: "pending" },
     { entryId: entries[4].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "points", direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9", result: "pending" },
     { entryId: entries[4].id, playerId: playersByName["Stephen Curry"].id, statType: "points", direction: "more", lineValue: "26.5", lineType: "standard", yourProjection: "29.3", projectionGap: "2.8", result: "pending" },
-  ];
-  await db.insert(entryPicksTable).values(pickDefs);
-  console.log(`Inserted ${pickDefs.length} entry picks`);
+  ]);
+  console.log("Inserted 15 entry picks");
 
-  // ---- Payout Config ----
+  // ---- Payout Config (Power + Flex — actual PrizePicks multipliers) ----
   await db.insert(payoutConfigTable).values([
-    { providerName: "prizepicks", entryType: "power", pickCount: 2, config: { multiplier: 3.0, description: "2-pick power" }, effectiveAt: new Date("2026-01-01") },
-    { providerName: "prizepicks", entryType: "power", pickCount: 3, config: { multiplier: 6.0, description: "3-pick power" }, effectiveAt: new Date("2026-01-01") },
-    { providerName: "prizepicks", entryType: "power", pickCount: 4, config: { multiplier: 10.0, description: "4-pick power" }, effectiveAt: new Date("2026-01-01") },
-    { providerName: "prizepicks", entryType: "power", pickCount: 5, config: { multiplier: 20.0, description: "5-pick power" }, effectiveAt: new Date("2026-01-01") },
-    { providerName: "prizepicks", entryType: "power", pickCount: 6, config: { multiplier: 40.0, description: "6-pick power" }, effectiveAt: new Date("2026-01-01") },
-    { providerName: "prizepicks", entryType: "flex", pickCount: 2, config: { "2of2": 3.0, description: "2-pick flex" }, effectiveAt: new Date("2026-01-01") },
-    { providerName: "prizepicks", entryType: "flex", pickCount: 3, config: { "3of3": 5.0, "2of3": 1.25, description: "3-pick flex" }, effectiveAt: new Date("2026-01-01") },
-    { providerName: "prizepicks", entryType: "flex", pickCount: 4, config: { "4of4": 10.0, "3of4": 2.5, description: "4-pick flex" }, effectiveAt: new Date("2026-01-01") },
-    { providerName: "prizepicks", entryType: "flex", pickCount: 5, config: { "5of5": 20.0, "4of5": 4.0, "3of5": 1.0, description: "5-pick flex" }, effectiveAt: new Date("2026-01-01") },
-    { providerName: "prizepicks", entryType: "flex", pickCount: 6, config: { "6of6": 40.0, "5of6": 6.0, "4of6": 1.5, description: "6-pick flex" }, effectiveAt: new Date("2026-01-01") },
+    { providerName: "prizepicks", entryType: "power", pickCount: 2, config: { multiplier: 3.0, description: "2-pick Power" }, effectiveAt: new Date("2026-01-01") },
+    { providerName: "prizepicks", entryType: "power", pickCount: 3, config: { multiplier: 6.0, description: "3-pick Power" }, effectiveAt: new Date("2026-01-01") },
+    { providerName: "prizepicks", entryType: "power", pickCount: 4, config: { multiplier: 10.0, description: "4-pick Power" }, effectiveAt: new Date("2026-01-01") },
+    { providerName: "prizepicks", entryType: "power", pickCount: 5, config: { multiplier: 20.0, description: "5-pick Power" }, effectiveAt: new Date("2026-01-01") },
+    { providerName: "prizepicks", entryType: "power", pickCount: 6, config: { multiplier: 40.0, description: "6-pick Power" }, effectiveAt: new Date("2026-01-01") },
+    { providerName: "prizepicks", entryType: "flex", pickCount: 2, config: { "2of2": 3.0, description: "2-pick Flex" }, effectiveAt: new Date("2026-01-01") },
+    { providerName: "prizepicks", entryType: "flex", pickCount: 3, config: { "3of3": 5.0, "2of3": 1.25, description: "3-pick Flex" }, effectiveAt: new Date("2026-01-01") },
+    { providerName: "prizepicks", entryType: "flex", pickCount: 4, config: { "4of4": 10.0, "3of4": 2.5, description: "4-pick Flex" }, effectiveAt: new Date("2026-01-01") },
+    { providerName: "prizepicks", entryType: "flex", pickCount: 5, config: { "5of5": 20.0, "4of5": 4.0, "3of5": 1.0, description: "5-pick Flex" }, effectiveAt: new Date("2026-01-01") },
+    { providerName: "prizepicks", entryType: "flex", pickCount: 6, config: { "6of6": 40.0, "5of6": 6.0, "4of6": 1.5, description: "6-pick Flex" }, effectiveAt: new Date("2026-01-01") },
   ]);
   console.log("Inserted payout configs");
 

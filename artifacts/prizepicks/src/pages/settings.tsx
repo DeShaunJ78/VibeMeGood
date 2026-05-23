@@ -7,7 +7,7 @@ import { formatDistanceToNow } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 
 export default function Settings() {
-  const { data, isLoading } = useGetDataHealth(undefined, {
+  const { data, isLoading } = useGetDataHealth({
     query: { queryKey: getGetDataHealthQueryKey() }
   });
 
