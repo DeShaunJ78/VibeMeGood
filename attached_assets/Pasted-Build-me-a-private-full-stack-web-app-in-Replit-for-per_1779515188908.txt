@@ -1,0 +1,587 @@
+Build me a private full-stack web app in Replit for personal PrizePicks analytics.
+
+CONTEXT
+This is a private personal decision-support dashboard, not a public consumer app and not a marketing site.
+Its purpose is to help me analyze PrizePicks props across all sports using structured data, projection comparisons, injury/news context, line history, external reference markets, journaling, and review metrics.
+The app should feel like a serious internal analytics workstation: fast, data-dense, dark mode, table-first, and built for desktop-first use.
+I already prefer a stack like React + Express + Drizzle ORM + Tailwind + PostgreSQL, and I want this app built in that direction inside Replit.
+
+IMPORTANT PRODUCT RULES
+- This app is for personal use only.
+- Do not build a public landing page or generic SaaS template.
+- Do not create fake AI summaries that invent stats or injuries.
+- Do not hide decision logic in a black-box score.
+- Every main score must be decomposable and explainable.
+- The app should support all major PrizePicks sports, but the architecture must make it easy to prioritize NBA, NFL, MLB, NHL, and WNBA first.
+- PrizePicks payout logic can vary by lineup composition, so do not hardcode one universal payout table as permanent truth. Build the system so payout assumptions can be stored in configuration and overridden by live captured lineup payout data.
+- Build the app so external APIs can be swapped via provider adapters.
+
+VISUAL DIRECTION
+Design this like a premium dark analytics terminal:
+- Dark charcoal / slate background
+- Clean restrained accent color
+- Dense but readable tables
+- Left sidebar navigation
+- Main workspace in center
+- Right-side slide-over drawer for prop details and explanations
+- Smooth, modern UI, but not flashy
+- Desktop-first, responsive enough for tablet/mobile later
+- Use Tailwind for styling
+- Use a professional dashboard aesthetic, not a gambling-site aesthetic
+
+TECH STACK
+Use:
+- Frontend: React
+- Routing: Wouter
+- Styling: Tailwind CSS
+- Backend: Express.js
+- Database: PostgreSQL
+- ORM: Drizzle ORM
+- Scheduling: node-cron
+- AI explanations: Anthropic Claude API via secure server-side integration
+- Caching: start with in-memory cache abstraction; make it easy to replace with Redis later
+- Environment variables for all secrets
+
+DATA MODEL
+Create a clean production-style schema with Drizzle for these tables:
+
+1. players
+- id
+- sport
+- full_name
+- first_name
+- last_name
+- team_id
+- position
+- status
+- external_ids JSONB
+- created_at
+- updated_at
+
+2. teams
+- id
+- sport
+- name
+- abbreviation
+- city
+- created_at
+- updated_at
+
+3. games
+- id
+- sport
+- home_team_id
+- away_team_id
+- start_time
+- status
+- spread
+- total
+- metadata JSONB
+- created_at
+- updated_at
+
+4. pp_lines
+- id
+- player_id
+- game_id
+- stat_type
+- directionality_type
+- line_value
+- line_type (standard, demon, goblin)
+- payout_modifier JSONB nullable
+- opened_at
+- updated_at
+- is_active
+- source_snapshot_id nullable
+- created_at
+
+5. pp_line_history
+- id
+- pp_line_id
+- line_value
+- line_type
+- captured_at
+- metadata JSONB
+
+6. external_lines
+- id
+- player_id
+- game_id
+- stat_type
+- book_name
+- over_line
+- over_odds
+- under_line
+- under_odds
+- no_vig_over_prob nullable
+- no_vig_under_prob nullable
+- pulled_at
+- metadata JSONB
+
+7. projections
+- id
+- player_id
+- game_id
+- stat_type
+- projected_value
+- floor_value nullable
+- median_value nullable
+- ceiling_value nullable
+- confidence_score nullable
+- projection_source
+- feature_snapshot JSONB
+- generated_at
+
+8. injuries
+- id
+- player_id
+- game_id nullable
+- sport
+- status
+- note
+- source
+- reported_at
+- created_at
+
+9. lineup_confirmations
+- id
+- player_id
+- game_id
+- is_starting
+- expected_minutes nullable
+- minutes_floor nullable
+- minutes_ceiling nullable
+- confirmed_at
+- source
+
+10. prop_scores
+- id
+- player_id
+- game_id
+- stat_type
+- pp_line_id
+- edge_score
+- stability_score
+- market_support_score
+- risk_score
+- final_score
+- action_tag (PLAY, WATCH, PASS)
+- reasoning JSONB
+- scored_at
+
+11. entries
+- id
+- entry_date
+- entry_type (power, flex)
+- pick_count
+- stake
+- displayed_payout_multiplier nullable
+- potential_payout nullable
+- actual_payout nullable
+- result (pending, win, loss, partial, refund)
+- notes
+- emotional_state nullable
+- submitted_at
+- closed_at nullable
+
+12. entry_picks
+- id
+- entry_id
+- pp_line_id nullable
+- player_id
+- game_id
+- stat_type
+- direction (more, less)
+- line_value
+- line_type
+- your_projection nullable
+- projection_gap nullable
+- result (pending, hit, miss, dnp, push)
+- closing_line nullable
+- clv nullable
+- created_at
+
+13. watchlist_items
+- id
+- player_id
+- game_id
+- stat_type
+- direction_preference nullable
+- note nullable
+- created_at
+
+14. alerts
+- id
+- type
+- severity
+- title
+- message
+- related_entity_type
+- related_entity_id
+- is_read
+- created_at
+
+15. data_pull_logs
+- id
+- provider
+- job_name
+- status
+- records_processed
+- started_at
+- finished_at
+- error_message nullable
+
+16. payout_config
+- id
+- provider_name
+- entry_type
+- pick_count
+- config JSONB
+- effective_at
+- created_at
+
+ARCHITECTURE RULES
+- Build with provider adapters so APIs can be swapped later.
+- Create interfaces/services for PrizePicks ingestion, sportsbook odds ingestion, injuries, lineups, projections, and scoring.
+- If a live API cannot be connected now, create mock providers and seed data so the app still works end to end.
+- Store line history from day one.
+- Keep business logic in services, not in components.
+- Use API routes from Express to serve normalized frontend-ready data.
+- Seed the database with realistic sample data for NBA and MLB so the app is immediately testable.
+- Build with TypeScript if possible across frontend and backend.
+
+MAIN SCREENS
+Build these screens:
+
+1. Command Center
+Purpose: daily mission control
+Show:
+- today’s games by sport
+- top injury/news updates
+- biggest line movements
+- top PLAY props
+- watchlist summary
+- data freshness summary
+- upcoming lock times
+- quick stats: active props, watched props, pending entries, average edge score, alerts count
+
+2. Slate Board
+Purpose: all props in one dense filterable table
+Columns:
+- sport
+- start time
+- player
+- team
+- opponent
+- stat type
+- PP line
+- line type
+- your projection
+- projection gap
+- edge score
+- stability score
+- market support score
+- risk score
+- action tag
+- updated time
+Filters:
+- sport
+- stat type
+- action tag
+- line type
+- team
+- game
+- risk threshold
+- min edge score
+- only watchlist
+Features:
+- sortable columns
+- quick add to watchlist
+- click row opens prop detail drawer
+- sticky filters
+- save filter preset
+
+3. Prop Detail Drawer
+Purpose: explain one prop deeply
+Show:
+- player card
+- game context
+- current PP line
+- line history chart
+- your projection and gap
+- external sportsbook reference lines
+- no-vig probabilities if available
+- edge/stability/market support/risk score breakdown
+- injury and lineup context
+- notes and reasons for PLAY/WATCH/PASS
+- add to watchlist
+- add to entry builder
+
+4. Injury and News Feed
+Purpose: monitor information risk
+Show:
+- latest injury reports
+- latest lineup confirmations
+- timestamps
+- affected props
+- affected watchlist items
+- status chips
+- data freshness indicator
+Filters by sport and time-to-lock
+
+5. Entry Builder
+Purpose: construct PrizePicks entries
+Features:
+- add/remove props
+- choose Power or Flex
+- choose 2 to 6 picks
+- display current configured payout assumptions
+- show per-pick break-even math based on stored payout config
+- correlation warnings
+- blowout exposure warnings
+- unresolved injury warnings
+- same-game concentration warnings
+- final entry quality summary
+- save as planned entry or mark as submitted
+
+6. Journal
+Purpose: log actual entries and outcomes
+Show:
+- all entries
+- picks in each entry
+- stake
+- payout
+- result
+- notes
+- emotional state
+- submitted time
+- closing-line data
+- searchable filters
+
+7. Review Dashboard
+Purpose: improve process over time
+Show:
+- hit rate by sport
+- hit rate by stat type
+- hit rate by action tag
+- CLV by category
+- average scores of winning vs losing picks
+- entry results by pick count and entry type
+- bankroll curve
+- best and worst-performing categories
+- chart of line movement vs outcomes
+- review cards for what is working / not working
+
+8. Settings / Data Health
+Purpose: manage providers and freshness
+Show:
+- environment/config summary
+- last successful data pulls
+- provider health
+- manual sync buttons
+- payout config editor
+- mock/live mode toggle
+- feature flags
+
+CORE ENGINES
+Build these service modules:
+
+1. PrizePicks Ingestion Service
+- ingest current props from adapter
+- normalize into pp_lines
+- append pp_line_history snapshots
+- detect changes and surface alerts
+- support standard, demon, goblin line types
+
+2. External Odds Service
+- ingest sportsbook reference lines
+- store external_lines
+- compute no-vig probabilities where possible
+- expose support/deviation data to scoring engine
+
+3. Injury / Lineup Service
+- ingest injuries and lineup confirmations
+- normalize statuses
+- expose player/game context for scoring
+
+4. Projection Engine
+Start simple, but structure for future upgrades.
+Version 1 projection method:
+- baseline rolling average
+- recent form weighting
+- expected minutes/opportunity adjustment
+- teammate absence adjustment
+- matchup adjustment
+- pace/game environment adjustment where relevant
+- home/away modifier
+Store feature snapshot used for each projection.
+
+5. Scoring Engine
+Compute these scores from 0-100:
+
+Edge Score:
+- projection gap
+- gap percent
+- external line support
+- no-vig fair value support
+
+Stability Score:
+- expected minutes reliability
+- confirmed starter status
+- teammate injury impact
+- historical volatility
+- blowout risk
+
+Market Support Score:
+- external line deviation
+- line movement direction
+- line movement magnitude
+- whether PP appears stale vs reference markets
+
+Risk Score:
+- unresolved injury risk
+- late-news risk
+- time to lock
+- correlation risk in current entry context if applicable
+
+Final Score:
+- weighted combination of the above
+- final action tag PLAY / WATCH / PASS
+
+IMPORTANT:
+- store reasoning as structured JSON
+- show exact sub-factors
+- do not use opaque AI-generated scores
+
+6. Alert Engine
+Trigger alerts only for meaningful changes:
+- line movement >= threshold
+- injury/news on watched player
+- lineup confirmation near lock
+- watched prop downgraded from PLAY to WATCH/PASS
+- line moves against a submitted or planned entry
+- stale data provider
+
+AI COMPANION
+Build a Claude-powered explanation panel with retrieval-first architecture.
+
+Requirements:
+- Server-side Claude API call only
+- The AI only receives structured app data for the selected prop/entry/dashboard context
+- The AI explains the current situation in plain English
+- It must never invent missing injuries, line movement, or external market data
+- If data is missing, it must say so
+- Provide concise explanation with:
+  - current PP line
+  - your projection
+  - gap
+  - main supporting factors
+  - main risks
+  - action recommendation
+- Add an “Explain this prop” button in the prop drawer
+- Add an “Explain this entry” button in the entry builder
+
+Use prompt grounding like:
+“You are a private PrizePicks analytics assistant. Explain only from the structured data provided. If data is missing, say that clearly. Do not speculate beyond the supplied context.”
+
+USER EXPERIENCE DETAILS
+- Desktop-first
+- Fast filtering
+- Dense but readable tables
+- Keyboard-friendly where possible
+- Right-side drawer for detail
+- Charts should be minimal and useful
+- Use badges/chips for PLAY/WATCH/PASS and line type
+- Add tooltips for math terms like CLV, no-vig, edge score, stability
+- Include empty states and loading skeletons
+- Include data freshness indicators everywhere relevant
+
+SEED DATA
+Provide realistic seeded data for:
+- NBA
+- MLB
+Include:
+- teams
+- players
+- games
+- sample pp lines
+- line history
+- injuries
+- lineup confirmations
+- projections
+- scores
+- sample journal entries
+
+JOBS / AUTOMATION
+Set up node-cron jobs for:
+- morning slate sync
+- hourly injury refresh
+- hourly external odds refresh
+- regular PP line refresh
+- projection recompute
+- scoring recompute
+- final pre-lock refresh
+- closing-line snapshot capture
+Also build manual trigger endpoints/buttons in Settings.
+
+IMPLEMENTATION PHASES
+Build the app in this order:
+Phase 1:
+- database schema
+- server setup
+- seeded data
+- basic layout
+- Command Center
+- Slate Board
+- Prop Detail Drawer
+
+Phase 2:
+- ingestion service interfaces
+- projection engine v1
+- scoring engine
+- injuries/news feed
+- watchlist
+
+Phase 3:
+- entry builder
+- journal
+- review dashboard
+- alerts
+
+Phase 4:
+- Claude explanation panel
+- settings/data health
+- mock/live provider switching
+- polish and responsiveness
+
+QUALITY BAR
+- Clean code structure
+- Reusable components
+- Strong typing
+- No placeholder lorem ipsum product copy
+- No generic marketing homepage
+- Working seeded demo in preview
+- Reasonable error handling
+- Clear loading and empty states
+
+NAVIGATION
+Left sidebar:
+- Command Center
+- Slate Board
+- Injury Feed
+- Entry Builder
+- Journal
+- Review
+- Settings
+
+TOP PRIORITY
+I want the first version to feel immediately useful with seeded data even if live integrations are not all connected yet.
+
+AFTER BUILDING
+When the first version is complete:
+- tell me what is mocked vs live
+- list which providers need API keys
+- identify the next 10 best improvements
+- suggest how to connect SportsDataIO, The Odds API, and a PrizePicks line source cleanly
+
+Now build the first full version.

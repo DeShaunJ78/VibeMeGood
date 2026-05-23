@@ -1,22 +1,57 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: PrizePicks Analytics API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: players
+    description: Player operations
+  - name: teams
+    description: Team operations
+  - name: games
+    description: Game operations
+  - name: ppLines
+    description: PrizePicks line operations
+  - name: externalLines
+    description: External sportsbook line operations
+  - name: projections
+    description: Projection operations
+  - name: injuries
+    description: Injury and news operations
+  - name: lineupConfirmations
+    description: Lineup confirmation operations
+  - name: propScores
+    description: Prop scoring operations
+  - name: entries
+    description: Entry (bet slip) operations
+  - name: entryPicks
+    description: Entry pick operations
+  - name: watchlist
+    description: Watchlist operations
+  - name: alerts
+    description: Alert operations
+  - name: dataPullLogs
+    description: Data pull log operations
+  - name: payoutConfig
+    description: Payout configuration operations
+  - name: dashboard
+    description: Dashboard summary operations
+  - name: sync
+    description: Manual data sync operations
+  - name: anthropic
+    description: Anthropic AI chat operations
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +59,1604 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── PLAYERS ───────────────────────────────────────────────────────
+  /players:
+    get:
+      operationId: listPlayers
+      tags: [players]
+      summary: List players
+      parameters:
+        - { name: sport, in: query, schema: { type: string } }
+        - { name: teamId, in: query, schema: { type: integer } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Player list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Player" }
+    post:
+      operationId: createPlayer
+      tags: [players]
+      summary: Create player
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlayerInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Player" }
+
+  /players/{id}:
+    get:
+      operationId: getPlayer
+      tags: [players]
+      summary: Get player
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Player
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Player" }
+        "404":
+          description: Not found
+    patch:
+      operationId: updatePlayer
+      tags: [players]
+      summary: Update player
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlayerUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Player" }
+
+  # ─── TEAMS ────────────────────────────────────────────────────────
+  /teams:
+    get:
+      operationId: listTeams
+      tags: [teams]
+      summary: List teams
+      parameters:
+        - { name: sport, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Team list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Team" }
+    post:
+      operationId: createTeam
+      tags: [teams]
+      summary: Create team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TeamInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Team" }
+
+  /teams/{id}:
+    get:
+      operationId: getTeam
+      tags: [teams]
+      summary: Get team
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Team
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Team" }
+
+  # ─── GAMES ────────────────────────────────────────────────────────
+  /games:
+    get:
+      operationId: listGames
+      tags: [games]
+      summary: List games
+      parameters:
+        - { name: sport, in: query, schema: { type: string } }
+        - { name: date, in: query, schema: { type: string, format: date } }
+        - { name: status, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Game list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Game" }
+    post:
+      operationId: createGame
+      tags: [games]
+      summary: Create game
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GameInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Game" }
+
+  /games/{id}:
+    get:
+      operationId: getGame
+      tags: [games]
+      summary: Get game
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Game
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Game" }
+
+  # ─── PP LINES ─────────────────────────────────────────────────────
+  /pp-lines:
+    get:
+      operationId: listPpLines
+      tags: [ppLines]
+      summary: List PrizePicks lines
+      parameters:
+        - { name: sport, in: query, schema: { type: string } }
+        - { name: playerId, in: query, schema: { type: integer } }
+        - { name: gameId, in: query, schema: { type: integer } }
+        - { name: statType, in: query, schema: { type: string } }
+        - { name: lineType, in: query, schema: { type: string } }
+        - { name: isActive, in: query, schema: { type: boolean } }
+      responses:
+        "200":
+          description: PP Line list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PpLine" }
+    post:
+      operationId: createPpLine
+      tags: [ppLines]
+      summary: Create PP line
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PpLineInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PpLine" }
+
+  /pp-lines/{id}:
+    get:
+      operationId: getPpLine
+      tags: [ppLines]
+      summary: Get PP line
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: PP Line
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PpLine" }
+    patch:
+      operationId: updatePpLine
+      tags: [ppLines]
+      summary: Update PP line
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PpLineUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PpLine" }
+
+  /pp-lines/{id}/history:
+    get:
+      operationId: getPpLineHistory
+      tags: [ppLines]
+      summary: Get line movement history
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Line history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PpLineHistory" }
+
+  # ─── EXTERNAL LINES ───────────────────────────────────────────────
+  /external-lines:
+    get:
+      operationId: listExternalLines
+      tags: [externalLines]
+      summary: List external sportsbook lines
+      parameters:
+        - { name: playerId, in: query, schema: { type: integer } }
+        - { name: gameId, in: query, schema: { type: integer } }
+        - { name: statType, in: query, schema: { type: string } }
+        - { name: bookName, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: External lines
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ExternalLine" }
+
+  # ─── PROJECTIONS ──────────────────────────────────────────────────
+  /projections:
+    get:
+      operationId: listProjections
+      tags: [projections]
+      summary: List projections
+      parameters:
+        - { name: playerId, in: query, schema: { type: integer } }
+        - { name: gameId, in: query, schema: { type: integer } }
+        - { name: statType, in: query, schema: { type: string } }
+        - { name: source, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Projections
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Projection" }
+    post:
+      operationId: createProjection
+      tags: [projections]
+      summary: Create projection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectionInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Projection" }
+
+  /projections/{id}:
+    get:
+      operationId: getProjection
+      tags: [projections]
+      summary: Get projection
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Projection" }
+
+  # ─── INJURIES ─────────────────────────────────────────────────────
+  /injuries:
+    get:
+      operationId: listInjuries
+      tags: [injuries]
+      summary: List injury reports
+      parameters:
+        - { name: sport, in: query, schema: { type: string } }
+        - { name: playerId, in: query, schema: { type: integer } }
+        - { name: gameId, in: query, schema: { type: integer } }
+        - { name: since, in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: Injuries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Injury" }
+    post:
+      operationId: createInjury
+      tags: [injuries]
+      summary: Create injury report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InjuryInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Injury" }
+
+  # ─── LINEUP CONFIRMATIONS ─────────────────────────────────────────
+  /lineup-confirmations:
+    get:
+      operationId: listLineupConfirmations
+      tags: [lineupConfirmations]
+      summary: List lineup confirmations
+      parameters:
+        - { name: playerId, in: query, schema: { type: integer } }
+        - { name: gameId, in: query, schema: { type: integer } }
+        - { name: since, in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: Lineup confirmations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LineupConfirmation" }
+    post:
+      operationId: createLineupConfirmation
+      tags: [lineupConfirmations]
+      summary: Create lineup confirmation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LineupConfirmationInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LineupConfirmation" }
+
+  # ─── PROP SCORES ──────────────────────────────────────────────────
+  /prop-scores:
+    get:
+      operationId: listPropScores
+      tags: [propScores]
+      summary: List prop scores
+      parameters:
+        - { name: playerId, in: query, schema: { type: integer } }
+        - { name: gameId, in: query, schema: { type: integer } }
+        - { name: statType, in: query, schema: { type: string } }
+        - { name: actionTag, in: query, schema: { type: string } }
+        - { name: minFinalScore, in: query, schema: { type: number } }
+      responses:
+        "200":
+          description: Prop scores
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PropScore" }
+
+  /prop-scores/{id}:
+    get:
+      operationId: getPropScore
+      tags: [propScores]
+      summary: Get prop score
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Prop score
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PropScore" }
+
+  # ─── SLATE (ENRICHED PROP TABLE) ──────────────────────────────────
+  /slate:
+    get:
+      operationId: getSlate
+      tags: [propScores]
+      summary: Get enriched slate — props with scores, projections, player/team/game context
+      parameters:
+        - { name: sport, in: query, schema: { type: string } }
+        - { name: statType, in: query, schema: { type: string } }
+        - { name: actionTag, in: query, schema: { type: string } }
+        - { name: lineType, in: query, schema: { type: string } }
+        - { name: teamId, in: query, schema: { type: integer } }
+        - { name: gameId, in: query, schema: { type: integer } }
+        - { name: minEdgeScore, in: query, schema: { type: number } }
+        - { name: maxRiskScore, in: query, schema: { type: number } }
+        - { name: watchlistOnly, in: query, schema: { type: boolean } }
+        - { name: date, in: query, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Enriched slate rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SlateRow" }
+
+  /slate/{ppLineId}:
+    get:
+      operationId: getSlateRow
+      tags: [propScores]
+      summary: Get full prop detail for one line
+      parameters:
+        - { name: ppLineId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Full prop detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PropDetail" }
+
+  # ─── ENTRIES ──────────────────────────────────────────────────────
+  /entries:
+    get:
+      operationId: listEntries
+      tags: [entries]
+      summary: List entries
+      parameters:
+        - { name: result, in: query, schema: { type: string } }
+        - { name: entryType, in: query, schema: { type: string } }
+        - { name: since, in: query, schema: { type: string, format: date } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Entry" }
+    post:
+      operationId: createEntry
+      tags: [entries]
+      summary: Create entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EntryInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Entry" }
+
+  /entries/{id}:
+    get:
+      operationId: getEntry
+      tags: [entries]
+      summary: Get entry with picks
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Entry with picks
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntryWithPicks" }
+        "404":
+          description: Not found
+    patch:
+      operationId: updateEntry
+      tags: [entries]
+      summary: Update entry (result, payout, notes)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EntryUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Entry" }
+    delete:
+      operationId: deleteEntry
+      tags: [entries]
+      summary: Delete entry
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── ENTRY PICKS ──────────────────────────────────────────────────
+  /entries/{entryId}/picks:
+    get:
+      operationId: listEntryPicks
+      tags: [entryPicks]
+      summary: List picks for an entry
+      parameters:
+        - { name: entryId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Picks
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/EntryPick" }
+    post:
+      operationId: addEntryPick
+      tags: [entryPicks]
+      summary: Add pick to entry
+      parameters:
+        - { name: entryId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EntryPickInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntryPick" }
+
+  /entries/{entryId}/picks/{pickId}:
+    patch:
+      operationId: updateEntryPick
+      tags: [entryPicks]
+      summary: Update pick result
+      parameters:
+        - { name: entryId, in: path, required: true, schema: { type: integer } }
+        - { name: pickId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EntryPickUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntryPick" }
+    delete:
+      operationId: deleteEntryPick
+      tags: [entryPicks]
+      summary: Remove pick from entry
+      parameters:
+        - { name: entryId, in: path, required: true, schema: { type: integer } }
+        - { name: pickId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── WATCHLIST ────────────────────────────────────────────────────
+  /watchlist:
+    get:
+      operationId: listWatchlist
+      tags: [watchlist]
+      summary: List watchlist items
+      parameters:
+        - { name: playerId, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Watchlist items
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WatchlistItem" }
+    post:
+      operationId: addToWatchlist
+      tags: [watchlist]
+      summary: Add to watchlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WatchlistItemInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WatchlistItem" }
+
+  /watchlist/{id}:
+    delete:
+      operationId: removeFromWatchlist
+      tags: [watchlist]
+      summary: Remove from watchlist
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204":
+          description: Deleted
+    patch:
+      operationId: updateWatchlistItem
+      tags: [watchlist]
+      summary: Update watchlist item
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WatchlistItemUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WatchlistItem" }
+
+  # ─── ALERTS ───────────────────────────────────────────────────────
+  /alerts:
+    get:
+      operationId: listAlerts
+      tags: [alerts]
+      summary: List alerts
+      parameters:
+        - { name: isRead, in: query, schema: { type: boolean } }
+        - { name: severity, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Alert" }
+
+  /alerts/{id}/read:
+    patch:
+      operationId: markAlertRead
+      tags: [alerts]
+      summary: Mark alert as read
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Alert" }
+
+  /alerts/read-all:
+    patch:
+      operationId: markAllAlertsRead
+      tags: [alerts]
+      summary: Mark all alerts as read
+      responses:
+        "200":
+          description: Updated count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated: { type: integer }
+                required: [updated]
+
+  # ─── DATA PULL LOGS ───────────────────────────────────────────────
+  /data-pull-logs:
+    get:
+      operationId: listDataPullLogs
+      tags: [dataPullLogs]
+      summary: List data pull logs
+      parameters:
+        - { name: provider, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DataPullLog" }
+
+  # ─── PAYOUT CONFIG ────────────────────────────────────────────────
+  /payout-config:
+    get:
+      operationId: listPayoutConfigs
+      tags: [payoutConfig]
+      summary: List payout configurations
+      responses:
+        "200":
+          description: Payout configs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PayoutConfig" }
+    post:
+      operationId: createPayoutConfig
+      tags: [payoutConfig]
+      summary: Create payout config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PayoutConfigInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutConfig" }
+
+  /payout-config/{id}:
+    patch:
+      operationId: updatePayoutConfig
+      tags: [payoutConfig]
+      summary: Update payout config
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PayoutConfigUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutConfig" }
+
+  # ─── DASHBOARD ────────────────────────────────────────────────────
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Command center summary — today's games, alerts, top props, line movements
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DashboardSummary" }
+
+  /dashboard/review:
+    get:
+      operationId: getReviewStats
+      tags: [dashboard]
+      summary: Review dashboard stats — hit rates, CLV, bankroll curve, category breakdowns
+      parameters:
+        - { name: since, in: query, schema: { type: string, format: date } }
+        - { name: until, in: query, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Review stats
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewStats" }
+
+  /dashboard/data-health:
+    get:
+      operationId: getDataHealth
+      tags: [dashboard]
+      summary: Data freshness and provider health
+      responses:
+        "200":
+          description: Data health
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DataHealth" }
+
+  # ─── SYNC ─────────────────────────────────────────────────────────
+  /sync/pp-lines:
+    post:
+      operationId: syncPpLines
+      tags: [sync]
+      summary: Manually trigger PP line sync
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncResult" }
+
+  /sync/injuries:
+    post:
+      operationId: syncInjuries
+      tags: [sync]
+      summary: Manually trigger injury sync
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncResult" }
+
+  /sync/external-odds:
+    post:
+      operationId: syncExternalOdds
+      tags: [sync]
+      summary: Manually trigger external odds sync
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncResult" }
+
+  /sync/projections:
+    post:
+      operationId: syncProjections
+      tags: [sync]
+      summary: Manually trigger projection recompute
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncResult" }
+
+  /sync/scores:
+    post:
+      operationId: syncScores
+      tags: [sync]
+      summary: Manually trigger scoring recompute
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncResult" }
+
+  # ─── AI EXPLAIN ───────────────────────────────────────────────────
+  /explain/prop/{ppLineId}:
+    post:
+      operationId: explainProp
+      tags: [anthropic]
+      summary: Claude explanation for a specific prop (SSE stream)
+      parameters:
+        - { name: ppLineId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream: {}
+
+  /explain/entry/{entryId}:
+    post:
+      operationId: explainEntry
+      tags: [anthropic]
+      summary: Claude explanation for an entry (SSE stream)
+      parameters:
+        - { name: entryId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream: {}
+
+  # ─── ANTHROPIC CONVERSATIONS ──────────────────────────────────────
+  /anthropic/conversations:
+    get:
+      operationId: listAnthropicConversations
+      tags: [anthropic]
+      summary: List all conversations
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AnthropicConversation" }
+    post:
+      operationId: createAnthropicConversation
+      tags: [anthropic]
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnthropicConversationInput" }
+      responses:
+        "201":
+          description: Created conversation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnthropicConversation" }
+
+  /anthropic/conversations/{id}:
+    get:
+      operationId: getAnthropicConversation
+      tags: [anthropic]
+      summary: Get conversation with messages
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Conversation with messages
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnthropicConversationWithMessages" }
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnthropicError" }
+    delete:
+      operationId: deleteAnthropicConversation
+      tags: [anthropic]
+      summary: Delete a conversation
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204":
+          description: Deleted
+
+  /anthropic/conversations/{id}/messages:
+    get:
+      operationId: listAnthropicMessages
+      tags: [anthropic]
+      summary: List messages in a conversation
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AnthropicMessage" }
+    post:
+      operationId: sendAnthropicMessage
+      tags: [anthropic]
+      summary: Send a message and receive an AI response (SSE stream)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnthropicMessageInput" }
+      responses:
+        "200":
+          description: SSE stream of assistant response chunks
+          content:
+            text/event-stream: {}
+
 components:
   schemas:
     HealthStatus:
       type: object
       properties:
-        status:
-          type: string
-      required:
-        - status
+        status: { type: string }
+      required: [status]
 
+    # ─── PLAYER ─────────────────────────────────────────────────────
+    Player:
+      type: object
+      properties:
+        id: { type: integer }
+        sport: { type: string }
+        fullName: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        teamId: { type: ["integer", "null"] }
+        position: { type: ["string", "null"] }
+        status: { type: string }
+        externalIds: {}
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, sport, fullName, firstName, lastName, status, createdAt, updatedAt]
+
+    PlayerInput:
+      type: object
+      properties:
+        sport: { type: string }
+        fullName: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        teamId: { type: ["integer", "null"] }
+        position: { type: ["string", "null"] }
+        status: { type: string }
+        externalIds: {}
+      required: [sport, fullName, firstName, lastName, status]
+
+    PlayerUpdate:
+      type: object
+      properties:
+        teamId: { type: ["integer", "null"] }
+        position: { type: ["string", "null"] }
+        status: { type: string }
+        externalIds: {}
+
+    # ─── TEAM ───────────────────────────────────────────────────────
+    Team:
+      type: object
+      properties:
+        id: { type: integer }
+        sport: { type: string }
+        name: { type: string }
+        abbreviation: { type: string }
+        city: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, sport, name, abbreviation, createdAt, updatedAt]
+
+    TeamInput:
+      type: object
+      properties:
+        sport: { type: string }
+        name: { type: string }
+        abbreviation: { type: string }
+        city: { type: ["string", "null"] }
+      required: [sport, name, abbreviation]
+
+    # ─── GAME ───────────────────────────────────────────────────────
+    Game:
+      type: object
+      properties:
+        id: { type: integer }
+        sport: { type: string }
+        homeTeamId: { type: integer }
+        awayTeamId: { type: integer }
+        homeTeamAbbr: { type: ["string", "null"] }
+        awayTeamAbbr: { type: ["string", "null"] }
+        homeTeamName: { type: ["string", "null"] }
+        awayTeamName: { type: ["string", "null"] }
+        startTime: { type: string, format: date-time }
+        status: { type: string }
+        spread: { type: ["number", "null"] }
+        total: { type: ["number", "null"] }
+        metadata: {}
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, sport, homeTeamId, awayTeamId, startTime, status, createdAt, updatedAt]
+
+    GameInput:
+      type: object
+      properties:
+        sport: { type: string }
+        homeTeamId: { type: integer }
+        awayTeamId: { type: integer }
+        startTime: { type: string, format: date-time }
+        status: { type: string }
+        spread: { type: ["number", "null"] }
+        total: { type: ["number", "null"] }
+        metadata: {}
+      required: [sport, homeTeamId, awayTeamId, startTime, status]
+
+    # ─── PP LINE ────────────────────────────────────────────────────
+    PpLine:
+      type: object
+      properties:
+        id: { type: integer }
+        playerId: { type: integer }
+        gameId: { type: ["integer", "null"] }
+        statType: { type: string }
+        directionalityType: { type: string }
+        lineValue: { type: number }
+        lineType: { type: string }
+        payoutModifier: {}
+        openedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+      required: [id, playerId, statType, directionalityType, lineValue, lineType, isActive, createdAt, updatedAt, openedAt]
+
+    PpLineInput:
+      type: object
+      properties:
+        playerId: { type: integer }
+        gameId: { type: ["integer", "null"] }
+        statType: { type: string }
+        directionalityType: { type: string }
+        lineValue: { type: number }
+        lineType: { type: string }
+        payoutModifier: {}
+        openedAt: { type: string, format: date-time }
+        isActive: { type: boolean }
+      required: [playerId, statType, directionalityType, lineValue, lineType, openedAt, isActive]
+
+    PpLineUpdate:
+      type: object
+      properties:
+        lineValue: { type: number }
+        lineType: { type: string }
+        isActive: { type: boolean }
+        payoutModifier: {}
+
+    PpLineHistory:
+      type: object
+      properties:
+        id: { type: integer }
+        ppLineId: { type: integer }
+        lineValue: { type: number }
+        lineType: { type: string }
+        capturedAt: { type: string, format: date-time }
+        metadata: {}
+      required: [id, ppLineId, lineValue, lineType, capturedAt]
+
+    # ─── EXTERNAL LINE ──────────────────────────────────────────────
+    ExternalLine:
+      type: object
+      properties:
+        id: { type: integer }
+        playerId: { type: integer }
+        gameId: { type: ["integer", "null"] }
+        statType: { type: string }
+        bookName: { type: string }
+        overLine: { type: number }
+        overOdds: { type: ["integer", "null"] }
+        underLine: { type: number }
+        underOdds: { type: ["integer", "null"] }
+        noVigOverProb: { type: ["number", "null"] }
+        noVigUnderProb: { type: ["number", "null"] }
+        pulledAt: { type: string, format: date-time }
+        metadata: {}
+      required: [id, playerId, statType, bookName, overLine, underLine, pulledAt]
+
+    # ─── PROJECTION ─────────────────────────────────────────────────
+    Projection:
+      type: object
+      properties:
+        id: { type: integer }
+        playerId: { type: integer }
+        gameId: { type: ["integer", "null"] }
+        statType: { type: string }
+        projectedValue: { type: number }
+        floorValue: { type: ["number", "null"] }
+        medianValue: { type: ["number", "null"] }
+        ceilingValue: { type: ["number", "null"] }
+        confidenceScore: { type: ["number", "null"] }
+        projectionSource: { type: string }
+        featureSnapshot: {}
+        generatedAt: { type: string, format: date-time }
+      required: [id, playerId, statType, projectedValue, projectionSource, generatedAt]
+
+    ProjectionInput:
+      type: object
+      properties:
+        playerId: { type: integer }
+        gameId: { type: ["integer", "null"] }
+        statType: { type: string }
+        projectedValue: { type: number }
+        floorValue: { type: ["number", "null"] }
+        medianValue: { type: ["number", "null"] }
+        ceilingValue: { type: ["number", "null"] }
+        confidenceScore: { type: ["number", "null"] }
+        projectionSource: { type: string }
+        featureSnapshot: {}
+      required: [playerId, statType, projectedValue, projectionSource]
+
+    # ─── INJURY ─────────────────────────────────────────────────────
+    Injury:
+      type: object
+      properties:
+        id: { type: integer }
+        playerId: { type: integer }
+        playerName: { type: ["string", "null"] }
+        playerTeam: { type: ["string", "null"] }
+        gameId: { type: ["integer", "null"] }
+        sport: { type: string }
+        status: { type: string }
+        note: { type: string }
+        source: { type: string }
+        reportedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+      required: [id, playerId, sport, status, note, source, reportedAt, createdAt]
+
+    InjuryInput:
+      type: object
+      properties:
+        playerId: { type: integer }
+        gameId: { type: ["integer", "null"] }
+        sport: { type: string }
+        status: { type: string }
+        note: { type: string }
+        source: { type: string }
+        reportedAt: { type: string, format: date-time }
+      required: [playerId, sport, status, note, source, reportedAt]
+
+    # ─── LINEUP CONFIRMATION ────────────────────────────────────────
+    LineupConfirmation:
+      type: object
+      properties:
+        id: { type: integer }
+        playerId: { type: integer }
+        playerName: { type: ["string", "null"] }
+        gameId: { type: integer }
+        isStarting: { type: boolean }
+        expectedMinutes: { type: ["number", "null"] }
+        minutesFloor: { type: ["number", "null"] }
+        minutesCeiling: { type: ["number", "null"] }
+        confirmedAt: { type: string, format: date-time }
+        source: { type: string }
+      required: [id, playerId, gameId, isStarting, confirmedAt, source]
+
+    LineupConfirmationInput:
+      type: object
+      properties:
+        playerId: { type: integer }
+        gameId: { type: integer }
+        isStarting: { type: boolean }
+        expectedMinutes: { type: ["number", "null"] }
+        minutesFloor: { type: ["number", "null"] }
+        minutesCeiling: { type: ["number", "null"] }
+        confirmedAt: { type: string, format: date-time }
+        source: { type: string }
+      required: [playerId, gameId, isStarting, confirmedAt, source]
+
+    # ─── PROP SCORE ─────────────────────────────────────────────────
+    PropScore:
+      type: object
+      properties:
+        id: { type: integer }
+        playerId: { type: integer }
+        gameId: { type: ["integer", "null"] }
+        statType: { type: string }
+        ppLineId: { type: integer }
+        edgeScore: { type: number }
+        stabilityScore: { type: number }
+        marketSupportScore: { type: number }
+        riskScore: { type: number }
+        finalScore: { type: number }
+        actionTag: { type: string }
+        reasoning: {}
+        scoredAt: { type: string, format: date-time }
+      required: [id, playerId, statType, ppLineId, edgeScore, stabilityScore, marketSupportScore, riskScore, finalScore, actionTag, scoredAt]
+
+    # ─── SLATE ROW ──────────────────────────────────────────────────
+    SlateRow:
+      type: object
+      properties:
+        ppLineId: { type: integer }
+        playerId: { type: integer }
+        playerName: { type: string }
+        teamAbbr: { type: ["string", "null"] }
+        opponentAbbr: { type: ["string", "null"] }
+        sport: { type: string }
+        startTime: { type: ["string", "null"] }
+        statType: { type: string }
+        lineValue: { type: number }
+        lineType: { type: string }
+        directionalityType: { type: string }
+        yourProjection: { type: ["number", "null"] }
+        projectionGap: { type: ["number", "null"] }
+        edgeScore: { type: ["number", "null"] }
+        stabilityScore: { type: ["number", "null"] }
+        marketSupportScore: { type: ["number", "null"] }
+        riskScore: { type: ["number", "null"] }
+        finalScore: { type: ["number", "null"] }
+        actionTag: { type: ["string", "null"] }
+        isWatched: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+      required: [ppLineId, playerId, playerName, sport, statType, lineValue, lineType, directionalityType, isWatched, updatedAt]
+
+    # ─── PROP DETAIL ────────────────────────────────────────────────
+    PropDetail:
+      type: object
+      properties:
+        ppLine: { $ref: "#/components/schemas/PpLine" }
+        player: { $ref: "#/components/schemas/Player" }
+        game: {}
+        lineHistory: { type: array, items: { $ref: "#/components/schemas/PpLineHistory" } }
+        projection: {}
+        externalLines: { type: array, items: { $ref: "#/components/schemas/ExternalLine" } }
+        propScore: {}
+        injuries: { type: array, items: { $ref: "#/components/schemas/Injury" } }
+        lineupConfirmation: {}
+        isWatched: { type: boolean }
+        watchlistId: { type: ["integer", "null"] }
+      required: [ppLine, player, lineHistory, externalLines, injuries, isWatched]
+
+    # ─── ENTRY ──────────────────────────────────────────────────────
+    Entry:
+      type: object
+      properties:
+        id: { type: integer }
+        entryDate: { type: string, format: date }
+        entryType: { type: string }
+        pickCount: { type: integer }
+        stake: { type: number }
+        displayedPayoutMultiplier: { type: ["number", "null"] }
+        potentialPayout: { type: ["number", "null"] }
+        actualPayout: { type: ["number", "null"] }
+        result: { type: string }
+        notes: { type: ["string", "null"] }
+        emotionalState: { type: ["string", "null"] }
+        submittedAt: { type: ["string", "null"] }
+        closedAt: { type: ["string", "null"] }
+      required: [id, entryDate, entryType, pickCount, stake, result]
+
+    EntryInput:
+      type: object
+      properties:
+        entryDate: { type: string, format: date }
+        entryType: { type: string }
+        pickCount: { type: integer }
+        stake: { type: number }
+        displayedPayoutMultiplier: { type: ["number", "null"] }
+        potentialPayout: { type: ["number", "null"] }
+        notes: { type: ["string", "null"] }
+        emotionalState: { type: ["string", "null"] }
+        submittedAt: { type: ["string", "null"] }
+      required: [entryDate, entryType, pickCount, stake]
+
+    EntryUpdate:
+      type: object
+      properties:
+        result: { type: string }
+        actualPayout: { type: ["number", "null"] }
+        notes: { type: ["string", "null"] }
+        emotionalState: { type: ["string", "null"] }
+        closedAt: { type: ["string", "null"] }
+        submittedAt: { type: ["string", "null"] }
+
+    EntryWithPicks:
+      type: object
+      properties:
+        entry: { $ref: "#/components/schemas/Entry" }
+        picks: { type: array, items: { $ref: "#/components/schemas/EntryPick" } }
+      required: [entry, picks]
+
+    # ─── ENTRY PICK ─────────────────────────────────────────────────
+    EntryPick:
+      type: object
+      properties:
+        id: { type: integer }
+        entryId: { type: integer }
+        ppLineId: { type: ["integer", "null"] }
+        playerId: { type: integer }
+        playerName: { type: ["string", "null"] }
+        gameId: { type: ["integer", "null"] }
+        statType: { type: string }
+        direction: { type: string }
+        lineValue: { type: number }
+        lineType: { type: string }
+        yourProjection: { type: ["number", "null"] }
+        projectionGap: { type: ["number", "null"] }
+        result: { type: string }
+        closingLine: { type: ["number", "null"] }
+        clv: { type: ["number", "null"] }
+        createdAt: { type: string, format: date-time }
+      required: [id, entryId, playerId, statType, direction, lineValue, lineType, result, createdAt]
+
+    EntryPickInput:
+      type: object
+      properties:
+        ppLineId: { type: ["integer", "null"] }
+        playerId: { type: integer }
+        gameId: { type: ["integer", "null"] }
+        statType: { type: string }
+        direction: { type: string }
+        lineValue: { type: number }
+        lineType: { type: string }
+        yourProjection: { type: ["number", "null"] }
+        projectionGap: { type: ["number", "null"] }
+      required: [playerId, statType, direction, lineValue, lineType]
+
+    EntryPickUpdate:
+      type: object
+      properties:
+        result: { type: string }
+        closingLine: { type: ["number", "null"] }
+        clv: { type: ["number", "null"] }
+
+    # ─── WATCHLIST ──────────────────────────────────────────────────
+    WatchlistItem:
+      type: object
+      properties:
+        id: { type: integer }
+        playerId: { type: integer }
+        playerName: { type: ["string", "null"] }
+        gameId: { type: ["integer", "null"] }
+        statType: { type: string }
+        directionPreference: { type: ["string", "null"] }
+        note: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+      required: [id, playerId, statType, createdAt]
+
+    WatchlistItemInput:
+      type: object
+      properties:
+        playerId: { type: integer }
+        gameId: { type: ["integer", "null"] }
+        statType: { type: string }
+        directionPreference: { type: ["string", "null"] }
+        note: { type: ["string", "null"] }
+      required: [playerId, statType]
+
+    WatchlistItemUpdate:
+      type: object
+      properties:
+        directionPreference: { type: ["string", "null"] }
+        note: { type: ["string", "null"] }
+
+    # ─── ALERT ──────────────────────────────────────────────────────
+    Alert:
+      type: object
+      properties:
+        id: { type: integer }
+        type: { type: string }
+        severity: { type: string }
+        title: { type: string }
+        message: { type: string }
+        relatedEntityType: { type: ["string", "null"] }
+        relatedEntityId: { type: ["integer", "null"] }
+        isRead: { type: boolean }
+        createdAt: { type: string, format: date-time }
+      required: [id, type, severity, title, message, isRead, createdAt]
+
+    # ─── DATA PULL LOG ──────────────────────────────────────────────
+    DataPullLog:
+      type: object
+      properties:
+        id: { type: integer }
+        provider: { type: string }
+        jobName: { type: string }
+        status: { type: string }
+        recordsProcessed: { type: ["integer", "null"] }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: ["string", "null"] }
+        errorMessage: { type: ["string", "null"] }
+      required: [id, provider, jobName, status, startedAt]
+
+    # ─── PAYOUT CONFIG ──────────────────────────────────────────────
+    PayoutConfig:
+      type: object
+      properties:
+        id: { type: integer }
+        providerName: { type: string }
+        entryType: { type: string }
+        pickCount: { type: integer }
+        config: {}
+        effectiveAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+      required: [id, providerName, entryType, pickCount, config, effectiveAt, createdAt]
+
+    PayoutConfigInput:
+      type: object
+      properties:
+        providerName: { type: string }
+        entryType: { type: string }
+        pickCount: { type: integer }
+        config: {}
+        effectiveAt: { type: string, format: date-time }
+      required: [providerName, entryType, pickCount, config, effectiveAt]
+
+    PayoutConfigUpdate:
+      type: object
+      properties:
+        config: {}
+        effectiveAt: { type: string, format: date-time }
+
+    # ─── DASHBOARD ──────────────────────────────────────────────────
+    DashboardSummary:
+      type: object
+      properties:
+        todaysGames: { type: array, items: { $ref: "#/components/schemas/Game" } }
+        topInjuries: { type: array, items: { $ref: "#/components/schemas/Injury" } }
+        biggestLineMovements: { type: array, items: {} }
+        topPlayProps: { type: array, items: { $ref: "#/components/schemas/SlateRow" } }
+        watchlistCount: { type: integer }
+        activePropsCount: { type: integer }
+        pendingEntriesCount: { type: integer }
+        averageEdgeScore: { type: ["number", "null"] }
+        unreadAlertsCount: { type: integer }
+        dataFreshness: {}
+      required: [todaysGames, topInjuries, biggestLineMovements, topPlayProps, watchlistCount, activePropsCount, pendingEntriesCount, unreadAlertsCount]
+
+    ReviewStats:
+      type: object
+      properties:
+        hitRateBySport: {}
+        hitRateByStatType: {}
+        hitRateByActionTag: {}
+        avgClvByCategory: {}
+        avgScoresByResult: {}
+        entryResultsByTypeAndCount: {}
+        bankrollCurve: { type: array, items: {} }
+        topCategories: { type: array, items: {} }
+        bottomCategories: { type: array, items: {} }
+        totalEntries: { type: integer }
+        totalPnl: { type: number }
+        overallHitRate: { type: ["number", "null"] }
+      required: [totalEntries, totalPnl]
+
+    DataHealth:
+      type: object
+      properties:
+        providers: { type: array, items: {} }
+        lastPullLogs: { type: array, items: { $ref: "#/components/schemas/DataPullLog" } }
+        mode: { type: string }
+      required: [providers, lastPullLogs, mode]
+
+    # ─── SYNC ───────────────────────────────────────────────────────
+    SyncResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        provider: { type: string }
+        jobName: { type: string }
+        recordsProcessed: { type: integer }
+        message: { type: string }
+        logId: { type: integer }
+      required: [success, provider, jobName, recordsProcessed, message]
+
+    # ─── ANTHROPIC ──────────────────────────────────────────────────
+    AnthropicConversation:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        createdAt: { type: string, format: date-time }
+      required: [id, title, createdAt]
+
+    AnthropicMessage:
+      type: object
+      properties:
+        id: { type: integer }
+        conversationId: { type: integer }
+        role: { type: string }
+        content: { type: string }
+        createdAt: { type: string, format: date-time }
+      required: [id, conversationId, role, content, createdAt]
+
+    AnthropicConversationInput:
+      type: object
+      properties:
+        title: { type: string }
+      required: [title]
+
+    AnthropicMessageInput:
+      type: object
+      properties:
+        content: { type: string }
+      required: [content]
+
+    AnthropicConversationWithMessages:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        createdAt: { type: string, format: date-time }
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/AnthropicMessage" }
+      required: [id, title, createdAt, messages]
+
+    AnthropicError:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]

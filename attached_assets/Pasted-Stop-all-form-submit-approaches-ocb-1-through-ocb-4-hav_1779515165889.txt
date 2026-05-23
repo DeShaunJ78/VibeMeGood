@@ -1,0 +1,73 @@
+Stop all form-submit approaches. ocb-1 through ocb-4 have 
+proven the form submit chain is not reachable or is bailing 
+before generateStream is called. Do not attempt ocb-5 via 
+form.requestSubmit() or generateBtn.click().
+
+STEP 1 — DIAGNOSE FIRST, BUILD SECOND.
+
+Add these two temporary console.log lines directly into 
+app.html at the TOP of the form submit handler 
+(immediately after the opening line of the #prompt-form 
+submit listener at L9766, before any other logic):
+
+  console.log('[pmg-ocb-debug] submit handler fired');
+  console.log('[pmg-ocb-debug] __pmgAI:', !!window.__pmgAI,
+    window.__pmgAI && {
+      hasStream: typeof window.__pmgAI.generateStream,
+      remaining: window.__pmgAI.remaining?.('generate'),
+    }
+  );
+
+Also add this one line to the bail branch (immediately 
+before the finalize(localPrompt) call at L9866):
+
+  console.warn('[pmg-ocb-debug] BAILING', {
+    ai: !!window.__pmgAI,
+    hasStream: typeof window.__pmgAI?.generateStream,
+    remaining: window.__pmgAI?.remaining?.('generate'),
+  });
+
+Deploy this. Click Build once. Report back the exact 
+console output. Do not proceed to Step 2 until you 
+have that output.
+
+STEP 2 — FIX BASED ON WHAT THE LOG SHOWS.
+
+IF the log shows "submit handler fired" never appears:
+  Another listener is intercepting the submit before L9766.
+  Run: grep -n "submit" artifacts/promptmegood/public/scripts/pmg-money-mode-pro.js
+  and: grep -n "submit" artifacts/promptmegood/public/scripts/pmg-ux.js | head -20
+  Find the interceptor. Report it. Do not touch it yet.
+
+IF the log shows "submit handler fired" + __pmgAI is false:
+  The __pmgAI IIFE at L12496 is failing silently.
+  Add a try/catch around the entire IIFE and log the error.
+  Report what throws.
+
+IF the log shows "submit handler fired" + __pmgAI is true 
+but remaining is 0 or negative:
+  The usage wipe in ocb-4 is not running before the submit.
+  Fix: in pmg-one-click-build.js, wipe all pmg_ai_usage:* 
+  localStorage keys SYNCHRONOUSLY at the TOP of the script 
+  (not inside a callback or timeout), then confirm 
+  remaining() returns > 0 before triggering anything.
+
+IF the log shows BAILING fires with remaining > 0 but 
+hasStream is "undefined":
+  pmg-money-mode-pro.js L975 wrapper is replacing 
+  generateStream with a non-function. 
+  Read that wrapper. Report exactly what it does to 
+  generateStream. Do not modify it yet.
+
+STEP 3 — ONCE ROOT CAUSE IS CONFIRMED.
+
+If the fix requires touching pmg-ux.js or pmg-chassis-v3.js: 
+STOP and report. Do not touch those files.
+
+If the fix is in pmg-money-mode-pro.js or app.html: 
+proceed with the minimal surgical fix only. 
+Remove the debug console.logs after fix is confirmed.
+
+The Build button's existing 2-step flow must continue 
+working for users who use it normally. Fix only the 
+one-click path. Do not refactor anything else.
