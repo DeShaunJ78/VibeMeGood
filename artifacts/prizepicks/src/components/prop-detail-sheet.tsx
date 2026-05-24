@@ -518,23 +518,70 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
                 </div>
               )}
 
-              {/* External Lines */}
+              {/* External Lines + Market Math */}
               {data.externalLines.length > 0 && (
                 <div className="px-5 py-4 border-b border-slate-800/50">
-                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-3">Book Comparison</div>
-                  <div className="space-y-2">
-                    {data.externalLines.map((el: any, i: number) => (
-                      <div key={i} className="flex items-center justify-between text-sm bg-slate-900 border border-slate-800 px-3 py-2 rounded">
-                        <span className="font-mono text-xs font-bold text-slate-300">{el.bookName}</span>
-                        <div className="flex items-center gap-4 font-mono text-xs">
-                          <span className="text-emerald-400">O {el.overLine}</span>
-                          <span className="text-rose-400">U {el.underLine}</span>
-                          {el.noVigOverProb && (
-                            <span className="text-muted-foreground">{(Number(el.noVigOverProb) * 100).toFixed(1)}% / {(Number(el.noVigUnderProb) * 100).toFixed(1)}%</span>
-                          )}
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-3">Market Math</div>
+
+                  {/* Consensus fair probability */}
+                  {(() => {
+                    const linesWithProb = data.externalLines.filter((el: any) => el.noVigOverProb != null);
+                    if (!linesWithProb.length) return null;
+                    const avg = linesWithProb.reduce((s: number, el: any) => s + Number(el.noVigOverProb), 0) / linesWithProb.length;
+                    const fairPct = avg * 100;
+                    const pOver = data.ourProjection?.pOver ?? null;
+                    return (
+                      <div className="space-y-1.5 mb-3">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <span className="text-muted-foreground">Consensus fair P(over)</span>
+                          <span className="text-foreground font-bold">{fairPct.toFixed(1)}%</span>
                         </div>
+                        {pOver != null && (
+                          <div className="flex items-center justify-between text-xs font-mono">
+                            <span className="text-muted-foreground">Our model P(over)</span>
+                            <span className={`font-bold ${pOver > fairPct ? "text-emerald-400" : "text-rose-400"}`}>
+                              {pOver.toFixed(1)}%
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    ))}
+                    );
+                  })()}
+
+                  {/* Per-book breakdown */}
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] font-mono text-muted-foreground">Book Hold</div>
+                    {data.externalLines.map((el: any, i: number) => {
+                      const holdPct = el.holdPct != null ? Number(el.holdPct) * 100 : null;
+                      const overPrice  = el.overOdds  ?? null;
+                      const underPrice = el.underOdds ?? null;
+                      return (
+                        <div key={i} className="flex items-center justify-between text-[11px] font-mono">
+                          <span className="text-slate-400 capitalize">{el.bookName}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-emerald-400">O {el.overLine}</span>
+                            <span className="text-rose-400">U {el.underLine}</span>
+                            {overPrice != null && underPrice != null && (
+                              <span className="text-slate-500">
+                                {overPrice > 0 ? `+${overPrice}` : overPrice} / {underPrice > 0 ? `+${underPrice}` : underPrice}
+                              </span>
+                            )}
+                            {holdPct != null ? (
+                              <span className={holdPct < 3 ? "text-emerald-400" : holdPct < 7 ? "text-amber-400" : "text-rose-400"}>
+                                {holdPct.toFixed(1)}%
+                              </span>
+                            ) : (
+                              <span className="text-slate-600">—</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground pt-1">
+                      <span className="text-emerald-400">● &lt;3% fair</span>
+                      <span className="text-amber-400">● 3-7% moderate</span>
+                      <span className="text-rose-400">● &gt;7% juiced</span>
+                    </div>
                   </div>
                 </div>
               )}

@@ -5,6 +5,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { logger } from "../logger";
+import { twoWayHold, noVigProbs } from "../analytics/odds-math";
 import { computeAllProjections } from "../projection/compute";
 import { computeStreaks } from "./streaks";
 
@@ -80,19 +81,45 @@ export async function syncExternalOdds(): Promise<number> {
 
         for (const bookmaker of (oddsData.bookmakers || [])) {
           for (const market of (bookmaker.markets || [])) {
-            for (const outcome of (market.outcomes || [])) {
-              if (outcome.type !== "Over") continue;
-              const playerName = outcome.description || outcome.name;
-              if (!playerName || !outcome.point) continue;
+            // Group outcomes by player description so we can pair over+under
+            const byPlayer = new Map<string, any[]>();
+            for (const o of (market.outcomes || [])) {
+              const desc = (o.description || o.name || "").trim();
+              if (!desc) continue;
+              if (!byPlayer.has(desc)) byPlayer.set(desc, []);
+              byPlayer.get(desc)!.push(o);
+            }
+
+            for (const [playerName, playerOutcomes] of byPlayer) {
+              const overOutcome  = playerOutcomes.find((o: any) => o.name?.toLowerCase() === "over");
+              const underOutcome = playerOutcomes.find((o: any) => o.name?.toLowerCase() === "under");
+              if (!overOutcome?.point) continue;
 
               const match = lines.find(l => {
-                const ppLast = l.player.fullName.split(" ").pop()?.toLowerCase() || "";
+                const ppLast  = l.player.fullName.split(" ").pop()?.toLowerCase() || "";
                 const mktLast = playerName.split(" ").pop()?.toLowerCase() || "";
                 return ppLast === mktLast || l.player.fullName.toLowerCase() === playerName.toLowerCase();
               });
               if (!match) continue;
 
-              const lineVal = outcome.point.toString();
+              const lineVal    = overOutcome.point.toString();
+              const overPrice  = overOutcome.price  != null ? Number(overOutcome.price)  : null;
+              const underPrice = underOutcome?.price != null ? Number(underOutcome.price) : null;
+
+              // Compute hold and no-vig when both prices available
+              let holdPctStr:       string | null = null;
+              let noVigOverProbStr: string | null = null;
+              let noVigUnderProbStr: string | null = null;
+              if (overPrice && underPrice) {
+                const hold = twoWayHold(overPrice, underPrice);
+                if (hold) holdPctStr = hold.toFixed(6);
+
+                const nvProbs = noVigProbs(overPrice, underPrice);
+                if (nvProbs) {
+                  noVigOverProbStr  = nvProbs.overFair.toFixed(6);
+                  noVigUnderProbStr = nvProbs.underFair.toFixed(6);
+                }
+              }
 
               const [existing] = await db.select().from(externalLinesTable)
                 .where(and(
@@ -118,17 +145,32 @@ export async function syncExternalOdds(): Promise<number> {
               }
 
               await db.insert(externalLinesTable).values({
-                playerId: match.player.id,
-                ppLineId: match.line.id,
-                statType: match.line.statType,
-                bookName: bookmaker.key,
-                lineValue: lineVal,
-                overLine: lineVal,
-                underLine: lineVal,
+                playerId:       match.player.id,
+                ppLineId:       match.line.id,
+                statType:       match.line.statType,
+                bookName:       bookmaker.key,
+                lineValue:      lineVal,
+                overLine:       lineVal,
+                underLine:      underOutcome?.point?.toString() ?? lineVal,
+                overOdds:       overPrice,
+                underOdds:      underPrice,
+                holdPct:        holdPctStr,
+                noVigOverProb:  noVigOverProbStr,
+                noVigUnderProb: noVigUnderProbStr,
                 pulledAt: new Date(),
               }).onConflictDoUpdate({
                 target: [externalLinesTable.ppLineId, externalLinesTable.bookName],
-                set: { lineValue: lineVal, overLine: lineVal, underLine: lineVal, pulledAt: new Date() },
+                set: {
+                  lineValue:      lineVal,
+                  overLine:       lineVal,
+                  underLine:      underOutcome?.point?.toString() ?? lineVal,
+                  overOdds:       overPrice,
+                  underOdds:      underPrice,
+                  holdPct:        holdPctStr,
+                  noVigOverProb:  noVigOverProbStr,
+                  noVigUnderProb: noVigUnderProbStr,
+                  pulledAt: new Date(),
+                },
               });
               processed++;
             }

@@ -76,7 +76,12 @@ async function buildAnalystContext(): Promise<string> {
     const pOverPct = Math.round(parseFloat(proj.pOver.toString()) * 10) / 10;
     const tag      = score?.actionTag ?? "UNRATED";
     const gated    = proj.noPlayReason ? ` [GATED: ${proj.noPlayReason}]` : "";
-    topPickLines.push(`  ${topPickLines.length + 1}. ${player.fullName} (${teamAbbr}) — ${proj.statType} — Line: ${line.lineValue} — P(Over): ${pOverPct}% — Tag: ${tag}${gated}`);
+    const scoreReasoning = (score?.reasoning as Record<string, unknown> | null) ?? null;
+    const mktEdge = scoreReasoning?.marketEdge != null ? ` — Mkt Edge: ${scoreReasoning.marketEdge}%` : "";
+    const holdNote = scoreReasoning?.holdPct != null
+      ? ` — Hold: ${(Number(scoreReasoning.holdPct) * 100).toFixed(1)}%`
+      : "";
+    topPickLines.push(`  ${topPickLines.length + 1}. ${player.fullName} (${teamAbbr}) — ${proj.statType} — Line: ${line.lineValue} — P(Over): ${pOverPct}%${mktEdge}${holdNote} — Tag: ${tag}${gated}`);
   }
 
   const watchLines: string[] = watchRows.map(w => {

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import Decimal from "decimal.js";
 import { db } from "@workspace/db";
 import {
   ppLinesTable, externalLinesTable, propScoresTable, playersTable,
@@ -7,6 +8,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, or, isNull, desc, gte } from "drizzle-orm";
 import { logger } from "../lib/logger";
+import { consensusFairProb, edgePct, holdWarning } from "../lib/analytics/odds-math";
 
 const router = Router();
 
@@ -78,7 +80,50 @@ router.get("/market-intel", async (req, res) => {
         const vals = Object.values(bookLines);
         const marketAvg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
         const ppLine = parseFloat(row.line.lineValue.toString());
-        const trueEdge = marketAvg ? (-(ppLine - marketAvg) / marketAvg) * 100 : null;
+
+        // No-vig consensus fair probability across books
+        const noVigDecimalProbs: Decimal[] = extLines
+          .filter(l => l.noVigOverProb !== null)
+          .map(l => new Decimal(l.noVigOverProb!.toString()));
+        const fairProbDecimal = consensusFairProb(noVigDecimalProbs);
+
+        // Our model probability
+        const projPOver = row.proj?.pOver ? parseFloat(row.proj.pOver.toString()) : null;
+        const modelProbDecimal = projPOver != null ? new Decimal(projPOver).div(100) : null;
+
+        // True edge: model P(over) vs no-vig fair probability (falls back to line comparison)
+        let trueEdge: number | null = null;
+        if (fairProbDecimal && modelProbDecimal) {
+          trueEdge = edgePct(modelProbDecimal, fairProbDecimal).times(100).toDecimalPlaces(2).toNumber();
+        } else if (marketAvg) {
+          trueEdge = Math.round((-(ppLine - marketAvg) / marketAvg) * 1000) / 10;
+        }
+
+        // Hold metrics
+        const holdValues = extLines
+          .filter(l => l.holdPct !== null)
+          .map(l => new Decimal(l.holdPct!.toString()));
+        const avgHoldDecimal = holdValues.length
+          ? holdValues.reduce((a, b) => a.plus(b), new Decimal(0)).div(holdValues.length)
+          : null;
+
+        const marketHoldPct = avgHoldDecimal
+          ? avgHoldDecimal.times(100).toDecimalPlaces(2).toNumber()
+          : null;
+        const holdRating = avgHoldDecimal ? holdWarning(avgHoldDecimal) : null;
+
+        const bookHolds = extLines
+          .filter(l => l.holdPct !== null)
+          .map(l => ({
+            book:       l.bookName,
+            holdPct:    new Decimal(l.holdPct!.toString()).times(100).toDecimalPlaces(2).toNumber(),
+            overPrice:  l.overOdds  ?? null,
+            underPrice: l.underOdds ?? null,
+          }));
+
+        const fairProb = fairProbDecimal
+          ? fairProbDecimal.times(100).toDecimalPlaces(2).toNumber()
+          : null;
 
         // marketDataStatus — never show edge scores based on guesswork
         let marketDataStatus: "available" | "partial" | "unavailable" | "not_synced";
@@ -145,10 +190,14 @@ router.get("/market-intel", async (req, res) => {
 
           // Market
           marketAvg: marketAvg ? Math.round(marketAvg * 100) / 100 : null,
-          trueEdge: trueEdge ? Math.round(trueEdge * 10) / 10 : null,
+          trueEdge,
           bookLines,
           marketDataStatus,
           bookCount: vals.length,
+          fairProb,
+          marketHoldPct,
+          holdRating,
+          bookHolds,
 
           // Scores — only show when data available
           edgeScore: marketDataStatus !== "not_synced" && row.score

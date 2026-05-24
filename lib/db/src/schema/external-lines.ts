@@ -17,6 +17,7 @@ export const externalLinesTable = pgTable("external_lines", {
   underOdds: integer("under_odds"),
   noVigOverProb: numeric("no_vig_over_prob"),
   noVigUnderProb: numeric("no_vig_under_prob"),
+  holdPct: numeric("hold_pct"),
   pulledAt: timestamp("pulled_at").notNull(),
   metadata: jsonb("metadata"),
 }, (t) => ({

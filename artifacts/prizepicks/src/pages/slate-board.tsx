@@ -52,6 +52,10 @@ type MarketIntelRow = {
   bookLines: Record<string, number>;
   bookCount: number;
   marketDataStatus: "available" | "partial" | "unavailable" | "not_synced";
+  fairProb: number | null;
+  marketHoldPct: number | null;
+  holdRating: "low" | "moderate" | "high" | null;
+  bookHolds: { book: string; holdPct: number; overPrice: number | null; underPrice: number | null }[];
   edgeScore: number | null;
   actionTag: string | null;
   ourProjection: OurProjection | null;
@@ -309,6 +313,10 @@ export default function SlateBoard() {
       recentMoves: mi?.recentMoves ?? [],
       scoring: mi?.scoring ?? null,
       variance: mi?.variance ?? null,
+      fairProb: mi?.fairProb ?? null,
+      marketHoldPct: mi?.marketHoldPct ?? null,
+      holdRating: mi?.holdRating ?? null,
+      bookHolds: mi?.bookHolds ?? [],
     };
   });
 
@@ -341,6 +349,10 @@ export default function SlateBoard() {
       recentMoves: mi.recentMoves,
       scoring: mi.scoring,
       variance: mi.variance ?? null,
+      fairProb: mi.fairProb ?? null,
+      marketHoldPct: mi.marketHoldPct ?? null,
+      holdRating: mi.holdRating ?? null,
+      bookHolds: mi.bookHolds ?? [],
     }));
 
   const allRows = [...mergedRows, ...miOnlyRows];
@@ -568,7 +580,15 @@ export default function SlateBoard() {
                   <TableHead className="w-16 font-mono text-xs text-right">PP Line</TableHead>
                   <TableHead className="w-20 font-mono text-xs text-center">Type</TableHead>
                   <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-right">Mkt Avg</TableHead>
-                  <TableHead className="hidden lg:table-cell w-22 font-mono text-xs text-right">True Edge</TableHead>
+                  <TableHead className="hidden lg:table-cell w-22 font-mono text-xs text-right">
+                    <Tooltip>
+                      <TooltipTrigger>True Edge</TooltipTrigger>
+                      <TooltipContent className="text-xs max-w-xs">
+                        Our model P(over) vs consensus no-vig market probability. Vig stripped from external book lines.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TableHead>
+                  <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-right">Hold%</TableHead>
                   <TableHead className="hidden lg:table-cell w-28 font-mono text-xs text-right">Our Proj</TableHead>
                   <TableHead className="w-20 font-mono text-xs text-center">P(Over)</TableHead>
                   <TableHead className="hidden md:table-cell w-14 font-mono text-xs text-center">Streak</TableHead>
@@ -580,14 +600,14 @@ export default function SlateBoard() {
                 {isLoading ? (
                   Array.from({ length: 10 }).map((_, i) => (
                     <TableRow key={i} className="border-slate-800">
-                      {Array.from({ length: varianceEnabled ? 15 : 14 }).map((_, j) => (
+                      {Array.from({ length: varianceEnabled ? 16 : 15 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full bg-slate-800" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : playerRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={varianceEnabled ? 15 : 14} className="h-48 text-center text-muted-foreground font-mono">
+                    <TableCell colSpan={varianceEnabled ? 16 : 15} className="h-48 text-center text-muted-foreground font-mono">
                       No props — click Force Sync to load live slate
                     </TableCell>
                   </TableRow>
@@ -649,6 +669,22 @@ export default function SlateBoard() {
                             </span>
                           ) : (
                             <span className="text-slate-600 text-[10px]">no data</span>
+                          )}
+                        </TableCell>
+
+                        {/* Hold% */}
+                        <TableCell className="hidden lg:table-cell font-mono text-xs text-right">
+                          {row.marketHoldPct != null ? (
+                            <span className={
+                              row.holdRating === "low"      ? "text-emerald-400" :
+                              row.holdRating === "moderate" ? "text-amber-400"   :
+                              row.holdRating === "high"     ? "text-rose-400"    :
+                              "text-muted-foreground"
+                            }>
+                              {row.marketHoldPct.toFixed(1)}%
+                            </span>
+                          ) : (
+                            <span className="text-slate-700">—</span>
                           )}
                         </TableCell>
 
