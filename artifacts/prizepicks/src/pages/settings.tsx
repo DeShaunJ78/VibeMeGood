@@ -258,10 +258,23 @@ export default function Settings() {
         {/* Manual sync controls */}
         <Card className="bg-slate-900 border-slate-800">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <RefreshCw className="w-4 h-4 text-primary" /> Data Sync
-            </CardTitle>
-            <CardDescription>Manually trigger individual data provider syncs</CardDescription>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <RefreshCw className="w-4 h-4 text-primary" /> Data Sync
+                </CardTitle>
+                <CardDescription className="mt-1">Manually trigger individual data provider syncs</CardDescription>
+              </div>
+              <Button
+                size="sm"
+                onClick={syncAll}
+                disabled={syncingAll}
+                className="shrink-0 font-mono text-xs h-8 bg-primary hover:bg-primary/90"
+              >
+                <RefreshCw className={`w-3 h-3 mr-1.5 ${syncingAll ? "animate-spin" : ""}`} />
+                {syncingAll ? "Syncing…" : "Sync All"}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-2">
             {SYNC_JOBS.map(job => (
