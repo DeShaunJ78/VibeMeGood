@@ -1,24 +1,34 @@
-import { pgTable, serial, integer, boolean, numeric, date, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  pgTable, serial, integer, numeric, boolean,
+  varchar, date, timestamp, uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { playersTable } from "./players";
-import { gamesTable } from "./games";
 
 export const fatigueDataTable = pgTable("fatigue_data", {
-  id: serial("id").primaryKey(),
-  playerId: integer("player_id").references(() => playersTable.id),
-  gameId: integer("game_id").references(() => gamesTable.id),
-  gameDate: date("game_date").notNull(),
-  daysRest: integer("days_rest"),
-  isBackToBack: boolean("is_back_to_back").default(false),
-  isThreeInFour: boolean("is_three_in_four").default(false),
-  prevGameMinutes: numeric("prev_game_minutes"),
-  prevGameWasOT: boolean("prev_game_was_ot").default(false),
-  travelMiles: integer("travel_miles"),
-  timezoneShiftHours: integer("timezone_shift_hours").default(0),
-  isEarlyGame: boolean("is_early_game").default(false),
-  fatigueScore: integer("fatigue_score"),
-  computedAt: timestamp("computed_at").defaultNow(),
+  id:                  serial("id").primaryKey(),
+  playerId:            integer("player_id").references(() => playersTable.id).notNull(),
+  computedForDate:     date("computed_for_date").notNull(),
+
+  lastGameDate:        date("last_game_date"),
+  daysRest:            integer("days_rest"),
+  isBackToBack:        boolean("is_back_to_back").default(false),
+  isThreeInFour:       boolean("is_three_in_four").default(false),
+  gamesLast7Days:      integer("games_last_7_days"),
+
+  prevGameMinutes:     numeric("prev_game_minutes"),
+  avgMinutesL5:        numeric("avg_minutes_l5"),
+  prevGameHomeAway:    varchar("prev_game_home_away", { length: 4 }),
+
+  travelMiles:         integer("travel_miles"),
+  timezoneShiftHours:  integer("timezone_shift_hours").default(0),
+
+  fatigueScore:        integer("fatigue_score").notNull(),
+  fatigueLabel:        varchar("fatigue_label", { length: 50 }),
+  warnings:            varchar("warnings", { length: 500 }),
+
+  computedAt:          timestamp("computed_at").defaultNow(),
 }, (t) => ({
-  uniq: uniqueIndex("fatigue_data_unique").on(t.playerId, t.gameId),
+  uniq: uniqueIndex("fatigue_data_unique").on(t.playerId, t.computedForDate),
 }));
 
 export type FatigueData = typeof fatigueDataTable.$inferSelect;

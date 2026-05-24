@@ -20,12 +20,14 @@ export async function computeVarianceForLine(ppLineId: number): Promise<void> {
     ? (await db.select().from(gamesTable).where(eq(gamesTable.id, line.gameId)))[0] ?? null
     : null;
 
-  // 1. Fatigue
+  // 1. Fatigue — look up by player + today's date
+  const today = new Date().toISOString().split("T")[0];
   const [fatigueRow] = await db.select().from(fatigueDataTable)
     .where(
-      game
-        ? and(eq(fatigueDataTable.playerId, player.id), eq(fatigueDataTable.gameId, game.id))
-        : eq(fatigueDataTable.playerId, player.id)
+      and(
+        eq(fatigueDataTable.playerId, player.id),
+        eq(fatigueDataTable.computedForDate, today),
+      )
     )
     .orderBy(desc(fatigueDataTable.computedAt))
     .limit(1);
@@ -38,8 +40,8 @@ export async function computeVarianceForLine(ppLineId: number): Promise<void> {
         travelMiles: fatigueRow.travelMiles ?? 0,
         timezoneShiftHours: fatigueRow.timezoneShiftHours ?? 0,
         prevGameMinutes: fatigueRow.prevGameMinutes ? parseFloat(fatigueRow.prevGameMinutes.toString()) : 0,
-        prevGameWasOT: fatigueRow.prevGameWasOT ?? false,
-        isEarlyGame: fatigueRow.isEarlyGame ?? false,
+        prevGameWasOT: false,
+        isEarlyGame: false,
       })
     : { score: 50, label: "No schedule data", warnings: [] as string[] };
 

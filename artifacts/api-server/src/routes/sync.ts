@@ -9,6 +9,7 @@ import { syncExternalOdds, recalcPropScores } from "../lib/sync/external-odds";
 import { computeAllProjections } from "../lib/projection/compute";
 import { computeStreaks } from "../lib/sync/streaks";
 import { computeAllVarianceScores } from "../lib/variance";
+import { syncFatigueData } from "../lib/sync/fatigue";
 
 const router = Router();
 
@@ -187,6 +188,10 @@ router.post("/sync/scores", async (req, res) => {
   await runSync("prizepicks", "sync-scores", syncScoresImpl, res);
 });
 
+router.post("/sync/fatigue", async (req, res) => {
+  await runSync("internal", "fatigue", syncFatigueData, res);
+});
+
 // Force sync all — triggers PP lines + external odds sequentially
 router.post("/sync/all", async (req, res) => {
   res.json({ status: "started", message: "All syncs initiated" });
@@ -198,6 +203,7 @@ router.post("/sync/all", async (req, res) => {
     { name: "external-odds", provider: "the-odds-api", fn: syncExternalOdds },
     { name: "projections", provider: "nba-stats",     fn: syncProjectionsImpl },
     { name: "variance",    provider: "internal",      fn: computeAllVarianceScores },
+    { name: "fatigue",     provider: "internal",      fn: syncFatigueData },
   ];
 
   for (const job of jobs) {

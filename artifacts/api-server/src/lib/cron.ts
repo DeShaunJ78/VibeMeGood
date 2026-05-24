@@ -4,6 +4,7 @@ import { dataPullLogsTable, alertsTable, ppLinesTable, propScoresTable } from "@
 import { eq, and } from "drizzle-orm";
 import { logger } from "./logger";
 import { computeAllVarianceScores } from "./variance";
+import { syncFatigueData } from "./sync/fatigue";
 
 async function logPull(provider: string, jobName: string, fn: () => Promise<number>) {
   const [log] = await db.insert(dataPullLogsTable).values({
@@ -74,6 +75,16 @@ export function startCronJobs() {
   // Variance scores — runs after projections at 6:30 AM
   cron.schedule("30 6 * * *", async () => {
     await logPull("internal", "variance-scores", computeAllVarianceScores);
+  });
+
+  // Fatigue data — runs after projections populate game logs at 6:30 AM
+  cron.schedule("30 6 * * *", async () => {
+    await logPull("internal", "fatigue", syncFatigueData);
+  });
+
+  // Fatigue re-run at noon to catch late lineup news
+  cron.schedule("0 12 * * *", async () => {
+    await logPull("internal", "fatigue", syncFatigueData);
   });
 
   // Alert: stale data warning — check every hour if pp-lines haven't been updated in 2h
