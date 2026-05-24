@@ -34,7 +34,7 @@ router.get("/dashboard/data-health", async (req, res) => {
       };
     });
 
-    const mode = process.env.DATA_MODE ?? "mock";
+    const mode = process.env.DATA_MODE ?? "live";
 
     res.json({
       providers,
