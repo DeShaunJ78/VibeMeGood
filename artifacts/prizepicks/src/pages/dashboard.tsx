@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetDashboardSummary,
   useListAlerts, getListAlertsQueryKey,
-  useMarkAlertRead, useMarkAllAlertsRead,
+  useMarkAlertRead, useMarkAllAlertsRead, useClearReadAlerts,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
 import {
   AlertTriangle, Activity, Eye, Target, TrendingUp, Cpu, ShieldOff, BarChart2,
-  BellOff, CheckCheck,
+  BellOff, CheckCheck, Trash2,
 } from "lucide-react";
 import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge } from "@/components/ui/badges";
 
@@ -62,8 +62,9 @@ function AlertsPanel({
   const { data: alerts, isLoading } = useListAlerts(undefined, {
     query: { enabled: open, queryKey: getListAlertsQueryKey() },
   });
-  const markOne  = useMarkAlertRead();
-  const markAll  = useMarkAllAlertsRead();
+  const markOne   = useMarkAlertRead();
+  const markAll   = useMarkAllAlertsRead();
+  const clearRead = useClearReadAlerts();
 
   const summaryKey = ["/api/dashboard/summary"];
 
@@ -79,6 +80,14 @@ function AlertsPanel({
     await qc.invalidateQueries({ queryKey: summaryKey });
   }
 
+  async function handleClearRead() {
+    await clearRead.mutateAsync();
+    await qc.invalidateQueries({ queryKey: getListAlertsQueryKey() });
+    await qc.invalidateQueries({ queryKey: summaryKey });
+  }
+
+  const hasRead = alerts?.some((a: any) => a.isRead);
+
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="bg-slate-900 border-slate-800 max-w-lg max-h-[80vh] flex flex-col p-0 gap-0">
@@ -91,16 +100,28 @@ function AlertsPanel({
               </span>
             )}
           </div>
-          {unreadCount > 0 && (
-            <Button
-              size="sm" variant="outline" onClick={handleMarkAll}
-              disabled={markAll.isPending}
-              className="font-mono text-xs h-7 border-slate-700 text-slate-300 gap-1.5"
-            >
-              <CheckCheck className="w-3.5 h-3.5" />
-              Mark all read
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <Button
+                size="sm" variant="outline" onClick={handleMarkAll}
+                disabled={markAll.isPending}
+                className="font-mono text-xs h-7 border-slate-700 text-slate-300 gap-1.5"
+              >
+                <CheckCheck className="w-3.5 h-3.5" />
+                Mark all read
+              </Button>
+            )}
+            {hasRead && (
+              <Button
+                size="sm" variant="outline" onClick={handleClearRead}
+                disabled={clearRead.isPending}
+                className="font-mono text-xs h-7 border-rose-900/60 text-rose-400 hover:bg-rose-900/20 gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Clear dismissed
+              </Button>
+            )}
+          </div>
         </DialogHeader>
         <div className="overflow-auto flex-1 p-4 space-y-2">
           {isLoading ? (

@@ -769,6 +769,22 @@ paths:
                   updated: { type: integer }
                 required: [updated]
 
+  /alerts/read:
+    delete:
+      operationId: clearReadAlerts
+      tags: [alerts]
+      summary: Delete all read/dismissed alerts
+      responses:
+        "200":
+          description: Deleted count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: integer }
+                required: [deleted]
+
   # ─── DATA PULL LOGS ───────────────────────────────────────────────
   /data-pull-logs:
     get:

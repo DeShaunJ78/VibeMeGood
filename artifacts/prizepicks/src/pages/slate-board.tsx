@@ -495,11 +495,14 @@ export default function SlateBoard() {
         )}
       </div>
 
-      {/* Not synced banner */}
-      {notSynced && !isLoading && (
-        <div className="flex items-center gap-2 text-amber-400 bg-amber-950/20 border border-amber-700/30 rounded px-3 py-2 text-sm font-mono">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          No live data yet — click <span className="font-bold mx-1">Force Sync</span> to pull props from PrizePicks.
+      {/* Not synced banner — only when there are also no seeded props to show */}
+      {notSynced && !isLoading && playerRows.length === 0 && (
+        <div className="flex items-center justify-between gap-3 text-amber-400 bg-amber-950/20 border border-amber-700/30 rounded px-3 py-2 text-sm font-mono">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            No live data — use <span className="font-bold mx-1">Force Sync</span> to pull props from PrizePicks.
+          </div>
+          <ForceSyncButton />
         </div>
       )}
 

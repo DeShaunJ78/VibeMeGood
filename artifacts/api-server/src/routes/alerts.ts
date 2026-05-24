@@ -47,4 +47,14 @@ router.patch("/alerts/read-all", async (req, res) => {
   }
 });
 
+router.delete("/alerts/read", async (req, res) => {
+  try {
+    const result = await db.delete(alertsTable).where(eq(alertsTable.isRead, true)).returning();
+    res.json({ deleted: result.length });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;

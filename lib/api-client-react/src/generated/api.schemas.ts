@@ -881,6 +881,10 @@ export type MarkAllAlertsRead200 = {
   updated: number;
 };
 
+export type ClearReadAlerts200 = {
+  deleted: number;
+};
+
 export type ListDataPullLogsParams = {
 provider?: string;
 status?: string;

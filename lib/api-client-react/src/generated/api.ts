@@ -27,6 +27,7 @@ import type {
   AnthropicError,
   AnthropicMessage,
   AnthropicMessageInput,
+  ClearReadAlerts200,
   DashboardSummary,
   DataHealth,
   DataPullLog,
@@ -3461,6 +3462,76 @@ export const useMarkAllAlertsRead = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getMarkAllAlertsReadMutationOptions(options));
+    }
+
+export const getClearReadAlertsUrl = () => {
+
+
+
+
+  return `/api/alerts/read`
+}
+
+/**
+ * @summary Delete all read/dismissed alerts
+ */
+export const clearReadAlerts = async ( options?: RequestInit): Promise<ClearReadAlerts200> => {
+
+  return customFetch<ClearReadAlerts200>(getClearReadAlertsUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getClearReadAlertsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearReadAlerts>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof clearReadAlerts>>, TError,void, TContext> => {
+
+const mutationKey = ['clearReadAlerts'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clearReadAlerts>>, void> = () => {
+
+
+          return  clearReadAlerts(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClearReadAlertsMutationResult = NonNullable<Awaited<ReturnType<typeof clearReadAlerts>>>
+
+    export type ClearReadAlertsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete all read/dismissed alerts
+ */
+export const useClearReadAlerts = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearReadAlerts>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof clearReadAlerts>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getClearReadAlertsMutationOptions(options));
     }
 
 export const getListDataPullLogsUrl = (params?: ListDataPullLogsParams,) => {

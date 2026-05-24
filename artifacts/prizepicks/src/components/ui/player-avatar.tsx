@@ -41,6 +41,7 @@ export function PlayerAvatar({ name, imageUrl, size = "sm", className = "" }: Pl
         src={imageUrl}
         alt={name}
         loading="lazy"
+        referrerPolicy="no-referrer"
         onError={() => setImgError(true)}
         className={`rounded-full object-cover shrink-0 ${sizeClass} ${className}`}
       />

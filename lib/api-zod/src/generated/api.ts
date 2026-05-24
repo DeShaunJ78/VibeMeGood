@@ -1028,6 +1028,14 @@ export const MarkAllAlertsReadResponse = zod.object({
 
 
 /**
+ * @summary Delete all read/dismissed alerts
+ */
+export const ClearReadAlertsResponse = zod.object({
+  "deleted": zod.number()
+})
+
+
+/**
  * @summary List data pull logs
  */
 export const ListDataPullLogsQueryParams = zod.object({
