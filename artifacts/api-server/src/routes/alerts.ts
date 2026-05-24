@@ -57,4 +57,28 @@ router.delete("/alerts/read", async (req, res) => {
   }
 });
 
+router.delete("/alerts/clear-all", async (req, res) => {
+  try {
+    const result = await db.delete(alertsTable).returning();
+    res.json({ deleted: result.length });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/alerts/:id", async (req, res) => {
+  try {
+    const [deleted] = await db
+      .delete(alertsTable)
+      .where(eq(alertsTable.id, Number(req.params.id)))
+      .returning();
+    if (!deleted) return void res.status(404).json({ error: "Alert not found" });
+    res.json({ deleted: 1 });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;

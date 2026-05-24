@@ -785,6 +785,40 @@ paths:
                   deleted: { type: integer }
                 required: [deleted]
 
+  /alerts/clear-all:
+    delete:
+      operationId: clearAllAlerts
+      tags: [alerts]
+      summary: Delete every alert regardless of read status
+      responses:
+        "200":
+          description: Deleted count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: integer }
+                required: [deleted]
+
+  /alerts/{id}:
+    delete:
+      operationId: deleteAlert
+      tags: [alerts]
+      summary: Delete a single alert by ID
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: integer }
+                required: [deleted]
+
   # ─── DATA PULL LOGS ───────────────────────────────────────────────
   /data-pull-logs:
     get:

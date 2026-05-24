@@ -4,6 +4,7 @@ import {
   useGetDashboardSummary,
   useListAlerts, getListAlertsQueryKey,
   useMarkAlertRead, useMarkAllAlertsRead, useClearReadAlerts,
+  useClearAllAlerts, useDeleteAlert,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
 import {
   AlertTriangle, Activity, Eye, Target, TrendingUp, Cpu, ShieldOff, BarChart2,
-  BellOff, CheckCheck, Trash2,
+  BellOff, CheckCheck, Trash2, X,
 } from "lucide-react";
 import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge } from "@/components/ui/badges";
 
@@ -65,6 +66,8 @@ function AlertsPanel({
   const markOne   = useMarkAlertRead();
   const markAll   = useMarkAllAlertsRead();
   const clearRead = useClearReadAlerts();
+  const clearAll  = useClearAllAlerts();
+  const deleteOne = useDeleteAlert();
 
   const summaryKey = ["/api/dashboard/summary"];
 
@@ -82,6 +85,18 @@ function AlertsPanel({
 
   async function handleClearRead() {
     await clearRead.mutateAsync();
+    await qc.invalidateQueries({ queryKey: getListAlertsQueryKey() });
+    await qc.invalidateQueries({ queryKey: summaryKey });
+  }
+
+  async function handleClearAll() {
+    await clearAll.mutateAsync();
+    await qc.invalidateQueries({ queryKey: getListAlertsQueryKey() });
+    await qc.invalidateQueries({ queryKey: summaryKey });
+  }
+
+  async function handleDeleteOne(id: number) {
+    await deleteOne.mutateAsync({ id });
     await qc.invalidateQueries({ queryKey: getListAlertsQueryKey() });
     await qc.invalidateQueries({ queryKey: summaryKey });
   }
@@ -115,10 +130,20 @@ function AlertsPanel({
               <Button
                 size="sm" variant="outline" onClick={handleClearRead}
                 disabled={clearRead.isPending}
-                className="font-mono text-xs h-7 border-rose-900/60 text-rose-400 hover:bg-rose-900/20 gap-1.5"
+                className="font-mono text-xs h-7 border-slate-700 text-slate-400 hover:text-rose-400 hover:border-rose-800/60 gap-1"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                Clear dismissed
+                <Trash2 className="w-3 h-3" />
+                Clear read
+              </Button>
+            )}
+            {alerts && alerts.length > 0 && (
+              <Button
+                size="sm" variant="outline" onClick={handleClearAll}
+                disabled={clearAll.isPending}
+                className="font-mono text-xs h-7 border-rose-900/60 text-rose-400 hover:bg-rose-900/20 gap-1"
+              >
+                <Trash2 className="w-3 h-3" />
+                Clear all
               </Button>
             )}
           </div>
@@ -161,6 +186,14 @@ function AlertsPanel({
                     <CheckCheck className="w-3.5 h-3.5" />
                   </Button>
                 )}
+                <Button
+                  size="icon" variant="ghost" onClick={() => handleDeleteOne(a.id)}
+                  disabled={deleteOne.isPending}
+                  className="h-6 w-6 shrink-0 text-slate-600 hover:text-rose-400"
+                  title="Delete alert"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </Button>
               </div>
             ))
           )}

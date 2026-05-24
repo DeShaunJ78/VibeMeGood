@@ -885,6 +885,14 @@ export type ClearReadAlerts200 = {
   deleted: number;
 };
 
+export type ClearAllAlerts200 = {
+  deleted: number;
+};
+
+export type DeleteAlert200 = {
+  deleted: number;
+};
+
 export type ListDataPullLogsParams = {
 provider?: string;
 status?: string;

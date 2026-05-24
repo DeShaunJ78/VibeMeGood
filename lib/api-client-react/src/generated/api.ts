@@ -27,10 +27,12 @@ import type {
   AnthropicError,
   AnthropicMessage,
   AnthropicMessageInput,
+  ClearAllAlerts200,
   ClearReadAlerts200,
   DashboardSummary,
   DataHealth,
   DataPullLog,
+  DeleteAlert200,
   Entry,
   EntryInput,
   EntryPick,
@@ -3532,6 +3534,146 @@ export const useClearReadAlerts = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getClearReadAlertsMutationOptions(options));
+    }
+
+export const getClearAllAlertsUrl = () => {
+
+
+
+
+  return `/api/alerts/clear-all`
+}
+
+/**
+ * @summary Delete every alert regardless of read status
+ */
+export const clearAllAlerts = async ( options?: RequestInit): Promise<ClearAllAlerts200> => {
+
+  return customFetch<ClearAllAlerts200>(getClearAllAlertsUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getClearAllAlertsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearAllAlerts>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof clearAllAlerts>>, TError,void, TContext> => {
+
+const mutationKey = ['clearAllAlerts'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clearAllAlerts>>, void> = () => {
+
+
+          return  clearAllAlerts(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClearAllAlertsMutationResult = NonNullable<Awaited<ReturnType<typeof clearAllAlerts>>>
+
+    export type ClearAllAlertsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete every alert regardless of read status
+ */
+export const useClearAllAlerts = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearAllAlerts>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof clearAllAlerts>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getClearAllAlertsMutationOptions(options));
+    }
+
+export const getDeleteAlertUrl = (id: number,) => {
+
+
+
+
+  return `/api/alerts/${id}`
+}
+
+/**
+ * @summary Delete a single alert by ID
+ */
+export const deleteAlert = async (id: number, options?: RequestInit): Promise<DeleteAlert200> => {
+
+  return customFetch<DeleteAlert200>(getDeleteAlertUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteAlertMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAlert>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAlert>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteAlert'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAlert>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteAlert(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAlertMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAlert>>>
+
+    export type DeleteAlertMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a single alert by ID
+ */
+export const useDeleteAlert = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAlert>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAlert>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteAlertMutationOptions(options));
     }
 
 export const getListDataPullLogsUrl = (params?: ListDataPullLogsParams,) => {

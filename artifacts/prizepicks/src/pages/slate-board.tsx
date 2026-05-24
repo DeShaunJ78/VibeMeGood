@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   useGetSlate, getGetSlateQueryKey,
   useAddToWatchlist, useRemoveFromWatchlist,
@@ -247,8 +247,30 @@ export default function SlateBoard() {
 
   const activeFilterCount = [sport !== "all" && sport, lineTypeFilter !== "all" && lineTypeFilter, minEdge].filter(Boolean).length;
   const [optPickCount, setOptPickCount] = useState(4);
-  const [optResults, setOptResults] = useState<OptResult[]>([]);
-  const [optLoaded, setOptLoaded] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(75);
+
+  const OPT_KEY    = "pp_opt_results";
+  const OPT_TS_KEY = "pp_opt_ts";
+  const OPT_TTL    = 6 * 60 * 60 * 1000;
+
+  const [optResults, setOptResults] = useState<OptResult[]>(() => {
+    try {
+      const s = localStorage.getItem(OPT_KEY);
+      const t = localStorage.getItem(OPT_TS_KEY);
+      if (s && t && Date.now() - Number(t) < OPT_TTL) return JSON.parse(s);
+    } catch {}
+    return [];
+  });
+  const [optLoaded, setOptLoaded] = useState<boolean>(() => {
+    try {
+      const s = localStorage.getItem(OPT_KEY);
+      const t = localStorage.getItem(OPT_TS_KEY);
+      return !!(s && t && Date.now() - Number(t) < OPT_TTL);
+    } catch {}
+    return false;
+  });
   const { addPick, hasPick } = useEntry();
 
   const slateParams = {
@@ -322,25 +344,39 @@ export default function SlateBoard() {
     }));
 
   const allRows = [...mergedRows, ...miOnlyRows];
-
-  let playerRows = allRows.filter((r) => r.pickCategory !== "team");
-  let teamRows = allRows.filter((r) => r.pickCategory === "team");
-
-  if (lineTypeFilter !== "all") playerRows = playerRows.filter(r => r.lineType === lineTypeFilter);
-  if (minEdge) playerRows = playerRows.filter(r => r.edgeScore != null && r.edgeScore >= parseFloat(minEdge));
-
-  // Default sort: highest model P(Over) first, then by edge score
-  playerRows = [...playerRows].sort((a, b) => {
-    const aPOver = a.ourProjection?.pOver ?? -1;
-    const bPOver = b.ourProjection?.pOver ?? -1;
-    if (bPOver !== aPOver) return bPOver - aPOver;
-    return (b.edgeScore ?? 0) - (a.edgeScore ?? 0);
-  });
-
-  const watchCount = playerRows.filter(r => r.isWatched).length;
-  const noPlayCount = playerRows.filter(r => r.actionTag === "NO-PLAY").length;
-  const playCount = playerRows.filter(r => r.actionTag === "PLAY").length;
+  const teamRows = allRows.filter((r) => r.pickCategory === "team");
   const notSynced = !marketIntel || marketIntel.length === 0;
+
+  const playerRows = useMemo(() => {
+    let rows = allRows.filter((r) => r.pickCategory !== "team");
+    if (lineTypeFilter !== "all") rows = rows.filter(r => r.lineType === lineTypeFilter);
+    if (minEdge) rows = rows.filter(r => r.edgeScore != null && r.edgeScore >= parseFloat(minEdge));
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      rows = rows.filter(r =>
+        r.playerName.toLowerCase().includes(q) ||
+        (r.teamAbbr ?? "").toLowerCase().includes(q)
+      );
+    }
+    return [...rows].sort((a, b) => {
+      const aPOver = a.ourProjection?.pOver ?? -1;
+      const bPOver = b.ourProjection?.pOver ?? -1;
+      if (bPOver !== aPOver) return bPOver - aPOver;
+      return (b.edgeScore ?? 0) - (a.edgeScore ?? 0);
+    });
+  }, [allRows, lineTypeFilter, minEdge, searchQuery]);
+
+  const watchCount  = useMemo(() => playerRows.filter(r => r.isWatched).length,   [playerRows]);
+  const noPlayCount = useMemo(() => playerRows.filter(r => r.actionTag === "NO-PLAY").length, [playerRows]);
+  const playCount   = useMemo(() => playerRows.filter(r => r.actionTag === "PLAY").length,    [playerRows]);
+  const visibleRows = useMemo(() => playerRows.slice(0, visibleCount), [playerRows, visibleCount]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(searchInput), 150);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  useEffect(() => { setVisibleCount(75); }, [lineTypeFilter, minEdge, sport, searchQuery]);
 
   const runOptimizer = useCallback(() => {
     const multiplier = POWER_MULTIPLIERS[optPickCount] ?? 10;
@@ -373,6 +409,10 @@ export default function SlateBoard() {
     setOptResults(results);
     setOptLoaded(true);
     setOptimizerOpen(true);
+    try {
+      localStorage.setItem(OPT_KEY, JSON.stringify(results));
+      localStorage.setItem(OPT_TS_KEY, String(Date.now()));
+    } catch {}
   }, [playerRows, optPickCount]);
 
   function loadOptimizerToEntry() {
@@ -482,12 +522,18 @@ export default function SlateBoard() {
                 onChange={e => setMinEdge(e.target.value)}
                 className="w-24 bg-slate-900 border-slate-800 font-mono text-sm"
               />
+              <Input
+                placeholder="Search player…"
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                className="w-36 bg-slate-900 border-slate-800 font-mono text-sm"
+              />
               <Button
                 onClick={runOptimizer}
                 size="sm"
                 className="font-mono text-xs bg-violet-700 hover:bg-violet-600 text-white gap-1.5"
               >
-                <Zap className="w-3.5 h-3.5" /> Optimizer
+                <Zap className="w-3.5 h-3.5" /> {optLoaded ? "Re-run" : "Optimizer"}
               </Button>
               <ForceSyncButton />
             </div>
@@ -546,7 +592,7 @@ export default function SlateBoard() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  playerRows.map((row) => {
+                  visibleRows.map((row) => {
                     const isNoPlay = row.actionTag === "NO-PLAY";
                     const proj: OurProjection | null = row.ourProjection ?? null;
 
@@ -679,6 +725,17 @@ export default function SlateBoard() {
                 )}
               </TableBody>
             </Table>
+            {visibleCount < playerRows.length && (
+              <div className="flex justify-center py-3 border-t border-slate-800">
+                <Button
+                  size="sm" variant="outline"
+                  onClick={() => setVisibleCount(c => c + 75)}
+                  className="font-mono text-xs border-slate-700 text-slate-400 hover:text-foreground gap-1.5"
+                >
+                  Show more ({playerRows.length - visibleCount} remaining)
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -776,9 +833,21 @@ export default function SlateBoard() {
               onClick={runOptimizer}
               className="ml-auto font-mono text-xs bg-violet-700 hover:bg-violet-600 gap-1"
             >
-              <Zap className="w-3 h-3" /> Run
+              <Zap className="w-3 h-3" /> {optLoaded ? "Re-run" : "Run"}
             </Button>
           </div>
+          {optLoaded && (() => {
+            try {
+              const ts = Number(localStorage.getItem("pp_opt_ts") ?? 0);
+              const ageMin = Math.floor((Date.now() - ts) / 60000);
+              if (ageMin > 60) return (
+                <div className="text-[10px] font-mono text-amber-400 bg-amber-950/20 border border-amber-700/30 rounded px-2 py-1 mb-2">
+                  ⚠ Results from {ageMin}m ago — consider re-running for fresh data
+                </div>
+              );
+            } catch {}
+            return null;
+          })()}
 
           {optLoaded && (
             optResults.length === 0 ? (

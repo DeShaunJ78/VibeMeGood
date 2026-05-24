@@ -1036,6 +1036,26 @@ export const ClearReadAlertsResponse = zod.object({
 
 
 /**
+ * @summary Delete every alert regardless of read status
+ */
+export const ClearAllAlertsResponse = zod.object({
+  "deleted": zod.number()
+})
+
+
+/**
+ * @summary Delete a single alert by ID
+ */
+export const DeleteAlertParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteAlertResponse = zod.object({
+  "deleted": zod.number()
+})
+
+
+/**
  * @summary List data pull logs
  */
 export const ListDataPullLogsQueryParams = zod.object({
