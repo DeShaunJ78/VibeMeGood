@@ -1,3 +1,20 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+  <rect width="180" height="180" rx="36" fill="#0f172a"/>
+  <defs>
+    <linearGradient id="line-grad" x1="26" y1="145" x2="156" y2="34" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6d28d9"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <polyline
+    points="26,145 64,108 96,124 130,68 156,34"
+    stroke="url(#line-grad)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"
+    filter="url(#glow)"
+  />
+  <circle cx="156" cy="34" r="14" fill="#10b981" opacity="0.25"/>
+  <circle cx="156" cy="34" r="8" fill="#10b981"/>
 </svg>

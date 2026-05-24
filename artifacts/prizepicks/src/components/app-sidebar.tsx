@@ -75,8 +75,23 @@ export function AppSidebar() {
     <Sidebar variant="sidebar" collapsible="icon">
       <SidebarHeader className="border-b border-border/50 pb-4 pt-4 px-4">
         <div className="flex items-center gap-2 overflow-hidden">
-          <div className="bg-primary/20 p-1 rounded border border-primary/30 shrink-0 text-primary">
-            <Activity size={20} />
+          <div className="shrink-0">
+            <svg width="30" height="30" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="180" height="180" rx="36" fill="#0f172a"/>
+              <rect width="180" height="180" rx="36" fill="none" stroke="#6d28d9" strokeWidth="6" strokeOpacity="0.4"/>
+              <defs>
+                <linearGradient id="sb-grad" x1="26" y1="145" x2="156" y2="34" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="#6d28d9"/>
+                  <stop offset="100%" stopColor="#10b981"/>
+                </linearGradient>
+              </defs>
+              <polyline
+                points="26,145 64,108 96,124 130,68 156,34"
+                stroke="url(#sb-grad)" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" fill="none"
+              />
+              <circle cx="156" cy="34" r="14" fill="#10b981" fillOpacity="0.25"/>
+              <circle cx="156" cy="34" r="8" fill="#10b981"/>
+            </svg>
           </div>
           {!isCollapsed && (
             <div className="flex flex-col truncate">
