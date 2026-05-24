@@ -7,6 +7,8 @@ interface VarianceRow {
   ppLineId: number;
   playerId: number;
   statType: string;
+  playerName: string | null;
+  sport: string | null;
   volatilityRating: string | null;
   fatigueScore: number | null;
   usageScore: number | null;
@@ -95,7 +97,8 @@ export default function StabilityRadar() {
                     <p className="text-xs text-muted-foreground font-mono">None</p>
                   ) : rows.slice(0, 8).map(r => (
                     <div key={r.ppLineId} className={`p-2 rounded border text-xs ${colorClass}`}>
-                      <div className="font-mono font-bold">{r.statType}</div>
+                      <div className="font-semibold">{r.playerName ?? "Unknown"}</div>
+                      <div className="text-[9px] font-mono opacity-60">{r.statType}{r.sport ? ` · ${r.sport}` : ""}</div>
                       {r.whyItMoves && <div className="text-[10px] opacity-70 mt-0.5 truncate">{r.whyItMoves}</div>}
                       {r.warnings && r.warnings.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">

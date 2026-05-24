@@ -6,6 +6,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface VarianceRow {
   ppLineId: number;
   statType: string;
+  playerName: string | null;
+  sport: string | null;
   environmentScore: number | null;
   blowoutRisk: number | null;
   volatilityRating: string | null;
@@ -67,7 +69,8 @@ export default function EnvironmentBoard() {
               ) : highRisk.slice(0, 10).map(r => (
                 <div key={r.ppLineId} className="flex items-center justify-between p-3 bg-slate-950 rounded border border-rose-900/30">
                   <div>
-                    <div className="font-mono text-sm font-bold">{r.statType}</div>
+                    <div className="font-semibold text-sm">{r.playerName ?? "Unknown"}</div>
+                    <div className="text-[10px] font-mono text-muted-foreground">{r.statType}{r.sport ? ` · ${r.sport}` : ""}</div>
                     <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
                       {r.warnings?.includes("blowout_risk_extreme") ? "⚠ Extreme blowout risk" : "Blowout sensitive"}
                     </div>
@@ -95,7 +98,8 @@ export default function EnvironmentBoard() {
               ) : goodEnv.slice(0, 10).map(r => (
                 <div key={r.ppLineId} className="flex items-center justify-between p-3 bg-slate-950 rounded border border-emerald-900/30">
                   <div>
-                    <div className="font-mono text-sm font-bold">{r.statType}</div>
+                    <div className="font-semibold text-sm">{r.playerName ?? "Unknown"}</div>
+                    <div className="text-[10px] font-mono text-muted-foreground">{r.statType}{r.sport ? ` · ${r.sport}` : ""}</div>
                     <div className="text-[10px] text-muted-foreground font-mono mt-0.5">Low blowout risk · High-pace environment</div>
                   </div>
                   <div className="text-right">

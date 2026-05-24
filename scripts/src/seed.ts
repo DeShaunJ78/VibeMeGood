@@ -1,3 +1,8 @@
+if (process.env.NODE_ENV === "production") {
+  console.error("ERROR: Seed scripts must not run in production.");
+  process.exit(1);
+}
+
 import { db } from "@workspace/db";
 import {
   teamsTable, playersTable, gamesTable, ppLinesTable, ppLineHistoryTable,

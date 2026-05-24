@@ -5,6 +5,7 @@ import { computeAllProjections } from "./lib/projection/compute";
 import { recalcPropScores } from "./lib/sync/external-odds";
 import { computeStreaks } from "./lib/sync/streaks";
 import { syncFatigueData } from "./lib/sync/fatigue";
+import { computeAllVarianceScores } from "./lib/variance";
 
 const rawPort = process.env["PORT"];
 
@@ -36,6 +37,7 @@ app.listen(port, (err) => {
       await recalcPropScores();
       await computeStreaks();
       await syncFatigueData();
+      await computeAllVarianceScores();
       logger.info({ computed: n }, "Startup projection run complete");
     } catch (e) {
       logger.error(e, "Startup projection run failed");

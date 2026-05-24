@@ -1,10 +1,15 @@
 import cron from "node-cron";
 import { db } from "@workspace/db";
-import { dataPullLogsTable, alertsTable, ppLinesTable, propScoresTable } from "@workspace/db/schema";
+import { dataPullLogsTable, alertsTable, ppLinesTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { logger } from "./logger";
+import { syncPpLines } from "./sync/prizepicks";
+import { syncExternalOdds, recalcPropScores } from "./sync/external-odds";
+import { computeAllProjections } from "./projection/compute";
+import { computeStreaks } from "./sync/streaks";
 import { computeAllVarianceScores } from "./variance";
 import { syncFatigueData } from "./sync/fatigue";
+import { syncInjuries } from "./sync/injuries";
 
 async function logPull(provider: string, jobName: string, fn: () => Promise<number>) {
   const [log] = await db.insert(dataPullLogsTable).values({
@@ -36,58 +41,47 @@ async function logPull(provider: string, jobName: string, fn: () => Promise<numb
 }
 
 export function startCronJobs() {
-  // Refresh line snapshot every 15 minutes during typical sports hours
-  cron.schedule("*/15 * * * *", async () => {
-    await logPull("prizepicks", "line-snapshot", async () => {
-      // Stub: In production, pull from PrizePicks API and upsert pp_lines + pp_line_history
-      return 0;
-    });
-  });
+  // PP lines every 10 minutes
+  cron.schedule("*/10 * * * *", () =>
+    logPull("prizepicks", "pp-lines", syncPpLines)
+  );
 
-  // Injury feed every 30 minutes
-  cron.schedule("*/30 * * * *", async () => {
-    await logPull("injury-news", "injury-feed", async () => {
-      return 0;
-    });
-  });
+  // Injuries every 20 minutes
+  cron.schedule("*/20 * * * *", () =>
+    logPull("injury-news", "injuries", syncInjuries)
+  );
 
   // External odds every 20 minutes
-  cron.schedule("*/20 * * * *", async () => {
-    await logPull("external-odds", "external-odds", async () => {
-      return 0;
-    });
-  });
+  cron.schedule("*/20 * * * *", () =>
+    logPull("the-odds-api", "external-odds", syncExternalOdds)
+  );
 
-  // Score/result refresh every 5 minutes
-  cron.schedule("*/5 * * * *", async () => {
-    await logPull("prizepicks", "score-refresh", async () => {
-      return 0;
-    });
-  });
+  // Daily projections at 6 AM
+  cron.schedule("0 6 * * *", () =>
+    logPull("nba-stats", "projections", async () => {
+      const n = await computeAllProjections();
+      await recalcPropScores();
+      await computeStreaks();
+      return n;
+    })
+  );
 
-  // Daily projection refresh at 6 AM
-  cron.schedule("0 6 * * *", async () => {
-    await logPull("projections", "daily-projections", async () => {
-      return 0;
-    });
-  });
+  // Variance scores at 6:30 AM (after projections)
+  cron.schedule("30 6 * * *", () =>
+    logPull("internal", "variance-scores", computeAllVarianceScores)
+  );
 
-  // Variance scores — runs after projections at 6:30 AM
-  cron.schedule("30 6 * * *", async () => {
-    await logPull("internal", "variance-scores", computeAllVarianceScores);
-  });
-
-  // Fatigue data — runs after projections populate game logs at 6:30 AM
-  cron.schedule("30 6 * * *", async () => {
-    await logPull("internal", "fatigue", syncFatigueData);
-  });
+  // Fatigue data at 6:30 AM (after projections populate game logs)
+  cron.schedule("30 6 * * *", () =>
+    logPull("internal", "fatigue", syncFatigueData)
+  );
 
   // Fatigue re-run at noon to catch late lineup news
-  cron.schedule("0 12 * * *", async () => {
-    await logPull("internal", "fatigue", syncFatigueData);
-  });
+  cron.schedule("0 12 * * *", () =>
+    logPull("internal", "fatigue", syncFatigueData)
+  );
 
-  // Alert: stale data warning — check every hour if pp-lines haven't been updated in 2h
+  // Alert: stale data check every hour
   cron.schedule("0 * * * *", async () => {
     try {
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);

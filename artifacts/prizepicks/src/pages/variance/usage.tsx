@@ -6,6 +6,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface VarianceRow {
   ppLineId: number;
   statType: string;
+  playerName: string | null;
+  sport: string | null;
   usageScore: number | null;
   matchupScore: number | null;
   volatilityRating: string | null;
@@ -68,9 +70,12 @@ export default function UsageSignals() {
               {spiked.length === 0 ? <p className="text-xs text-muted-foreground font-mono">None</p>
                 : spiked.slice(0, 8).map(r => (
                   <div key={r.ppLineId} className="p-2 bg-violet-900/20 border border-violet-700/30 rounded">
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold">{r.statType}</span>
-                      <span className="font-mono text-xs text-violet-400">{r.usageScore}/100</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-xs truncate">{r.playerName ?? "Unknown"}</div>
+                        <div className="text-[9px] font-mono text-muted-foreground">{r.statType}</div>
+                      </div>
+                      <span className="font-mono text-xs text-violet-400 shrink-0">{r.usageScore}/100</span>
                     </div>
                     {r.whyItMoves && <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{r.whyItMoves}</div>}
                   </div>
@@ -89,9 +94,12 @@ export default function UsageSignals() {
               {shrinking.length === 0 ? <p className="text-xs text-muted-foreground font-mono">None</p>
                 : shrinking.slice(0, 8).map(r => (
                   <div key={r.ppLineId} className="p-2 bg-orange-900/20 border border-orange-700/30 rounded">
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold">{r.statType}</span>
-                      <span className="font-mono text-xs text-orange-400">{r.usageScore}/100</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-xs truncate">{r.playerName ?? "Unknown"}</div>
+                        <div className="text-[9px] font-mono text-muted-foreground">{r.statType}</div>
+                      </div>
+                      <span className="font-mono text-xs text-orange-400 shrink-0">{r.usageScore}/100</span>
                     </div>
                     {r.warnings?.includes("minutes_risk") && (
                       <span className="text-[9px] text-orange-300 font-mono">mins declining</span>
@@ -112,9 +120,12 @@ export default function UsageSignals() {
               {strongMatchup.length === 0 ? <p className="text-xs text-muted-foreground font-mono">None</p>
                 : strongMatchup.slice(0, 8).map(r => (
                   <div key={r.ppLineId} className="p-2 bg-cyan-900/20 border border-cyan-700/30 rounded">
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold">{r.statType}</span>
-                      <span className="font-mono text-xs text-cyan-400">{r.matchupScore}%</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-xs truncate">{r.playerName ?? "Unknown"}</div>
+                        <div className="text-[9px] font-mono text-muted-foreground">{r.statType}</div>
+                      </div>
+                      <span className="font-mono text-xs text-cyan-400 shrink-0">{r.matchupScore}%</span>
                     </div>
                     <div className="text-[10px] text-muted-foreground mt-0.5">historical over rate</div>
                   </div>
