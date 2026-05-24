@@ -5,7 +5,7 @@ import {
   propScoresTable, watchlistItemsTable, alertsTable, entriesTable,
   playersTable, teamsTable, ourProjectionsTable,
 } from "@workspace/db/schema";
-import { eq, and, gte, desc, sql, inArray, isNotNull } from "drizzle-orm";
+import { eq, and, gte, desc, sql, inArray, isNotNull, isNull, or } from "drizzle-orm";
 
 const router = Router();
 
@@ -21,7 +21,13 @@ router.get("/dashboard/summary", async (req, res) => {
           .where(and(gte(gamesTable.startTime, startOfToday), sql`${gamesTable.startTime} < ${endOfToday}`))
           .limit(20),
         db.select().from(injuriesTable).orderBy(desc(injuriesTable.reportedAt)).limit(8),
-        db.select().from(ppLinesTable).where(eq(ppLinesTable.isActive, true)),
+        db.select().from(ppLinesTable).where(and(
+          eq(ppLinesTable.isActive, true),
+          or(
+            isNull(ppLinesTable.lastSyncedAt),
+            gte(ppLinesTable.lastSyncedAt, new Date(Date.now() - 12 * 60 * 60 * 1000)),
+          ),
+        )),
         db.select({ count: sql<number>`count(*)` }).from(watchlistItemsTable),
         db.select({ count: sql<number>`count(*)` }).from(alertsTable).where(eq(alertsTable.isRead, false)),
         db.select({ count: sql<number>`count(*)` }).from(entriesTable).where(eq(entriesTable.result, "pending")),

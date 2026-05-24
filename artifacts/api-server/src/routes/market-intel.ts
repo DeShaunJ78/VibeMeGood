@@ -5,7 +5,7 @@ import {
   ourProjectionsTable, playerStreaksTable, lineMoveEventsTable, syncRunsTable,
   varianceScoresTable,
 } from "@workspace/db/schema";
-import { eq, and, or, isNull, desc } from "drizzle-orm";
+import { eq, and, or, isNull, desc, gte } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -37,7 +37,13 @@ router.get("/market-intel", async (req, res) => {
           eq(playerStreaksTable.statType, ppLinesTable.statType),
         ),
       )
-      .where(eq(ppLinesTable.isActive, true));
+      .where(and(
+        eq(ppLinesTable.isActive, true),
+        or(
+          isNull(ppLinesTable.lastSyncedAt),
+          gte(ppLinesTable.lastSyncedAt, new Date(Date.now() - 12 * 60 * 60 * 1000)),
+        ),
+      ));
 
     // Last odds sync for marketDataStatus
     const [lastOddsRun] = await db

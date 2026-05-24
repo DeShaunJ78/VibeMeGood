@@ -2,7 +2,7 @@ import { db } from "@workspace/db";
 import {
   ppLinesTable, ppLineHistoryTable, playersTable, teamsTable,
 } from "@workspace/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, or, isNull, lt } from "drizzle-orm";
 import { broadcastNewGoblin } from "../sse";
 import { logger } from "../logger";
 
@@ -27,7 +27,6 @@ export async function syncPpLines(): Promise<number> {
   }
 
   let processed = 0;
-  const seenLineIds = new Set<number>();
 
   for (const proj of (data.data || [])) {
     try {
@@ -92,10 +91,7 @@ export async function syncPpLines(): Promise<number> {
           eq(ppLinesTable.isActive, true),
         )).limit(1);
 
-      let lineId: number;
       if (existing) {
-        seenLineIds.add(existing.id);
-        lineId = existing.id;
         if (Number(existing.lineValue) !== lineValue || existing.lineType !== lineType) {
           await db.insert(ppLineHistoryTable).values({
             ppLineId: existing.id,
@@ -104,7 +100,12 @@ export async function syncPpLines(): Promise<number> {
             capturedAt: new Date(),
           });
           await db.update(ppLinesTable)
-            .set({ lineValue: lineValue.toString(), lineType, updatedAt: new Date() })
+            .set({ lineValue: lineValue.toString(), lineType, lastSyncedAt: new Date(), updatedAt: new Date() })
+            .where(eq(ppLinesTable.id, existing.id));
+        } else {
+          // Line unchanged — still stamp lastSyncedAt so deactivation knows it was seen
+          await db.update(ppLinesTable)
+            .set({ lastSyncedAt: new Date() })
             .where(eq(ppLinesTable.id, existing.id));
         }
       } else {
@@ -116,6 +117,7 @@ export async function syncPpLines(): Promise<number> {
           directionalityType: "over_under",
           isActive: true,
           openedAt: new Date(),
+          lastSyncedAt: new Date(),
         }).returning();
         await db.insert(ppLineHistoryTable).values({
           ppLineId: newLine.id,
@@ -123,32 +125,33 @@ export async function syncPpLines(): Promise<number> {
           lineType,
           capturedAt: new Date(),
         });
-        seenLineIds.add(newLine.id);
-        lineId = newLine.id;
 
         if (lineType === "goblin") {
           broadcastNewGoblin(playerName, statType, lineValue, sport);
         }
       }
-
-      void lineId;
       processed++;
     } catch (e) {
       logger.error({ err: e }, "Error processing PP projection");
     }
   }
 
-  // Deactivate stale lines not seen in this sync
-  const allActive = await db.select({ id: ppLinesTable.id })
-    .from(ppLinesTable)
-    .where(eq(ppLinesTable.isActive, true));
-
-  const staleIds = allActive.map(l => l.id).filter(id => !seenLineIds.has(id));
-  if (staleIds.length > 0) {
-    await db.update(ppLinesTable)
-      .set({ isActive: false, updatedAt: new Date() })
-      .where(inArray(ppLinesTable.id, staleIds));
-    logger.info({ staleIds: staleIds.length }, "Deactivated stale PP lines");
+  // Deactivate lines that weren't seen in this sync (use timestamp, not ID list)
+  // Any active line whose lastSyncedAt is more than 1 hour old wasn't in this run
+  const deactivationCutoff = new Date(Date.now() - 60 * 60 * 1000);
+  const deactivated = await db
+    .update(ppLinesTable)
+    .set({ isActive: false, updatedAt: new Date() })
+    .where(and(
+      eq(ppLinesTable.isActive, true),
+      or(
+        isNull(ppLinesTable.lastSyncedAt),
+        lt(ppLinesTable.lastSyncedAt, deactivationCutoff),
+      ),
+    ))
+    .returning({ id: ppLinesTable.id });
+  if (deactivated.length > 0) {
+    logger.info({ count: deactivated.length }, "Deactivated stale PP lines");
   }
 
   return processed;

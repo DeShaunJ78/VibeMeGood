@@ -6,7 +6,7 @@ import {
   ppLineHistoryTable, injuriesTable, lineupConfirmationsTable,
   ourProjectionsTable, playerGameLogsTable,
 } from "@workspace/db/schema";
-import { eq, and, inArray, desc } from "drizzle-orm";
+import { eq, and, inArray, desc, gte, isNull, or } from "drizzle-orm";
 
 const router = Router();
 
@@ -15,7 +15,13 @@ router.get("/slate", async (req, res) => {
     const { sport, statType, actionTag, lineType, teamId, gameId, minEdgeScore, maxRiskScore, watchlistOnly } =
       req.query as Record<string, string>;
 
-    const lineConditions = [eq(ppLinesTable.isActive, true)];
+    const cutoff12h = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    const lineConditions = [
+      and(
+        eq(ppLinesTable.isActive, true),
+        or(isNull(ppLinesTable.lastSyncedAt), gte(ppLinesTable.lastSyncedAt, cutoff12h)),
+      ),
+    ];
     if (statType) lineConditions.push(eq(ppLinesTable.statType, statType));
     if (lineType) lineConditions.push(eq(ppLinesTable.lineType, lineType));
     if (gameId) lineConditions.push(eq(ppLinesTable.gameId, Number(gameId)));
