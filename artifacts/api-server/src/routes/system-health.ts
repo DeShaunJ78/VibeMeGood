@@ -7,6 +7,7 @@ import {
 } from "@workspace/db/schema";
 import { desc, count, isNotNull, eq, sql, and, max } from "drizzle-orm";
 import { logger } from "../lib/logger";
+import { simulateEntry } from "../lib/simulation/entry-simulator";
 
 const router = Router();
 
@@ -211,8 +212,61 @@ async function checkApiConnectivity(): Promise<CheckResult[]> {
   return results;
 }
 
+async function checkSimulationEngine(): Promise<CheckResult> {
+  try {
+    const result = simulateEntry({
+      legs: [
+        {
+          playerName: "Test Player A",
+          statType: "Points",
+          line: 25,
+          side: "over",
+          modelProb: 0.60,
+          sport: "NBA",
+          team: "LAL",
+          gameId: "test-game-1",
+          mean: 27,
+          stdDev: 5,
+        },
+        {
+          playerName: "Test Player B",
+          statType: "Points",
+          line: 20,
+          side: "over",
+          modelProb: 0.60,
+          sport: "NBA",
+          team: "BOS",
+          gameId: "test-game-1",
+          mean: 22,
+          stdDev: 4,
+        },
+      ],
+      runs: 500,
+      multiplier: 3,
+    });
+    const ok = typeof result.trueJointProbability === "number" && result.runCount > 0;
+    return {
+      name: "Simulation Engine",
+      status: ok ? "green" : "red",
+      detail: ok
+        ? `Monte Carlo OK — naive=${(result.naiveProbability * 100).toFixed(1)}% sim=${(result.trueJointProbability * 100).toFixed(1)}%`
+        : "Simulation returned invalid result",
+      lastUpdated: null,
+      fixAction: null,
+    };
+  } catch (err) {
+    return {
+      name: "Simulation Engine",
+      status: "red",
+      detail: `Error: ${err instanceof Error ? err.message : "unknown"}`,
+      lastUpdated: null,
+      fixAction: null,
+    };
+  }
+}
+
 async function checkFeatureStatus(): Promise<CheckResult[]> {
-  const [varianceCount, miCount, aiCount, calCount, cronJobs] = await Promise.all([
+  const [varianceCount, miCount, aiCount, calCount, cronJobs, simCheck] = await Promise.all([
     db.select({ n: count() }).from(varianceScoresTable),
     db.select({ n: count() }).from(ppLinesTable).where(eq(ppLinesTable.isActive, true)),
     db.select({ n: count() }).from(ourProjectionsTable),
@@ -220,6 +274,7 @@ async function checkFeatureStatus(): Promise<CheckResult[]> {
     db.select({ jobName: dataPullLogsTable.jobName })
       .from(dataPullLogsTable)
       .groupBy(dataPullLogsTable.jobName),
+    checkSimulationEngine(),
   ]);
 
   const varN = Number(varianceCount[0]?.n ?? 0);
@@ -270,6 +325,7 @@ async function checkFeatureStatus(): Promise<CheckResult[]> {
       lastUpdated: null,
       fixAction: null,
     },
+    simCheck,
   ];
 }
 

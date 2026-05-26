@@ -1,0 +1,215 @@
+Add the stochastic simulation engine to VibeMeGood
+for true joint probability on multi-leg entries.
+
+CRITICAL RULES:
+- This is a TOGGLE — both numbers show side by side
+- Independent probability always shows (current math)
+- Simulated probability shows alongside it
+- Neither replaces the other
+- Switch is OFF by default
+
+STEP 1 — Distribution engine
+Create artifacts/api-server/src/lib/simulation/distributions.ts
+
+function sampleNormal(mean: number, stdDev: number): number
+function sampleLognormal(mean: number, stdDev: number): number
+function samplePoisson(lambda: number): number
+function sampleNegativeBinomial(mean: number, stdDev: number): number
+
+Always enforce floor = 0. Never return negative values.
+
+Distribution map by sport and stat:
+NBA: points=normal, rebounds=normal, assists=normal,
+     threes=poisson, steals=poisson, blocks=poisson
+NFL: passingYards=lognormal, rushingYards=lognormal,
+     receivingYards=lognormal, touchdowns=poisson,
+     receptions=normal
+MLB: hits=negative_binomial, homeRuns=poisson,
+     rbis=negative_binomial, strikeouts=negative_binomial
+NHL: goals=poisson, assists=poisson,
+     shotsOnGoal=negative_binomial
+
+computeStdDev(gameLogs: number[]): number
+If fewer than 5 logs return mean * 0.35 as fallback.
+
+STEP 2 — Correlation engine
+Create artifacts/api-server/src/lib/simulation/correlation.ts
+
+Correlation rules:
+QB + WR1 same team NFL:          +0.65
+QB + TE same team NFL:           +0.55
+NBA teammates high game total:   +0.40
+MLB batters same lineup:         +0.45
+NHL linemates same line:         +0.50
+QB rushing + QB passing:         -0.30
+Two WRs same team:              -0.25
+RB rushing + WR receiving:       -0.15
+Both teams high total:           +0.30
+Both teams low total:            -0.20
+Different games:                  0.00
+
+buildCorrelationMatrix(legs, sport): number[][]
+Returns N×N correlation matrix for all legs.
+
+Use Cholesky decomposition to generate 
+correlated normal samples.
+
+STEP 3 — Entry simulation engine
+Create artifacts/api-server/src/lib/simulation/entry-simulator.ts
+
+interface EntryLeg {
+  playerName: string
+  statType: string
+  line: number
+  side: "over" | "under"
+  modelProb: number
+  sport: string
+  team: string
+  gameId: string
+}
+
+async function simulateEntryProbability(config: {
+  legs: EntryLeg[]
+  runs: number
+  multiplier: number
+}): Promise<{
+  trueJointProbability: number
+  naiveProbability: number
+  correlationAdjustment: number
+  entryEV: number
+  adjustedEV: number
+  runCount: number
+}>
+
+Implementation:
+1. For each leg build distribution:
+   - mean: from ourProjectionsTable
+   - stdDev: from player_game_logs
+   - distribution: from DISTRIBUTION_MAP
+   - floor: 0
+
+2. Build correlation matrix from leg context
+   (same team, same game, sport, position)
+
+3. Run simulation (default 10,000 runs):
+   Each run samples every leg from distribution
+   accounting for correlations.
+   Count how many runs ALL legs hit simultaneously.
+
+4. trueJointProbability = allHit / runs
+5. naiveProbability = product of all modelProbs
+6. correlationAdjustment = true - naive
+7. entryEV = trueJointProbability * multiplier - 1
+8. adjustedEV = entryEV (with payout shift applied
+   if detectPayoutShift() flags the entry)
+
+STEP 4 — Backend endpoint
+POST /api/simulation/entry
+
+Request:
+{
+  legs: EntryLeg[]
+  runs: number (default 10000)
+  multiplier: number
+  entryType: string
+}
+
+Response:
+{
+  trueJointProbability: number
+  naiveProbability: number
+  correlationAdjustment: number
+  entryEV: number
+  adjustedEV: number
+  runCount: number
+  correlationDetails: {
+    hasPositiveCorrelation: boolean
+    hasNegativeCorrelation: boolean
+    dominantPairs: string[]
+  }
+}
+
+STEP 5 — Simulation toggle in Entry Builder
+Add simulation toggle to Entry Builder panel.
+
+Toggle label: "🎲 Simulation Mode"
+Default: OFF
+
+When OFF — show current display (unchanged):
+  Joint probability: 23.4% (independent math)
+  EV: +8.0%
+
+When ON — show both numbers side by side:
+  Independent:  23.4%  (current math)
+  Simulated:    27.8%  ✓ correlation helps
+  Difference:   +4.4%
+
+  Simulated EV: +66.8%  (uses simulated prob)
+  Standard EV:  +40.4%  (uses independent prob)
+
+Show which is more reliable:
+"Simulated probability accounts for correlation
+between legs. Use this number for correlated entries."
+
+Show correlation details:
+If positive correlation detected:
+"⚡ Positive correlation — these legs tend to 
+hit together. Simulated probability is higher 
+than independent math suggests."
+
+If negative correlation detected:
+"⚠️ Negative correlation — these legs work 
+against each other. Simulated probability is 
+lower than independent math suggests."
+
+STEP 6 — Runs selector
+Only visible when Simulation Mode is ON.
+
+Options:
+  1,000 runs  — Fast (~0.5 seconds)
+  5,000 runs  — Balanced (~2 seconds)
+  10,000 runs — Standard (default)
+  25,000 runs — High precision
+
+Show a note:
+"10,000 runs recommended for daily use."
+
+Show loading indicator while simulation runs.
+
+STEP 7 — Add to health check
+Add simulation engine check to /api/system-health:
+
+Feature Status — add:
+- Simulation Engine: ping POST /api/simulation/entry
+  with a test 2-leg entry
+  Green: returns valid result
+  Red: error or timeout
+
+STEP 8 — Verify
+After building test these scenarios:
+
+Test 1: 2-pick entry, both legs at 60%
+  Independent: 0.60 × 0.60 = 36% → EV +8%
+  Simulated: should be close to 36% for
+  uncorrelated players from different games
+  Confirm both numbers show side by side
+
+Test 2: LeBron points + AD rebounds (same team)
+  These are positively correlated
+  Simulated probability should be HIGHER
+  than naive independent multiplication
+  Confirm correlation detail shows positive
+
+Test 3: Two WRs same team both on receiving yards
+  These are negatively correlated (target share)
+  Simulated probability should be LOWER
+  than naive independent multiplication
+  Confirm correlation detail shows negative
+  Confirm payout shift warning also triggers
+
+Test 4: Turn simulation OFF
+  Confirm Entry Builder looks exactly the same
+  as before — only independent math showing
+  No simulation numbers visible
+
+Report pass or fail for all 4 tests.

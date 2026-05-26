@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useEntry } from "@/lib/entry-context";
-import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown, ShieldAlert, AlertTriangle, ClipboardCheck, BarChart2 } from "lucide-react";
+import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown, ShieldAlert, AlertTriangle, ClipboardCheck, BarChart2, Shuffle, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
 import {
@@ -106,6 +106,20 @@ interface LossLimitState {
   limit: number;
 }
 
+interface SimResult {
+  trueJointProbability: number;
+  naiveProbability: number;
+  correlationAdjustment: number;
+  entryEV: number;
+  adjustedEV: number;
+  runCount: number;
+  correlationDetails: {
+    hasPositiveCorrelation: boolean;
+    hasNegativeCorrelation: boolean;
+    dominantPairs: string[];
+  };
+}
+
 type SortDir = "asc" | "desc";
 
 export default function EntryBuilder() {
@@ -115,6 +129,10 @@ export default function EntryBuilder() {
   const [notes, setNotes] = useState<string>("");
   const [pickSortCol, setPickSortCol] = useState<string>("pOver");
   const [pickSortDir, setPickSortDir] = useState<SortDir>("desc");
+  const [simMode, setSimMode] = useState(false);
+  const [simRuns, setSimRuns] = useState(10000);
+  const [simResult, setSimResult] = useState<SimResult | null>(null);
+  const [simLoading, setSimLoading] = useState(false);
   const { picks, removePick, updateDirection, clearPicks } = useEntry();
 
   function togglePickSort(col: string) {
@@ -136,6 +154,43 @@ export default function EntryBuilder() {
       .then(data => setPendingCount(Array.isArray(data) ? data.length : 0))
       .catch(() => {});
   }, []);
+
+  const runSimulation = useCallback(async (currentPicks: typeof picks, runs: number, mult: number, style: string) => {
+    if (currentPicks.length < 2) { setSimResult(null); return; }
+    setSimLoading(true);
+    try {
+      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+      const body = {
+        legs: currentPicks.map(p => ({
+          ppLineId:  p.ppLineId,
+          direction: p.direction,
+          modelProb: legPHit(p) ?? 0.5,
+        })),
+        runs,
+        multiplier: mult,
+        entryType: style,
+      };
+      const res = await fetch(`${base}/api/simulation/entry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { setSimResult(null); return; }
+      const data = await res.json() as SimResult;
+      setSimResult(data);
+    } catch {
+      setSimResult(null);
+    } finally {
+      setSimLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!simMode || picks.length < 2) { setSimResult(null); return; }
+    const mult = playstyle === "power" ? (POWER_MULTIPLIERS[picks.length] ?? 0) : 0;
+    void runSimulation(picks, simRuns, mult || 1, playstyle);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [simMode, picks, simRuns, playstyle]);
 
   const stakeNum = parseFloat(stake) || 0;
   const n = picks.length;
@@ -342,7 +397,156 @@ export default function EntryBuilder() {
                 </span>
               </>
             )}
+
+            {/* Simulation Mode toggle */}
+            <div className="ml-auto shrink-0">
+              <button
+                onClick={() => setSimMode(m => !m)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono font-bold border transition-colors ${
+                  simMode
+                    ? "bg-violet-900/40 border-violet-600/50 text-violet-300"
+                    : "border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600"
+                }`}
+              >
+                <Shuffle className="w-3 h-3" />
+                Simulation
+              </button>
+            </div>
           </div>
+
+          {/* ── Simulation Panel ─────────────────────────────────────────────── */}
+          {simMode && (
+            <div className="bg-slate-900/80 border border-violet-700/30 rounded-lg px-4 py-3 space-y-3">
+              {/* Runs selector */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-mono text-slate-500 uppercase shrink-0">Runs:</span>
+                {([1000, 5000, 10000, 25000] as const).map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setSimRuns(r)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-colors ${
+                      simRuns === r
+                        ? "bg-violet-900/40 border-violet-600/50 text-violet-300"
+                        : "border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600"
+                    }`}
+                  >
+                    {r.toLocaleString()}
+                  </button>
+                ))}
+                <span className="text-[10px] font-mono text-slate-600">· 10,000 recommended for daily use</span>
+              </div>
+
+              {/* Loading */}
+              {simLoading && (
+                <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Running simulation ({simRuns.toLocaleString()} iterations)…
+                </div>
+              )}
+
+              {/* Results */}
+              {!simLoading && simResult && (
+                <>
+                  {/* Probability comparison — 3 columns */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-slate-800/60 rounded px-3 py-2">
+                      <div className="text-[10px] font-mono text-slate-500 uppercase mb-1">Independent</div>
+                      <div className="font-mono font-bold text-slate-300 text-sm">{(simResult.naiveProbability * 100).toFixed(1)}%</div>
+                      <div className="text-[10px] font-mono text-slate-600 mt-0.5">current math</div>
+                    </div>
+                    <div className={`rounded px-3 py-2 ${
+                      simResult.correlationAdjustment > 0.005
+                        ? "bg-emerald-950/40 border border-emerald-700/30"
+                        : simResult.correlationAdjustment < -0.005
+                        ? "bg-rose-950/40 border border-rose-700/30"
+                        : "bg-slate-800/60"
+                    }`}>
+                      <div className="text-[10px] font-mono text-slate-500 uppercase mb-1">Simulated</div>
+                      <div className={`font-mono font-bold text-sm ${
+                        simResult.correlationAdjustment > 0.005 ? "text-emerald-400"
+                        : simResult.correlationAdjustment < -0.005 ? "text-rose-400"
+                        : "text-slate-300"
+                      }`}>
+                        {(simResult.trueJointProbability * 100).toFixed(1)}%
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-600 mt-0.5">{simResult.runCount.toLocaleString()} runs</div>
+                    </div>
+                    <div className="bg-slate-800/60 rounded px-3 py-2">
+                      <div className="text-[10px] font-mono text-slate-500 uppercase mb-1">Difference</div>
+                      <div className={`font-mono font-bold text-sm ${
+                        simResult.correlationAdjustment > 0.005 ? "text-emerald-400"
+                        : simResult.correlationAdjustment < -0.005 ? "text-rose-400"
+                        : "text-slate-500"
+                      }`}>
+                        {simResult.correlationAdjustment >= 0 ? "+" : ""}
+                        {(simResult.correlationAdjustment * 100).toFixed(1)}%
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-600 mt-0.5">corr. adj.</div>
+                    </div>
+                  </div>
+
+                  {/* EV comparison */}
+                  {multiplier > 0 && (
+                    <div className="flex items-center gap-4 text-xs font-mono border-t border-slate-800 pt-2 flex-wrap">
+                      <div>
+                        <span className="text-slate-500">Simulated EV: </span>
+                        <span className={`font-bold ${simResult.entryEV >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                          {simResult.entryEV >= 0 ? "+" : ""}{(simResult.entryEV * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                      {evPct != null && (
+                        <div>
+                          <span className="text-slate-500">Standard EV: </span>
+                          <span className={`font-bold ${evPct >= 0 ? "text-amber-400" : "text-rose-400"}`}>
+                            {evPct >= 0 ? "+" : ""}{evPct.toFixed(1)}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Reliability note */}
+                  <div className="text-[10px] font-mono text-slate-500 leading-relaxed">
+                    Simulated probability accounts for correlation between legs. Use this number for correlated entries.
+                  </div>
+
+                  {/* Correlation details */}
+                  {simResult.correlationDetails.hasPositiveCorrelation && (
+                    <div className="flex items-start gap-2 text-[11px] font-mono text-emerald-300/80">
+                      <span className="shrink-0">⚡</span>
+                      <div>
+                        Positive correlation — these legs tend to hit together. Simulated probability is higher than independent math suggests.
+                        {simResult.correlationDetails.dominantPairs.length > 0 && (
+                          <div className="text-emerald-500/60 mt-0.5">{simResult.correlationDetails.dominantPairs.join(" · ")}</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {simResult.correlationDetails.hasNegativeCorrelation && (
+                    <div className="flex items-start gap-2 text-[11px] font-mono text-amber-300/80">
+                      <span className="shrink-0">⚠️</span>
+                      <div>
+                        Negative correlation — these legs work against each other. Simulated probability is lower than independent math suggests.
+                        {simResult.correlationDetails.dominantPairs.length > 0 && (
+                          <div className="text-amber-500/60 mt-0.5">{simResult.correlationDetails.dominantPairs.join(" · ")}</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {!simResult.correlationDetails.hasPositiveCorrelation && !simResult.correlationDetails.hasNegativeCorrelation && (
+                    <div className="text-[10px] font-mono text-slate-600">
+                      No significant correlation detected — legs appear independent.
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Empty state — waiting for picks */}
+              {!simLoading && !simResult && picks.length >= 2 && (
+                <div className="text-[11px] font-mono text-slate-500">Simulation failed — ensure picks are on active lines.</div>
+              )}
+            </div>
+          )}
 
           {/* Payout shift warning */}
           {shiftResult?.hasShift && (
