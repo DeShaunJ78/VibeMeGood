@@ -11,6 +11,7 @@ import { computeStreaks } from "../lib/sync/streaks";
 import { computeAllVarianceScores } from "../lib/variance";
 import { syncFatigueData } from "../lib/sync/fatigue";
 import { syncInjuries } from "../lib/sync/injuries";
+import { syncProjections } from "../lib/projections/sync";
 
 const router = Router();
 
@@ -102,6 +103,37 @@ router.post("/sync/scores", async (req, res) => {
 
 router.post("/sync/fatigue", async (req, res) => {
   await runSync("internal", "fatigue", syncFatigueData, res);
+});
+
+// Admin: sync FP/NHL projections for one or all sports
+router.post("/admin/sync/projections", async (req, res) => {
+  const sport = typeof req.query.sport === "string" ? req.query.sport : undefined;
+  const [log] = await db.insert(dataPullLogsTable).values({
+    provider: "fantasypros",
+    jobName: "projections",
+    status: "running",
+    startedAt: new Date(),
+  }).returning();
+
+  // Respond immediately; work runs async
+  res.json({ status: "started", logId: log.id });
+
+  try {
+    const results = await syncProjections(sport);
+    const totalScraped  = results.reduce((s, r) => s + r.scraped, 0);
+    const totalMatched  = results.reduce((s, r) => s + r.matched, 0);
+    const totalUpserted = results.reduce((s, r) => s + r.upserted, 0);
+    await db.update(dataPullLogsTable)
+      .set({ status: "success", recordsProcessed: totalUpserted, finishedAt: new Date() })
+      .where(eq(dataPullLogsTable.id, log.id));
+    req.log.info({ totalScraped, totalMatched, totalUpserted, sport }, "FP projection sync OK");
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    req.log.error({ err }, "FP projection sync failed");
+    await db.update(dataPullLogsTable)
+      .set({ status: "error", errorMessage, finishedAt: new Date() })
+      .where(eq(dataPullLogsTable.id, log.id));
+  }
 });
 
 // Force sync all — triggers PP lines + external odds sequentially

@@ -10,6 +10,7 @@ import { computeStreaks } from "./sync/streaks";
 import { computeAllVarianceScores } from "./variance";
 import { syncFatigueData } from "./sync/fatigue";
 import { syncInjuries } from "./sync/injuries";
+import { syncProjections } from "./projections/sync";
 
 async function logPull(provider: string, jobName: string, fn: () => Promise<number>) {
   const [log] = await db.insert(dataPullLogsTable).values({
@@ -67,6 +68,16 @@ export function startCronJobs() {
   cron.schedule("0 6 * * *",  projectionsJob);
   cron.schedule("0 11 * * *", projectionsJob);
   cron.schedule("0 14 * * *", projectionsJob);
+
+  // FP/NHL projection scraper at 7 AM, 11 AM, and 2 PM daily
+  const fpProjectionsJob = () =>
+    logPull("fantasypros", "projections", async () => {
+      const results = await syncProjections();
+      return results.reduce((s, r) => s + r.upserted, 0);
+    });
+  cron.schedule("0 7 * * *",  fpProjectionsJob);
+  cron.schedule("0 11 * * *", fpProjectionsJob);
+  cron.schedule("0 14 * * *", fpProjectionsJob);
 
   // Variance scores at 6:30 AM (after projections)
   cron.schedule("30 6 * * *", () =>

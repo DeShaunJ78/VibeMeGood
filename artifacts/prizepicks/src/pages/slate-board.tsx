@@ -90,6 +90,48 @@ function useMarketIntel(params: Record<string, string | undefined>) {
   });
 }
 
+function SyncProjectionsButton() {
+  const [syncing, setSyncing] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+
+  async function syncProj() {
+    setSyncing(true);
+    setResult(null);
+    try {
+      const res = await fetch(`${base}/api/admin/sync/projections`, { method: "POST" });
+      const data = await res.json() as { matched?: number; upserted?: number; error?: string };
+      if (data.error) throw new Error(data.error);
+      const label = `${data.upserted ?? data.matched ?? 0} projections`;
+      setResult(label);
+      toast({ title: "Projections synced", description: label });
+      void qc.invalidateQueries();
+    } catch {
+      toast({ title: "Sync failed", variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <Button
+        size="sm" variant="outline" onClick={syncProj} disabled={syncing}
+        title={result ? `Last sync: ${result}` : "Sync FP/NHL projections"}
+        className="gap-1.5 font-mono text-xs border-violet-500/40 text-violet-300 hover:bg-violet-500/10"
+      >
+        <Zap className={`w-3 h-3 ${syncing ? "animate-pulse" : ""}`} />
+        {syncing ? "Syncing…" : "Sync Proj"}
+      </Button>
+      {result && (
+        <span className="text-[10px] font-mono text-violet-400">{result}</span>
+      )}
+    </div>
+  );
+}
+
 function ForceSyncButton() {
   const [syncing, setSyncing] = useState(false);
   const [syncStep, setSyncStep] = useState<string | null>(null);
@@ -547,6 +589,7 @@ export default function SlateBoard() {
               >
                 <Zap className="w-3.5 h-3.5" /> {optLoaded ? "Re-run" : "Optimizer"}
               </Button>
+              <SyncProjectionsButton />
               <ForceSyncButton />
             </div>
           </>

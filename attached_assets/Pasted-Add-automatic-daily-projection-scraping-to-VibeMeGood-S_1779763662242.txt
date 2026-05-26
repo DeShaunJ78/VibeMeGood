@@ -1,0 +1,106 @@
+Add automatic daily projection scraping to 
+VibeMeGood. Same pattern as DraftDuel.
+
+STEP 1 — Create the scraper
+Create artifacts/api-server/src/lib/projections/fp-scraper.ts
+
+Scrape FantasyPros for each sport.
+Use the same approach that works in DraftDuel.
+
+NBA:
+https://www.fantasypros.com/daily-fantasy/nba/draftkings-picks.php
+Scrape the projections table.
+Season totals — divide by GP to get per-game averages.
+Compute projected value using this formula:
+PTS×1 + REB×1.25 + AST×1.5 + STL×2 + BLK×2 
++ TO×-0.5 + 3PM×0.5 + double-double bonus
+
+NFL:
+https://www.fantasypros.com/daily-fantasy/nfl/draftkings-picks.php
+FantasyPros pre-computes FPTS — use that column directly.
+
+MLB:
+https://www.fantasypros.com/daily-fantasy/mlb/draftkings-picks.php
+Compute from raw batting/pitching stats using DK scoring.
+
+NHL:
+Use NHL Stats API as guaranteed fallback:
+https://api-web.nhle.com/v1/schedule/now
+Pull tonight's games → team rosters → player stats
+Compute DK FPTS from season averages:
+Goal×8.5 + Assist×5 + SOG×1.5 + Block×1.3
+Goalie: Win×6 + Save×0.6 + GA×-3.5 + Shutout×4
+
+STEP 2 — Name matcher
+Create artifacts/api-server/src/lib/projections/name-match.ts
+
+Normalize names: lowercase, strip accents and punctuation.
+Match strategy:
+1. Exact match
+2. Levenshtein distance ≤ 2
+3. Last name + first initial fallback
+
+Match scraped playerName to players in the
+VibeMeGood players table.
+
+STEP 3 — Sync orchestrator
+Create artifacts/api-server/src/lib/projections/sync.ts
+
+syncProjections(sport?: string):
+- If sport provided, sync that sport only
+- If no sport, sync all four sports
+- For each player matched, upsert projection:
+  playerName, sport, projectedValue, source, scrapedAt
+- Log results: how many scraped, how many matched
+
+STEP 4 — Wire into existing projection system
+VibeMeGood already has a projection system.
+The scraped projections should feed into it:
+- Store in the existing ourProjectionsTable
+  or wherever projections are currently stored
+- The projection gap (yourProjection vs PP line)
+  should auto-compute after each scrape
+- Hit probability should update from new projections
+
+STEP 5 — Cron schedule
+Add to the existing cron scheduler:
+7:00 AM daily — sync all sports projections
+11:00 AM daily — sync all sports projections
+2:00 PM daily — sync all sports projections
+
+STEP 6 — Admin endpoint
+POST /api/admin/sync/projections?sport=NBA|NFL|MLB|NHL
+
+Optional sport param — omit to sync all.
+Returns count of players scraped and matched.
+
+STEP 7 — Sync Projections button
+Add "Sync Projections" button to the Slate Board
+header area alongside existing sync buttons.
+
+Calls POST /api/admin/sync/projections
+Shows "Syncing..." state while running
+Auto-refreshes the Slate Board when complete
+Shows result count in tooltip after sync
+
+STEP 8 — Update health check
+Update /api/system-health to check projections
+freshness against the new sync timestamps.
+
+VERIFY:
+After building trigger:
+POST /api/admin/sync/projections
+
+Report:
+- How many players scraped per sport
+- How many matched to VibeMeGood players
+- Sample of top 5 projected values per sport
+- Confirm values are realistic per-game numbers
+  NBA: top players 40-55 FPTS range
+  NFL: QB 25-35, RB 15-25, WR 15-25 range
+  MLB: top hitters 8-15, top pitchers 20-35 range
+  NHL: top skaters 10-18, goalies 20-35 range
+- Confirm Slate Board shows updated projections
+- Confirm projection gap updates automatically
+
+Come back with the results.
