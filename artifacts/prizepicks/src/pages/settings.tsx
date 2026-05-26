@@ -165,6 +165,7 @@ const SYNC_JOBS = [
   { label: "External Odds",      endpoint: "/api/sync/external-odds" },
   { label: "Player Projections", endpoint: "/api/sync/projections" },
   { label: "Game Scores",        endpoint: "/api/sync/scores" },
+  { label: "Variance Compute",   endpoint: "/api/sync/variance" },
 ];
 
 function StatusDot({ status }: { status: string }) {

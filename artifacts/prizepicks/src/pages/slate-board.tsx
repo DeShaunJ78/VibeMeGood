@@ -434,10 +434,41 @@ export default function SlateBoard() {
 
   const runOptimizer = useCallback(() => {
     const multiplier = POWER_MULTIPLIERS[optPickCount] ?? 10;
-    const goblinProps = playerRows
-      .filter(r => r.lineType === "goblin" && r.ourProjection?.pOver != null && r.ourProjection.pOver > 50)
-      .sort((a, b) => (b.ourProjection?.pOver ?? 0) - (a.ourProjection?.pOver ?? 0))
-      .slice(0, optPickCount);
+    const modes = (userSettings?.varianceModes ?? {}) as Record<string, boolean>;
+
+    // Apply variance-mode filters when variance intel is enabled
+    const stableGrind    = varianceEnabled && modes.stablePicksOnly;
+    const ceilingHunter  = varianceEnabled && modes.ceilingHunterMode;
+    const excludeVolatile = varianceEnabled && modes.excludeHighVolatility;
+
+    let candidates = playerRows.filter(
+      r => r.lineType === "goblin" && r.ourProjection?.pOver != null && r.ourProjection.pOver > 50,
+    );
+
+    if (stableGrind) {
+      // Stable Grind: remove high/boom_bust volatility, back-to-back players, blowoutRisk > 35
+      candidates = candidates.filter(r => {
+        const v = r.variance;
+        if (!v) return true; // no variance data — keep
+        if (v.volatilityRating === "high" || v.volatilityRating === "boom_bust") return false;
+        if (v.warnings?.includes("back_to_back")) return false;
+        if ((v.blowoutRisk ?? 0) > 35) return false;
+        return true;
+      });
+    } else if (excludeVolatile) {
+      // Exclude High Volatility: remove high/boom_bust props
+      candidates = candidates.filter(r => {
+        const v = r.variance;
+        if (!v) return true;
+        return v.volatilityRating !== "high" && v.volatilityRating !== "boom_bust";
+      });
+    }
+
+    const goblinProps = (ceilingHunter
+      // Ceiling Hunter: prioritise usage spikes first
+      ? candidates.sort((a, b) => ((b.variance?.usageScore ?? 0) - (a.variance?.usageScore ?? 0)))
+      : candidates.sort((a, b) => (b.ourProjection?.pOver ?? 0) - (a.ourProjection?.pOver ?? 0))
+    ).slice(0, optPickCount);
 
     const results: OptResult[] = goblinProps.map(r => {
       const pOver = (r.ourProjection?.pOver ?? 50) / 100;
@@ -467,7 +498,7 @@ export default function SlateBoard() {
       localStorage.setItem(OPT_KEY, JSON.stringify(results));
       localStorage.setItem(OPT_TS_KEY, String(Date.now()));
     } catch {}
-  }, [playerRows, optPickCount]);
+  }, [playerRows, optPickCount, userSettings, varianceEnabled]);
 
   function loadOptimizerToEntry() {
     for (const r of optResults) {

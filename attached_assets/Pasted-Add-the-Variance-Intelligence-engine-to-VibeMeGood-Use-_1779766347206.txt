@@ -1,0 +1,269 @@
+Add the Variance Intelligence engine to VibeMeGood.
+Use Variance_Engine.pdf as the complete spec.
+Read it carefully before writing any code.
+
+CRITICAL RULES:
+- Master toggle OFF by default. When OFF the app 
+  behaves exactly as it does today. Zero code 
+  paths change for the default experience.
+- EV modifier capped at ±15% of projected mean.
+  Never exceed this regardless of signal combination.
+- Narrative signals are display-only. They never
+  contribute to EV modifier.
+- Experimental signals never touch EV calculations.
+- Every variance-influenced number must be labeled.
+  Never show a mystery adjustment.
+
+STEP 1 — Database tables
+Add these tables via migration:
+
+variance_scores table:
+- id, ppLineId (references pp_lines), playerId
+- statType
+- fatigueScore (0-100)
+- environmentScore (0-100)
+- usageScore (0-100)
+- matchupScore (0-100)
+- narrativeScore (0-100, display only)
+- blowoutRisk (0-100)
+- volatilityRating (stable/elevated/high/boom_bust)
+- ceilingRating (0-100)
+- floorRating (0-100)
+- evModifier (numeric, capped ±0.15)
+- signals (jsonb)
+- warnings (jsonb array)
+- whyItMoves (text)
+- computedAt
+- unique on ppLineId
+
+fatigue_data table:
+- id, playerId, gameId, gameDate
+- daysRest, isBackToBack, isThreeInFour
+- prevGameMinutes, prevGameWasOT
+- travelMiles, timezoneShiftHours
+- isEarlyGame, fatigueScore
+- computedAt
+- unique on (playerId, gameId)
+
+referee_data table:
+- id, refName, sport
+- foulsPerGameFactor, paceImpactFactor
+- ftAttemptsFactor, technicalFoulRate
+- sampleGames, lastUpdated
+
+experimental_signals table:
+- id, ppLineId, playerId
+- isBirthdayGame, isNewShoes, isHaircutGame
+- socialSpikeScore, userNotes
+- computedAt
+- unique on ppLineId
+
+Add to user_settings table:
+- varianceIntelEnabled (boolean, default false)
+- varianceSignals (jsonb, default all true except
+  narrative and referee which default false)
+- varianceModes (jsonb, default all false)
+- experimentalLabEnabled (boolean, default false)
+- experimentalLabAcknowledged (boolean, default false)
+
+STEP 2 — Arena coordinates
+Add ARENA_COORDS constant to the variance engine.
+Include all 30 NBA teams with lat, lon, timezone,
+and altitude. Use the coordinates from the spec.
+
+Add haversineDistance() function to compute
+travel miles between two arenas.
+
+STEP 3 — Signal computation functions
+Create artifacts/api-server/src/lib/variance/compute-variance.ts
+
+Implement exactly as specced:
+
+computeFatigueScore(data): { score, label, warnings }
+Factors: isBackToBack (+35), isThreeInFour (+20),
+travelMiles (up to +15), timezoneShift (up to +10),
+prevGameMinutes (up to +10), prevGameWasOT (+8),
+isEarlyGame (+5), well rested (-10).
+Cap at 0-100.
+
+computeBlowoutRisk(spread, total, sport):
+{ probability, warning, evAdjustment }
+NBA thresholds: moderate 9, heavy 14, extreme 18.
+NFL: moderate 10, heavy 14, extreme 17.
+MLB: moderate 2.5, heavy 3.5, extreme 5.
+NHL: moderate 1.5, heavy 2, extreme 2.5.
+
+computeUsageDelta(playerId, statType):
+{ score, usageDelta, minutesTrend, label }
+Compare last 5 games vs season average.
+Score 0-100 where 50 is neutral.
+
+computeEVModifier(signals): number
+Fatigue >= 60: -0.06
+Fatigue >= 40: -0.03
+Fatigue <= -5: +0.02
+Blowout adjustment: direct from computeBlowoutRisk
+Usage delta > 15%: +0.06
+Usage delta > 8%: +0.03
+Usage delta < -15%: -0.05
+Usage delta < -8%: -0.02
+Aggressive mode: multiply by 2
+Hard cap: Math.max(-0.15, Math.min(0.15, modifier))
+
+STEP 4 — Master variance compute function
+Create artifacts/api-server/src/lib/variance/index.ts
+
+computeVarianceForLine(ppLineId): void
+1. Fetch pp_line + player
+2. Get fatigue from fatigue_data table
+3. Get spread + total from game_environment
+4. Compute blowout risk
+5. Compute usage delta from player_game_logs
+6. Compute matchup score from matchup_history
+7. Compute EV modifier from validated signals only
+8. Build whyItMoves human-readable summary
+9. Upsert to variance_scores
+
+computeAllVarianceScores(): number
+Loop all active pp_lines and compute variance.
+Return count of computed scores.
+
+STEP 5 — Backend routes
+Create artifacts/api-server/src/routes/variance.ts
+
+GET /api/variance/:ppLineId
+GET /api/variance
+POST /api/sync/variance (triggers computeAllVarianceScores)
+
+Add variance data to market-intel response:
+For each prop include variance object with:
+volatilityRating, blowoutRisk, fatigueScore,
+usageScore, matchupScore, warnings, evModifier,
+whyItMoves
+
+Add to cron schedule:
+Run computeAllVarianceScores() at 6:30 AM daily
+
+STEP 6 — Settings page
+Add Variance Intelligence section to settings:
+
+Master toggle (OFF by default)
+When ON show sub-toggles:
+  - Fatigue & Rest Modeling (default ON)
+  - Game Environment (default ON)
+  - Role & Usage Trends (default ON)
+  - Matchup Depth (default ON)
+  - Narrative Context (default OFF)
+  - Referee Modeling (default OFF)
+
+Optimizer modes (all OFF by default):
+  - Aggressive Variance Weighting
+  - Stable Picks Mode
+  - Ceiling Hunter Mode
+  - Exclude High Volatility
+
+Experimental Lab (separate gate):
+  - Requires confirmation dialog before enabling
+  - Dialog warns: zero statistical validity,
+    entertainment only, never influences EV
+  - Must click "I Understand — Enable Lab"
+
+STEP 7 — Variance badge component
+Create components/ui/variance-badge.tsx
+
+Volatility ratings:
+stable: green badge "STABLE"
+elevated: amber badge "ELEVATED"
+high: rose badge "VOLATILE"
+boom_bust: violet badge "BOOM/BUST"
+
+Show warning tags next to badge:
+B2B, 3in4, Blowout, Mins↓, Usage↑↑
+
+Only show badge when varianceIntelEnabled = true.
+When OFF the Slate Board looks identical to today.
+
+STEP 8 — Variance sidebar pages
+Add "Variance Intel" group to sidebar.
+Only visible when varianceIntelEnabled = true.
+
+Pages:
+/variance/stability — Stability Radar
+/variance/fatigue — Fatigue Tracker
+/variance/environment — Environment Board
+/variance/usage — Usage Signals
+/variance/lab — Experimental Lab
+  (only when experimentalLabEnabled = true)
+
+STEP 9 — Why This Edge panel
+Add to prop detail sheet when 
+varianceIntelEnabled = true:
+
+Show "Why This Edge Exists" panel with:
+- Human-readable whyItMoves summary
+- Signal meters (0-100) for each signal:
+  Fatigue Load, Environment, Usage Trend, 
+  Matchup Edge
+- EV modifier badge (+X% or -X%)
+- Warning tags
+- Projection reasoning from existing system
+
+STEP 10 — Optimizer integration
+When varianceIntelEnabled = true add these
+optimizer modes:
+
+Stable Grind: filter out volatilityRating=high
+and back_to_back warnings and blowoutRisk > 35
+
+Ceiling Hunter: boost score for usageScore > 70
+
+Sharp Market Only: show variance but ignore it
+in optimizer calculations
+
+STEP 11 — Experimental Lab page
+Create /variance/lab page.
+
+Show prominent disclaimer at top:
+"Experimental Signals — No Statistical Basis"
+"These signals are provided for entertainment
+and curiosity only. They do not influence EV
+calculations or recommendations."
+
+Show fields for:
+- Birthday game tracker
+- New shoes log
+- User annotation fields
+Label everything EXPERIMENTAL or UNVERIFIED.
+
+STEP 12 — Verify (9 acceptance tests)
+Run all 9 from the spec:
+
+1. Toggle OFF: Slate Board identical to before.
+   No variance badges visible anywhere.
+
+2. Toggle ON: each prop row shows volatility
+   badge. Prop detail shows Why This Edge panel.
+
+3. Experimental Lab requires confirmation dialog.
+   Dismissing keeps it disabled.
+
+4. Stable Grind returns zero back-to-back players
+   and zero props with blowoutRisk > 35.
+
+5. Player confirmed back-to-back shows
+   back_to_back warning and negative EV modifier.
+
+6. Blowout risk > 60% shows blowout_sensitive
+   warning and reduces EV by ~6%.
+
+7. Force Sync includes variance computation
+   as final step.
+
+8. Narrative signals appear in Why This Edge
+   panel but contribute 0 to EV modifier.
+
+9. Experimental Lab page shows disclaimer
+   banner at full prominence. Every signal
+   labeled EXPERIMENTAL or UNVERIFIED.
+
+Report pass or fail for all 9 tests.
