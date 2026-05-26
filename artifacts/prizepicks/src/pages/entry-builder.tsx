@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useCreateEntry } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -106,12 +106,25 @@ interface LossLimitState {
   limit: number;
 }
 
+type SortDir = "asc" | "desc";
+
 export default function EntryBuilder() {
   const { toast } = useToast();
   const [stake, setStake] = useState<string>("25");
   const [playstyle, setPlaystyle] = useState<"power" | "flex">("power");
   const [notes, setNotes] = useState<string>("");
+  const [pickSortCol, setPickSortCol] = useState<string>("pOver");
+  const [pickSortDir, setPickSortDir] = useState<SortDir>("desc");
   const { picks, removePick, updateDirection, clearPicks } = useEntry();
+
+  function togglePickSort(col: string) {
+    if (pickSortCol === col) {
+      setPickSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setPickSortCol(col);
+      setPickSortDir("desc");
+    }
+  }
   const createEntry = useCreateEntry();
   const [lossLimitDialog, setLossLimitDialog] = useState<LossLimitState | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
@@ -126,6 +139,31 @@ export default function EntryBuilder() {
 
   const stakeNum = parseFloat(stake) || 0;
   const n = picks.length;
+
+  const sortedPicks = useMemo(() => {
+    return [...picks].sort((a, b) => {
+      let cmp = 0;
+      switch (pickSortCol) {
+        case "pOver": {
+          const pA = legPHit(a) ?? -1;
+          const pB = legPHit(b) ?? -1;
+          cmp = pA - pB;
+          break;
+        }
+        case "playerName":
+          cmp = a.playerName.localeCompare(b.playerName);
+          break;
+        case "projGap": {
+          const ga = a.yourProjection != null ? a.yourProjection - a.lineValue : -999;
+          const gb = b.yourProjection != null ? b.yourProjection - b.lineValue : -999;
+          cmp = ga - gb;
+          break;
+        }
+        default: cmp = 0;
+      }
+      return pickSortDir === "asc" ? cmp : -cmp;
+    });
+  }, [picks, pickSortCol, pickSortDir]);
 
   // Detect same-team picks (correlation risk)
   const teamGroups = picks.reduce<Record<string, EntryPick[]>>((acc, p) => {
@@ -336,7 +374,24 @@ export default function EntryBuilder() {
           <div className="p-3 border-b border-slate-800 bg-slate-950 font-bold flex items-center gap-2 text-sm shrink-0">
             <Target className="w-4 h-4 text-primary" />
             Active Picks ({picks.length}/6)
-            <span className="ml-auto text-xs text-muted-foreground font-normal">Add props from the Slate Board</span>
+            {picks.length > 1 && (
+              <div className="ml-auto flex items-center gap-1">
+                <span className="text-[10px] font-mono font-normal text-slate-500">Sort:</span>
+                {([["pOver","Hit%"],["playerName","Name"],["projGap","Gap"]] as const).map(([col, lbl]) => (
+                  <button
+                    key={col}
+                    onClick={() => togglePickSort(col)}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-normal transition-colors ${
+                      pickSortCol === col
+                        ? "bg-primary/20 text-primary border border-primary/30"
+                        : "text-muted-foreground hover:text-foreground border border-transparent"
+                    }`}
+                  >
+                    {lbl}{pickSortCol === col ? (pickSortDir === "asc" ? " ↑" : " ↓") : ""}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex-1 overflow-auto">
             {picks.length === 0 ? (
@@ -364,7 +419,7 @@ export default function EntryBuilder() {
                     </div>
                   </div>
                 )}
-                {picks.map((pick) => (
+                {sortedPicks.map((pick) => (
                   <div key={pick.ppLineId} className="px-4 py-3 flex items-center gap-3">
                     <PlayerAvatar name={pick.playerName} imageUrl={pick.imageUrl} size="sm" />
                     <div className="flex-1 min-w-0">

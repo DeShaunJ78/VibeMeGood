@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import { Battery, RefreshCw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -165,13 +166,72 @@ function EmptyFatigueState({ onCompute }: { onCompute: () => void }) {
   );
 }
 
+type SortDir = "asc" | "desc";
+type FatigueSortCol = "fatigueScore" | "playerName" | "daysRest" | "travelMiles";
+
+const FATIGUE_SORT_OPTIONS: { col: FatigueSortCol; label: string }[] = [
+  { col: "fatigueScore", label: "Fatigue" },
+  { col: "playerName",   label: "Name" },
+  { col: "daysRest",     label: "Rest" },
+  { col: "travelMiles",  label: "Travel" },
+];
+
+function sortFatiguePlayers(players: FatiguePlayer[], col: FatigueSortCol, dir: SortDir) {
+  return [...players].sort((a, b) => {
+    let cmp = 0;
+    switch (col) {
+      case "fatigueScore": cmp = (a.fatigueScore ?? 0) - (b.fatigueScore ?? 0); break;
+      case "playerName":   cmp = a.playerName.localeCompare(b.playerName); break;
+      case "daysRest":     cmp = (a.daysRest ?? 99) - (b.daysRest ?? 99); break;
+      case "travelMiles":  cmp = (a.travelMiles ?? 0) - (b.travelMiles ?? 0); break;
+    }
+    return dir === "asc" ? cmp : -cmp;
+  });
+}
+
+function SortPills<T extends string>({
+  options, sortCol, sortDir, onSort,
+}: { options: { col: T; label: string }[]; sortCol: T; sortDir: SortDir; onSort: (c: T) => void }) {
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      <span className="text-[10px] font-mono text-slate-500 uppercase mr-1">Sort:</span>
+      {options.map(({ col, label }) => (
+        <button
+          key={col}
+          onClick={() => onSort(col)}
+          className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
+            sortCol === col
+              ? "bg-primary/20 text-primary border border-primary/30"
+              : "text-muted-foreground hover:text-foreground border border-transparent"
+          }`}
+        >
+          {label}{sortCol === col ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function FatigueTracker() {
   const { data, isLoading, refetch } = useFatigueData();
+  const [sortCol, setSortCol] = useState<FatigueSortCol>("fatigueScore");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  function toggleSort(col: FatigueSortCol) {
+    if (sortCol === col) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortCol(col);
+      setSortDir(col === "playerName" ? "asc" : "desc");
+    }
+  }
 
   const players    = data?.players ?? [];
   const summary    = data?.summary;
-  const highFatigue = players.filter(p => (p.fatigueScore ?? 0) >= 40);
-  const rested     = players.filter(p => (p.daysRest ?? 0) >= 4);
+
+  const sortedPlayers = useMemo(() => sortFatiguePlayers(players, sortCol, sortDir), [players, sortCol, sortDir]);
+  const highFatigue   = useMemo(() => sortedPlayers.filter(p => (p.fatigueScore ?? 0) >= 40), [sortedPlayers]);
+  const rested        = useMemo(() => sortedPlayers.filter(p => (p.daysRest ?? 0) >= 4), [sortedPlayers]);
 
   async function handleComputeNow() {
     await fetch(`${base}/api/sync/fatigue`, { method: "POST" });
@@ -219,39 +279,42 @@ export default function FatigueTracker() {
       ) : players.length === 0 ? (
         <EmptyFatigueState onCompute={handleComputeNow} />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="bg-slate-900 border-slate-800">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-mono uppercase tracking-wider text-rose-400 flex items-center gap-2">
-                <Battery className="w-4 h-4" /> High Fatigue Load
-                <span className="ml-auto text-muted-foreground">{highFatigue.length}</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {highFatigue.length === 0 ? (
-                <p className="text-xs text-muted-foreground font-mono">No high-fatigue players</p>
-              ) : highFatigue.slice(0, 12).map(p => (
-                <FatiguePlayerRow key={p.playerId} player={p} />
-              ))}
-            </CardContent>
-          </Card>
+        <>
+          <SortPills options={FATIGUE_SORT_OPTIONS} sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-mono uppercase tracking-wider text-rose-400 flex items-center gap-2">
+                  <Battery className="w-4 h-4" /> High Fatigue Load
+                  <span className="ml-auto text-muted-foreground">{highFatigue.length}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {highFatigue.length === 0 ? (
+                  <p className="text-xs text-muted-foreground font-mono">No high-fatigue players</p>
+                ) : highFatigue.slice(0, 12).map(p => (
+                  <FatiguePlayerRow key={p.playerId} player={p} />
+                ))}
+              </CardContent>
+            </Card>
 
-          <Card className="bg-slate-900 border-slate-800">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-mono uppercase tracking-wider text-emerald-400 flex items-center gap-2">
-                <Battery className="w-4 h-4" /> Well Rested — Advantage
-                <span className="ml-auto text-muted-foreground">{rested.length}</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {rested.length === 0 ? (
-                <p className="text-xs text-muted-foreground font-mono">No well-rested players identified</p>
-              ) : rested.slice(0, 12).map(p => (
-                <FatiguePlayerRow key={p.playerId} player={p} />
-              ))}
-            </CardContent>
-          </Card>
-        </div>
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-mono uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+                  <Battery className="w-4 h-4" /> Well Rested — Advantage
+                  <span className="ml-auto text-muted-foreground">{rested.length}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {rested.length === 0 ? (
+                  <p className="text-xs text-muted-foreground font-mono">No well-rested players identified</p>
+                ) : rested.slice(0, 12).map(p => (
+                  <FatiguePlayerRow key={p.playerId} player={p} />
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </>
       )}
     </div>
   );

@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import { Wind } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,11 +29,68 @@ function useVarianceScores() {
   });
 }
 
+type SortDir = "asc" | "desc";
+type EnvSortCol = "blowoutRisk" | "environmentScore" | "playerName";
+
+function SortPills({
+  sortCol, sortDir, onSort, cols,
+}: { sortCol: EnvSortCol; sortDir: SortDir; onSort: (c: EnvSortCol) => void; cols: { col: EnvSortCol; label: string }[] }) {
+  return (
+    <div className="flex items-center gap-1 ml-auto">
+      {cols.map(({ col, label }) => (
+        <button
+          key={col}
+          onClick={() => onSort(col)}
+          className={`px-1.5 py-0.5 rounded text-[9px] font-mono transition-colors ${
+            sortCol === col
+              ? "bg-primary/20 text-primary border border-primary/30"
+              : "text-muted-foreground hover:text-foreground border border-transparent"
+          }`}
+        >
+          {label}{sortCol === col ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function sortRows(rows: VarianceRow[], col: EnvSortCol, dir: SortDir) {
+  return [...rows].sort((a, b) => {
+    let cmp = 0;
+    switch (col) {
+      case "blowoutRisk":      cmp = (a.blowoutRisk ?? 0) - (b.blowoutRisk ?? 0); break;
+      case "environmentScore": cmp = (a.environmentScore ?? 0) - (b.environmentScore ?? 0); break;
+      case "playerName":       cmp = (a.playerName ?? "").localeCompare(b.playerName ?? ""); break;
+    }
+    return dir === "asc" ? cmp : -cmp;
+  });
+}
+
 export default function EnvironmentBoard() {
   const { data, isLoading } = useVarianceScores();
+  const [riskSort, setRiskSort]     = useState<EnvSortCol>("blowoutRisk");
+  const [riskSortDir, setRiskSortDir] = useState<SortDir>("desc");
+  const [envSort, setEnvSort]       = useState<EnvSortCol>("environmentScore");
+  const [envSortDir, setEnvSortDir] = useState<SortDir>("desc");
 
-  const highRisk = (data ?? []).filter(r => (r.blowoutRisk ?? 0) >= 35).sort((a, b) => (b.blowoutRisk ?? 0) - (a.blowoutRisk ?? 0));
-  const goodEnv = (data ?? []).filter(r => (r.environmentScore ?? 50) >= 70 && (r.blowoutRisk ?? 0) < 25).sort((a, b) => (b.environmentScore ?? 0) - (a.environmentScore ?? 0));
+  function toggleRisk(col: EnvSortCol) {
+    if (riskSort === col) { setRiskSortDir(d => d === "asc" ? "desc" : "asc"); }
+    else { setRiskSort(col); setRiskSortDir(col === "playerName" ? "asc" : "desc"); }
+  }
+  function toggleEnv(col: EnvSortCol) {
+    if (envSort === col) { setEnvSortDir(d => d === "asc" ? "desc" : "asc"); }
+    else { setEnvSort(col); setEnvSortDir(col === "playerName" ? "asc" : "desc"); }
+  }
+
+  const highRisk = useMemo(() => {
+    const base = (data ?? []).filter(r => (r.blowoutRisk ?? 0) >= 35);
+    return sortRows(base, riskSort, riskSortDir);
+  }, [data, riskSort, riskSortDir]);
+
+  const goodEnv = useMemo(() => {
+    const base = (data ?? []).filter(r => (r.environmentScore ?? 50) >= 70 && (r.blowoutRisk ?? 0) < 25);
+    return sortRows(base, envSort, envSortDir);
+  }, [data, envSort, envSortDir]);
 
   return (
     <div className="space-y-6">
@@ -60,7 +118,13 @@ export default function EnvironmentBoard() {
               <CardTitle className="text-sm font-mono uppercase tracking-wider text-rose-400 flex items-center gap-2">
                 <span className="inline-block w-2 h-2 rounded-full bg-rose-400" />
                 Blowout Risk ≥35%
-                <span className="ml-auto text-muted-foreground">{highRisk.length}</span>
+                <span className="text-muted-foreground">{highRisk.length}</span>
+                <SortPills
+                  sortCol={riskSort}
+                  sortDir={riskSortDir}
+                  onSort={toggleRisk}
+                  cols={[{ col: "blowoutRisk", label: "Risk%" }, { col: "playerName", label: "Name" }]}
+                />
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -89,7 +153,13 @@ export default function EnvironmentBoard() {
               <CardTitle className="text-sm font-mono uppercase tracking-wider text-emerald-400 flex items-center gap-2">
                 <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />
                 Favorable Environment
-                <span className="ml-auto text-muted-foreground">{goodEnv.length}</span>
+                <span className="text-muted-foreground">{goodEnv.length}</span>
+                <SortPills
+                  sortCol={envSort}
+                  sortDir={envSortDir}
+                  onSort={toggleEnv}
+                  cols={[{ col: "environmentScore", label: "Env" }, { col: "playerName", label: "Name" }]}
+                />
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">

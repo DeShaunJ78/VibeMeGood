@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import {
   useListEntries, getListEntriesQueryKey, useCreateEntry,
   useUpdateEntry, useUpdateEntryPick,
@@ -527,6 +527,10 @@ function NewEntryModal({ open, onClose }: { open: boolean; onClose: () => void }
   );
 }
 
+type SortDir = "asc" | "desc";
+
+const RESULT_ORDER: Record<string, number> = { win: 0, partial: 1, pending: 2, loss: 3, refund: 4 };
+
 export default function Journal() {
   const [search, setSearch]     = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -534,7 +538,23 @@ export default function Journal() {
   const [result, setResult]     = useState("");
   const [sport, setSport]       = useState("");
   const [newOpen, setNewOpen]   = useState(false);
+  const [sortCol, setSortCol]   = useState<string>("date");
+  const [sortDir, setSortDir]   = useState<SortDir>("desc");
   const qc = useQueryClient();
+
+  function toggleSort(col: string) {
+    if (sortCol === col) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortCol(col);
+      setSortDir("desc");
+    }
+  }
+
+  function sortLabel(col: string, label: string) {
+    const active = sortCol === col;
+    return `${label}${active ? (sortDir === "asc" ? " ↑" : " ↓") : ""}`;
+  }
 
   const params = {
     ...(search   ? { search }   : {}),
@@ -550,7 +570,40 @@ export default function Journal() {
     { query: { queryKey: getListEntriesQueryKey(hasParams ? params : undefined) } }
   );
 
-  const list = entries ?? [];
+  const rawList = entries ?? [];
+
+  const list = useMemo(() => {
+    return [...rawList].sort((a: any, b: any) => {
+      let cmp = 0;
+      switch (sortCol) {
+        case "date":
+          cmp = new Date(a.entryDate).getTime() - new Date(b.entryDate).getTime();
+          break;
+        case "result":
+          cmp = (RESULT_ORDER[a.result] ?? 99) - (RESULT_ORDER[b.result] ?? 99);
+          break;
+        case "pnl": {
+          const getPnl = (e: any) => {
+            if (e.result === "win" || e.result === "partial") return Number(e.actualPayout ?? 0) - Number(e.stake);
+            if (e.result === "loss") return -Number(e.stake);
+            return 0;
+          };
+          cmp = getPnl(a) - getPnl(b);
+          break;
+        }
+        case "stake":
+          cmp = Number(a.stake) - Number(b.stake);
+          break;
+        case "pickCount":
+          cmp = (a.pickCount ?? 0) - (b.pickCount ?? 0);
+          break;
+        default:
+          cmp = new Date(a.entryDate).getTime() - new Date(b.entryDate).getTime();
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [rawList, sortCol, sortDir]);
+
   const settled = list.filter((e: any) => e.result !== "pending");
   const pnl = settled.reduce((sum: number, e: any) => {
     const p = Number(e.actualPayout ?? 0);
@@ -678,6 +731,27 @@ export default function Journal() {
         )}
       </div>
 
+      {/* ── Sort bar ── */}
+      <div className="flex items-center gap-1 shrink-0 flex-wrap">
+        <span className="text-[10px] font-mono text-slate-500 uppercase mr-1">Sort:</span>
+        {(["date", "result", "pnl", "pickCount", "stake"] as const).map(col => {
+          const labels: Record<string, string> = { date: "Date", result: "Result", pnl: "P&L", pickCount: "Picks", stake: "Stake" };
+          return (
+            <button
+              key={col}
+              onClick={() => toggleSort(col)}
+              className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                sortCol === col
+                  ? "bg-primary/20 text-primary border border-primary/30"
+                  : "text-muted-foreground hover:text-foreground border border-transparent"
+              }`}
+            >
+              {sortLabel(col, labels[col])}
+            </button>
+          );
+        })}
+      </div>
+
       {/* ── Entry list ── */}
       <div className="flex-1 overflow-auto space-y-2 min-h-0">
         {isLoading ? (
@@ -698,6 +772,7 @@ export default function Journal() {
           </div>
         ) : (
           list.map((entry: any) => <EntryRow key={entry.id} entry={entry} />)
+
         )}
       </div>
 

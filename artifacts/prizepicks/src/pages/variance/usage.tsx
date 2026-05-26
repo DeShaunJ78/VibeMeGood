@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import { Activity } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,15 +29,79 @@ function useVarianceScores() {
   });
 }
 
+type SortDir = "asc" | "desc";
+type UsageSortCol = "score" | "playerName";
+
+function SortPills({
+  sortCol, sortDir, onSort, scoreLabel,
+}: { sortCol: UsageSortCol; sortDir: SortDir; onSort: (c: UsageSortCol) => void; scoreLabel: string }) {
+  return (
+    <div className="flex items-center gap-1 ml-auto">
+      {([["score", scoreLabel], ["playerName", "Name"]] as [UsageSortCol, string][]).map(([col, lbl]) => (
+        <button
+          key={col}
+          onClick={() => onSort(col)}
+          className={`px-1.5 py-0.5 rounded text-[9px] font-mono transition-colors ${
+            sortCol === col
+              ? "bg-primary/20 text-primary border border-primary/30"
+              : "text-muted-foreground hover:text-foreground border border-transparent"
+          }`}
+        >
+          {lbl}{sortCol === col ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function UsageSignals() {
   const { data, isLoading } = useVarianceScores();
+  const [spikeSort, setSpikeSort]     = useState<UsageSortCol>("score");
+  const [spikeSortDir, setSpikeSortDir] = useState<SortDir>("desc");
+  const [shrinkSort, setShrinkSort]   = useState<UsageSortCol>("score");
+  const [shrinkSortDir, setShrinkSortDir] = useState<SortDir>("asc");
+  const [matchSort, setMatchSort]     = useState<UsageSortCol>("score");
+  const [matchSortDir, setMatchSortDir] = useState<SortDir>("desc");
 
-  const spiked = (data ?? []).filter(r => (r.usageScore ?? 50) >= 72 || r.warnings?.includes("usage_volatile"))
-    .sort((a, b) => (b.usageScore ?? 0) - (a.usageScore ?? 0));
-  const shrinking = (data ?? []).filter(r => (r.usageScore ?? 50) <= 28 || r.warnings?.includes("minutes_risk"))
-    .sort((a, b) => (a.usageScore ?? 0) - (b.usageScore ?? 0));
-  const strongMatchup = (data ?? []).filter(r => (r.matchupScore ?? 50) >= 70)
-    .sort((a, b) => (b.matchupScore ?? 0) - (a.matchupScore ?? 0));
+  function toggle(
+    col: UsageSortCol,
+    current: UsageSortCol,
+    setCurrent: (c: UsageSortCol) => void,
+    dir: SortDir,
+    setDir: (d: SortDir) => void,
+    defaultDesc: boolean,
+  ) {
+    if (current === col) {
+      setDir(dir === "asc" ? "desc" : "asc");
+    } else {
+      setCurrent(col);
+      setDir(defaultDesc ? "desc" : "asc");
+    }
+  }
+
+  function sortRows(rows: VarianceRow[], col: UsageSortCol, dir: SortDir, scoreKey: "usageScore" | "matchupScore") {
+    return [...rows].sort((a, b) => {
+      let cmp = 0;
+      if (col === "score") cmp = (a[scoreKey] ?? 0) - (b[scoreKey] ?? 0);
+      else cmp = (a.playerName ?? "").localeCompare(b.playerName ?? "");
+      return dir === "asc" ? cmp : -cmp;
+    });
+  }
+
+  const spiked = useMemo(() => {
+    const base = (data ?? []).filter(r => (r.usageScore ?? 50) >= 72 || r.warnings?.includes("usage_volatile"));
+    return sortRows(base, spikeSort, spikeSortDir, "usageScore");
+  }, [data, spikeSort, spikeSortDir]);
+
+  const shrinking = useMemo(() => {
+    const base = (data ?? []).filter(r => (r.usageScore ?? 50) <= 28 || r.warnings?.includes("minutes_risk"));
+    return sortRows(base, shrinkSort, shrinkSortDir, "usageScore");
+  }, [data, shrinkSort, shrinkSortDir]);
+
+  const strongMatchup = useMemo(() => {
+    const base = (data ?? []).filter(r => (r.matchupScore ?? 50) >= 70);
+    return sortRows(base, matchSort, matchSortDir, "matchupScore");
+  }, [data, matchSort, matchSortDir]);
 
   return (
     <div className="space-y-6">
@@ -63,7 +128,13 @@ export default function UsageSignals() {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-mono uppercase tracking-wider text-violet-400 flex items-center gap-2">
                 Usage Spike ↑
-                <span className="ml-auto text-muted-foreground">{spiked.length}</span>
+                <span className="text-muted-foreground">{spiked.length}</span>
+                <SortPills
+                  scoreLabel="Score"
+                  sortCol={spikeSort}
+                  sortDir={spikeSortDir}
+                  onSort={col => toggle(col, spikeSort, setSpikeSort, spikeSortDir, setSpikeSortDir, col !== "playerName")}
+                />
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -87,7 +158,13 @@ export default function UsageSignals() {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-mono uppercase tracking-wider text-orange-400 flex items-center gap-2">
                 Role Shrinking ↓
-                <span className="ml-auto text-muted-foreground">{shrinking.length}</span>
+                <span className="text-muted-foreground">{shrinking.length}</span>
+                <SortPills
+                  scoreLabel="Score"
+                  sortCol={shrinkSort}
+                  sortDir={shrinkSortDir}
+                  onSort={col => toggle(col, shrinkSort, setShrinkSort, shrinkSortDir, setShrinkSortDir, false)}
+                />
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -113,7 +190,13 @@ export default function UsageSignals() {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-mono uppercase tracking-wider text-cyan-400 flex items-center gap-2">
                 Matchup Edge
-                <span className="ml-auto text-muted-foreground">{strongMatchup.length}</span>
+                <span className="text-muted-foreground">{strongMatchup.length}</span>
+                <SortPills
+                  scoreLabel="Matchup%"
+                  sortCol={matchSort}
+                  sortDir={matchSortDir}
+                  onSort={col => toggle(col, matchSort, setMatchSort, matchSortDir, setMatchSortDir, col !== "playerName")}
+                />
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">

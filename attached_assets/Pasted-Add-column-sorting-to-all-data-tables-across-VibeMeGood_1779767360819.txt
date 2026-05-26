@@ -1,0 +1,97 @@
+Add column sorting to all data tables across 
+VibeMeGood. Click header = sort ascending, 
+click again = sort descending, arrow indicator 
+shows active sort column.
+
+TABLES TO ADD SORTING TO:
+
+1. Slate Board — sort by:
+   - Player name (A-Z)
+   - Stat type
+   - PP Line value
+   - Your projection
+   - Projection gap (default sort, descending)
+   - Hit probability (descending)
+   - True Edge (descending)
+   - Confidence
+   - Fatigue score (when variance enabled)
+   - Blowout risk (when variance enabled)
+
+2. Journal / Paper Log — sort by:
+   - Date (default, newest first)
+   - Player name
+   - Result (won/lost/partial)
+   - P&L (descending)
+   - Sport
+
+3. Variance pages — sort by:
+   Fatigue Tracker:
+   - Fatigue score (default, descending)
+   - Player name
+   - Days rest
+   - Travel miles
+
+   Usage Signals:
+   - Usage score (default, descending)
+   - Player name
+   - Usage delta %
+   - Minutes trend
+
+   Stability Radar:
+   - Volatility rating
+   - Player name
+   - Blowout risk
+
+   Environment Board:
+   - Environment score (default, descending)
+   - Game total
+   - Spread
+
+4. Entry Builder picks list — sort by:
+   - Hit probability (default, descending)
+   - Player name
+   - Projection gap
+
+IMPLEMENTATION:
+- Use React state to track sort column 
+  and direction (asc/desc)
+- Sort client-side on existing data
+  No new API calls needed
+- Show sort arrow indicator next to 
+  active column header:
+  ↑ for ascending
+  ↓ for descending
+  No arrow for inactive columns
+- Clicking active column toggles direction
+- Clicking new column resets to descending
+
+DEFAULT SORTS:
+- Slate Board: projection gap descending
+  (biggest edges first)
+- Journal: date descending (newest first)
+- Fatigue Tracker: fatigue score descending
+  (most fatigued first)
+- Usage Signals: usage delta descending
+  (biggest spikes first)
+- Stability Radar: volatility rating
+  (high → elevated → stable)
+- Entry Builder: hit probability descending
+
+VERIFY:
+After implementing confirm:
+
+1. Slate Board — click "Proj Gap" header
+   Confirm rows re-sort with arrow showing
+   Click again — confirm direction reverses
+
+2. Click a different column header
+   Confirm sort switches to that column
+   Arrow moves to new column
+
+3. Journal — click "P&L" header
+   Confirm sorts by profit/loss
+
+4. Variance Fatigue page — click "Fatigue"
+   Confirm sorts highest fatigue first
+
+Report pass or fail for all 4 checks.

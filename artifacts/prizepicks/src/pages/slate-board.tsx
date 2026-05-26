@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import {
   useGetSlate, getGetSlateQueryKey,
   useAddToWatchlist, useRemoveFromWatchlist,
@@ -280,6 +280,28 @@ interface OptResult {
   ourProjection: OurProjection | null;
 }
 
+type SortDir = "asc" | "desc";
+
+function SortTh({
+  col, label, sortCol, sortDir, onSort, className = "", children,
+}: {
+  col: string; label?: string; sortCol: string; sortDir: SortDir;
+  onSort: (c: string) => void; className?: string; children?: ReactNode;
+}) {
+  const active = sortCol === col;
+  return (
+    <TableHead
+      onClick={() => onSort(col)}
+      className={`cursor-pointer select-none hover:text-foreground font-mono text-xs ${className}`}
+    >
+      <span className="inline-flex items-center gap-0.5">
+        {children ?? label}
+        {active ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+      </span>
+    </TableHead>
+  );
+}
+
 export default function SlateBoard() {
   const { data: userSettings } = useUserSettings();
   const varianceEnabled = userSettings?.varianceIntelEnabled ?? false;
@@ -296,6 +318,17 @@ export default function SlateBoard() {
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(75);
+  const [sortCol, setSortCol] = useState<string>("projGap");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  function toggleSort(col: string) {
+    if (sortCol === col) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortCol(col);
+      setSortDir("desc");
+    }
+  }
 
   const OPT_KEY    = "pp_opt_results";
   const OPT_TS_KEY = "pp_opt_ts";
@@ -413,12 +446,27 @@ export default function SlateBoard() {
       );
     }
     return [...rows].sort((a, b) => {
-      const aPOver = a.ourProjection?.pOver ?? -1;
-      const bPOver = b.ourProjection?.pOver ?? -1;
-      if (bPOver !== aPOver) return bPOver - aPOver;
-      return (b.edgeScore ?? 0) - (a.edgeScore ?? 0);
+      let cmp = 0;
+      switch (sortCol) {
+        case "playerName": cmp = (a.playerName ?? "").localeCompare(b.playerName ?? ""); break;
+        case "statType":   cmp = (a.statType ?? "").localeCompare(b.statType ?? ""); break;
+        case "ppLine":     cmp = (a.lineValue ?? 0) - (b.lineValue ?? 0); break;
+        case "ourProj":    cmp = (a.ourProjection?.value ?? -1) - (b.ourProjection?.value ?? -1); break;
+        case "projGap": {
+          const ga = a.ourProjection ? a.ourProjection.value - a.lineValue : -999;
+          const gb = b.ourProjection ? b.ourProjection.value - b.lineValue : -999;
+          cmp = ga - gb; break;
+        }
+        case "pOver":    cmp = (a.ourProjection?.pOver ?? -1) - (b.ourProjection?.pOver ?? -1); break;
+        case "trueEdge": cmp = (a.trueEdge ?? -999) - (b.trueEdge ?? -999); break;
+        case "fatigue":  cmp = (a.variance?.fatigueScore ?? 0) - (b.variance?.fatigueScore ?? 0); break;
+        case "blowout":  cmp = (a.variance?.blowoutRisk ?? 0) - (b.variance?.blowoutRisk ?? 0); break;
+        default:
+          cmp = (a.ourProjection?.pOver ?? -1) - (b.ourProjection?.pOver ?? -1);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [allRows, lineTypeFilter, minEdge, searchQuery]);
+  }, [allRows, lineTypeFilter, minEdge, searchQuery, sortCol, sortDir]);
 
   const watchCount  = useMemo(() => playerRows.filter(r => r.isWatched).length,   [playerRows]);
   const noPlayCount = useMemo(() => playerRows.filter(r => r.actionTag === "NO-PLAY").length, [playerRows]);
@@ -430,7 +478,7 @@ export default function SlateBoard() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  useEffect(() => { setVisibleCount(75); }, [lineTypeFilter, minEdge, sport, searchQuery]);
+  useEffect(() => { setVisibleCount(75); }, [lineTypeFilter, minEdge, sport, searchQuery, sortCol]);
 
   const runOptimizer = useCallback(() => {
     const multiplier = POWER_MULTIPLIERS[optPickCount] ?? 10;
@@ -647,41 +695,42 @@ export default function SlateBoard() {
                 <TableRow className="border-slate-800 hover:bg-slate-950">
                   <TableHead className="w-8 font-mono text-xs" />
                   <TableHead className="w-14 font-mono text-xs">Sport</TableHead>
-                  <TableHead className="font-mono text-xs">Player</TableHead>
+                  <SortTh col="playerName" label="Player" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                   <TableHead className="hidden md:table-cell w-12 font-mono text-xs">Team</TableHead>
                   <TableHead className="hidden md:table-cell w-12 font-mono text-xs">Opp</TableHead>
-                  <TableHead className="w-28 font-mono text-xs">Stat</TableHead>
-                  <TableHead className="w-16 font-mono text-xs text-right">PP Line</TableHead>
+                  <SortTh col="statType" label="Stat" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="w-28" />
+                  <SortTh col="ppLine" label="PP Line" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="w-16 text-right" />
                   <TableHead className="w-20 font-mono text-xs text-center">Type</TableHead>
                   <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-right">Mkt Avg</TableHead>
-                  <TableHead className="hidden lg:table-cell w-22 font-mono text-xs text-right">
+                  <SortTh col="trueEdge" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-22 text-right">
                     <Tooltip>
-                      <TooltipTrigger>True Edge</TooltipTrigger>
+                      <TooltipTrigger className="cursor-pointer">True Edge{sortCol === "trueEdge" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</TooltipTrigger>
                       <TooltipContent className="text-xs max-w-xs">
                         Our model P(over) vs consensus no-vig market probability. Vig stripped from external book lines.
                       </TooltipContent>
                     </Tooltip>
-                  </TableHead>
+                  </SortTh>
                   <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-right">Hold%</TableHead>
-                  <TableHead className="hidden lg:table-cell w-28 font-mono text-xs text-right">Our Proj</TableHead>
-                  <TableHead className="w-20 font-mono text-xs text-center">P(Over)</TableHead>
+                  <SortTh col="projGap" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-28 text-right" label="Our Proj ⇕" />
+                  <SortTh col="pOver" label="P(Over)" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="w-20 text-center" />
                   <TableHead className="hidden md:table-cell w-14 font-mono text-xs text-center">Streak</TableHead>
                   <TableHead className="w-24 font-mono text-xs text-center">Action</TableHead>
-                  {varianceEnabled && <TableHead className="hidden lg:table-cell w-22 font-mono text-xs text-center">Volatility</TableHead>}
+                  {varianceEnabled && <SortTh col="fatigue" label="Fatigue" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-22 text-center" />}
+                  {varianceEnabled && <SortTh col="blowout" label="Blowout%" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-22 text-center" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   Array.from({ length: 10 }).map((_, i) => (
                     <TableRow key={i} className="border-slate-800">
-                      {Array.from({ length: varianceEnabled ? 16 : 15 }).map((_, j) => (
+                      {Array.from({ length: varianceEnabled ? 17 : 15 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full bg-slate-800" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : playerRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={varianceEnabled ? 16 : 15} className="h-48 text-center text-muted-foreground font-mono">
+                    <TableCell colSpan={varianceEnabled ? 17 : 15} className="h-48 text-center text-muted-foreground font-mono">
                       No props — click Force Sync to load live slate
                     </TableCell>
                   </TableRow>
