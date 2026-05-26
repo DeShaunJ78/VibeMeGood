@@ -70,11 +70,30 @@ export async function syncPlatformLines(): Promise<PlatformSyncResult> {
     skipped.push(`underdog (${msg})`);
   }
 
-  // ── Pick6 — endpoint unreachable (HTTP 000 / connection refused) ────
-  skipped.push("pick6 (endpoint unreachable — HTTP 000)");
+  // ── Pick6 — parked GoDaddy domain; no active platform at pick6.com ──
+  // Investigated: pick6.com serves a GoDaddy parking page. api.pick6.com has
+  // no DNS record. pick6sports.com redirects to a defunct site (404).
+  // No accessible pick'em platform found at any pick6.* URL.
+  skipped.push("pick6 (domain is parked — no active platform found)");
 
-  // ── Betr — requires session auth (HTTP 500 / SessionNotFoundException) ─
+  // ── Betr — requires Symfony PHP session auth on every endpoint ────────
+  // Investigated: api.betr.app returns HTTP 500 + SessionNotFoundException on
+  // ALL routes including session-init itself. Headers (platform/jurisdiction)
+  // make no difference. No public API key system, no anonymous access path.
   skipped.push("betr (requires session auth — not publicly accessible)");
+
+  // ── Sleeper — pick'em lines gated behind user authentication ─────────
+  // Investigated: GraphQL schema has a Line type with outcome_value/subject/
+  // sport. REST sleeper.com/lines returns [] for all sports. GraphQL queries
+  // available_line_promotions, my_active_positions all return Unauthorized.
+  // No anonymous access path exists via REST or GraphQL.
+  skipped.push("sleeper (pick'em lines require user authentication)");
+
+  // ── ParlayPlay — domain does not resolve from server environment ──────
+  // Investigated: parlayplay.io and api.parlayplay.io both return HTTP 000
+  // (no DNS resolution) from Replit's network. Cloudflare JS challenge blocks
+  // all API paths even with a browser User-Agent.
+  skipped.push("parlayplay (domain unreachable — Cloudflare bot protection)");
 
   return { underdog: underdogCount, skipped };
 }
