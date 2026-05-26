@@ -40,7 +40,7 @@ async function fetchHealth(): Promise<HealthData> {
 
 async function triggerSync(action: string): Promise<void> {
   const map: Record<string, string> = {
-    "pp-lines":       "/api/sync/prizepicks",
+    "pp-lines":       "/api/sync/pp-lines",
     "external-odds":  "/api/sync/external-odds",
     "projections":    "/api/sync/projections",
     "injuries":       "/api/sync/injuries",

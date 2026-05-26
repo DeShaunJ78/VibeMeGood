@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { playersTable, entriesTable, entryPicksTable } from "@workspace/db/schema";
+import { playersTable, entriesTable, entryPicksTable, type InsertEntryPick } from "@workspace/db/schema";
 
 type PickKey =
   | "jokicPts" | "jokicAst" | "jokicReb"
@@ -153,7 +153,7 @@ async function seedEntries() {
   const inserted = await db.insert(entriesTable).values(entryRows).returning();
   console.log(`Inserted ${inserted.length} entries`);
 
-  const allPicks: typeof entryPicksTable.$inferInsert[] = [];
+  const allPicks: InsertEntryPick[] = [];
   for (let i = 0; i < ENTRIES.length; i++) {
     const def = ENTRIES[i];
     const entry = inserted[i];

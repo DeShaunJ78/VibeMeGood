@@ -66,7 +66,7 @@ const PickResultSchema = z.object({
 
 router.get("/entries/loss-limit-status", async (req, res): Promise<void> => {
   try {
-    const userId = (req.query.userId as string) ?? "local";
+    const userId = (req.query.userId as string) ?? "default";
     const [settings] = await db
       .select({ dailyLossLimit: userSettingsTable.dailyLossLimit })
       .from(userSettingsTable)
@@ -149,7 +149,7 @@ router.get("/entries", async (req, res) => {
 router.post("/entries", async (req, res): Promise<void> => {
   try {
     const body = req.body as Record<string, unknown>;
-    const userId = (body.userId as string) ?? "local";
+    const userId = (body.userId as string) ?? "default";
 
     // Strip non-schema keys before validation
     const { userId: _u, overrideLossLimit: _o, ...entryBody } = body;
