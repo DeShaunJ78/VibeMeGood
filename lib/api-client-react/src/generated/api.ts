@@ -87,6 +87,9 @@ import type {
   PropDetail,
   PropScore,
   ReviewStats,
+  SharpSignalRow,
+  SharpSummary,
+  SharpSyncResult,
   SlateRow,
   SyncResult,
   Team,
@@ -5467,6 +5470,230 @@ export const useSyncPaceRatings = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getSyncPaceRatingsMutationOptions(options));
     }
+
+export const getComputeSharpSignalsUrl = () => {
+
+
+
+
+  return `/api/sharp/compute`
+}
+
+/**
+ * @summary Compute and store sharp money signals for all line moves in the last 24h
+ */
+export const computeSharpSignals = async ( options?: RequestInit): Promise<SharpSyncResult> => {
+
+  return customFetch<SharpSyncResult>(getComputeSharpSignalsUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getComputeSharpSignalsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof computeSharpSignals>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof computeSharpSignals>>, TError,void, TContext> => {
+
+const mutationKey = ['computeSharpSignals'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof computeSharpSignals>>, void> = () => {
+
+
+          return  computeSharpSignals(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ComputeSharpSignalsMutationResult = NonNullable<Awaited<ReturnType<typeof computeSharpSignals>>>
+
+    export type ComputeSharpSignalsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Compute and store sharp money signals for all line moves in the last 24h
+ */
+export const useComputeSharpSignals = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof computeSharpSignals>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof computeSharpSignals>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getComputeSharpSignalsMutationOptions(options));
+    }
+
+export const getGetSharpSignalsUrl = () => {
+
+
+
+
+  return `/api/sharp/signals`
+}
+
+/**
+ * @summary Get all props with a detected sharp signal today
+ */
+export const getSharpSignals = async ( options?: RequestInit): Promise<SharpSignalRow[]> => {
+
+  return customFetch<SharpSignalRow[]>(getGetSharpSignalsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSharpSignalsQueryKey = () => {
+    return [
+    `/api/sharp/signals`
+    ] as const;
+    }
+
+
+export const getGetSharpSignalsQueryOptions = <TData = Awaited<ReturnType<typeof getSharpSignals>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSharpSignals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSharpSignalsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSharpSignals>>> = ({ signal }) => getSharpSignals({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSharpSignals>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSharpSignalsQueryResult = NonNullable<Awaited<ReturnType<typeof getSharpSignals>>>
+export type GetSharpSignalsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get all props with a detected sharp signal today
+ */
+
+export function useGetSharpSignals<TData = Awaited<ReturnType<typeof getSharpSignals>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSharpSignals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSharpSignalsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetSharpSummaryUrl = () => {
+
+
+
+
+  return `/api/sharp/summary`
+}
+
+/**
+ * @summary Count of sharp / public / neutral signals today
+ */
+export const getSharpSummary = async ( options?: RequestInit): Promise<SharpSummary> => {
+
+  return customFetch<SharpSummary>(getGetSharpSummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSharpSummaryQueryKey = () => {
+    return [
+    `/api/sharp/summary`
+    ] as const;
+    }
+
+
+export const getGetSharpSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getSharpSummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSharpSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSharpSummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSharpSummary>>> = ({ signal }) => getSharpSummary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSharpSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSharpSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getSharpSummary>>>
+export type GetSharpSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Count of sharp / public / neutral signals today
+ */
+
+export function useGetSharpSummary<TData = Awaited<ReturnType<typeof getSharpSummary>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSharpSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSharpSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getGetPlatformLinesByPropUrl = (params: GetPlatformLinesByPropParams,) => {
   const normalizedParams = new URLSearchParams();

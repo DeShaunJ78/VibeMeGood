@@ -19,6 +19,11 @@ interface PropDetailSheetProps {
   ppLineId: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  sharpSignal?:      string | null;
+  sharpConfidence?:  string | null;
+  sharpExplanation?: string | null;
+  sharpSide?:        string | null;
+  sharpPublicPct?:   number | null;
 }
 
 interface HitRateWindow {
@@ -218,7 +223,7 @@ function WhyThisEdgePanel({ variance, gamePace }: { variance: VarianceData; game
   );
 }
 
-export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailSheetProps) {
+export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sharpConfidence, sharpExplanation, sharpSide, sharpPublicPct }: PropDetailSheetProps) {
   const [data, setData] = useState<PropDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [explainText, setExplainText] = useState<string>("");
@@ -775,6 +780,40 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
                       </div>
                     );
                   })()}
+                </div>
+              )}
+
+              {/* ── Sharp Signal ── */}
+              {sharpSignal && sharpSignal !== "neutral" && (
+                <div className="px-5 py-4 border-b border-slate-800/50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-amber-400 text-sm leading-none">⚡</span>
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Sharp Signal</div>
+                    <span className={`ml-auto text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                      sharpSignal === "sharp" && sharpConfidence === "high"
+                        ? "bg-amber-900/50 text-amber-300 border-amber-700/40"
+                        : sharpSignal === "sharp" && sharpConfidence === "medium"
+                        ? "bg-orange-900/50 text-orange-300 border-orange-700/40"
+                        : sharpSignal === "public"
+                        ? "bg-slate-800 text-slate-400 border-slate-700"
+                        : "bg-slate-800 text-slate-500 border-slate-800"
+                    }`}>
+                      {sharpSignal === "sharp" ? `${(sharpConfidence ?? "low").toUpperCase()} CONF` : "PUBLIC STEAM"}
+                    </span>
+                  </div>
+                  <div className={`text-xs font-mono p-3 rounded border leading-relaxed ${
+                    sharpSignal === "sharp"
+                      ? "bg-amber-950/30 border-amber-800/40 text-amber-200"
+                      : "bg-slate-900 border-slate-700 text-slate-300"
+                  }`}>
+                    {sharpExplanation ?? "No explanation available."}
+                  </div>
+                  {sharpSide && sharpPublicPct != null && (
+                    <div className="mt-2 flex items-center gap-3 text-[10px] font-mono text-slate-400">
+                      <span>Est. public: <span className="text-slate-200">{sharpPublicPct}% on {sharpSide === "over" ? "under" : "over"}</span></span>
+                      <span className="ml-auto">Sharp side: <span className={sharpSignal === "sharp" ? "text-amber-300 font-bold" : "text-slate-300"}>{sharpSide.toUpperCase()}</span></span>
+                    </div>
+                  )}
                 </div>
               )}
 

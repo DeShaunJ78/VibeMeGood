@@ -1,0 +1,144 @@
+Add sharp vs public money tracking to 
+PropEdge inside DraftDuel.
+
+This shows HOW a line moved not just THAT
+it moved. Sharp money moves lines against
+public consensus. Public steam moves lines
+with consensus.
+
+STEP 1 — Sharp money detection engine
+Create artifacts/api-server/src/lib/propedge/sharp-detector.ts
+
+interface SharpSignal {
+  marketId: number
+  playerName: string
+  statType: string
+  lineValue: number
+  side: "over" | "under"
+  publicPct: number
+  sharpPct: number
+  signal: "sharp" | "public" | "neutral"
+  confidence: "low" | "medium" | "high"
+  explanation: string
+}
+
+Sharp money is identified by REVERSE LINE 
+MOVEMENT — when the line moves AGAINST the
+public betting percentage.
+
+Example of sharp money:
+- 70% of public bets are on OVER
+- Line moves TOWARD UNDER (opposite of public)
+- This means sharp money is hammering the UNDER
+- Sharp signal: UNDER ⚡
+
+Example of public steam:
+- 70% of public bets are on OVER  
+- Line moves TOWARD OVER (same as public)
+- This is just public pressure moving the line
+- Weaker signal, lower confidence
+
+function detectSharpMoney(
+  lineMovements: LineMovement[],
+  publicBettingPct: number
+): SharpSignal
+
+STEP 2 — Public betting percentage source
+The Odds API does not provide public betting
+percentages directly.
+
+Approximate from line movement velocity and
+direction using this logic:
+
+Strong sharp signal (high confidence):
+- Line moved 3%+ probability in under 30 min
+- Movement is AGAINST the expected direction
+  (e.g. favorite getting shorter odds when
+  most bets should be on them already)
+- Movement happened early in the week
+  (sharp bettors bet early, public bets late)
+
+Moderate sharp signal (medium confidence):
+- Line moved 2-3% probability
+- Movement direction is unexpected
+- Movement happened mid-week
+
+Public steam (low sharp confidence):
+- Line moved with obvious public consensus
+- Movement happened close to game time
+- Multiple books moved simultaneously
+  (books balancing, not sharp action)
+
+STEP 3 — Display on Today's Edges page
+Add sharp signal indicator to each edge card:
+
+⚡ Sharp money detected — UNDER pressure
+Public: ~65% on OVER (estimated)
+Line moved: -108 → -118 toward UNDER
+Signal: Reverse line movement
+Confidence: High
+
+or:
+
+📊 Public steam — OVER pressure  
+Line moved with public consensus
+Signal: Public action, not sharp
+Confidence: Low — treat with caution
+
+STEP 4 — Display on Line Movement page
+Add a "Sharp Money" filter to the Line
+Movement page.
+
+When filtered, only show movements that
+triggered a sharp signal.
+
+Color code movement rows:
+- Sharp signal: highlighted in gold/yellow
+- Public steam: normal white
+- Neutral: grey
+
+Add a "Sharp Only" toggle button at the top
+of the Line Movement page.
+
+STEP 5 — Sharp signal on Cross-Book page
+When a market shows sharp movement add
+a ⚡ badge to that market row.
+
+This tells you: the sharp money already
+found something here. Worth investigating.
+
+STEP 6 — Store sharp signals
+Add sharpSignal and sharpConfidence columns
+to sportsbook_line_movements table:
+- sharpSignal: "sharp" | "public" | "neutral"
+- sharpConfidence: "low" | "medium" | "high"
+- sharpExplanation: text
+
+Update detectLineMovements() to compute
+and store sharp signals on every movement.
+
+STEP 7 — Update Shark Chat knowledge
+The Shark Chat should know about sharp signals.
+Add to the DraftDuel/PropEdge knowledge:
+
+When the user asks about a sharp signal explain:
+- What reverse line movement means
+- Why sharp money betting early matters
+- How to combine sharp signals with model edge
+- When to trust sharp vs public signals
+
+STEP 8 — Health check
+Add: Sharp detector check
+Counts how many sharp signals detected today.
+Green: detector running, reports count
+Red: error
+
+VERIFY:
+After building trigger POST /api/propedge/ingest
+Check sportsbook_line_movements for sharp signals.
+Report:
+- How many movements detected total
+- How many flagged as sharp signals
+- Show one example sharp signal with explanation
+- Confirm Today's Edges page shows sharp badges
+- Confirm Line Movement page has Sharp Only filter

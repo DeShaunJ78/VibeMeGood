@@ -9,6 +9,7 @@ import {
 import { eq, and, or, isNull, desc, gte, asc, inArray, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { consensusFairProb, edgePct, holdWarning } from "../lib/analytics/odds-math";
+import { detectSharpMoney } from "../lib/propedge/sharp-detector";
 
 const router = Router();
 
@@ -169,17 +170,22 @@ router.get("/market-intel", async (req, res) => {
     const varScoreByPpLineId = new Map(allVarScores.map(v => [v.ppLineId!, v]));
 
     const recentMovesByPpLineId = new Map<number, typeof allRecentMoves>();
+    const allMovesByPpLineId    = new Map<number, typeof allRecentMoves>();
     for (const m of allRecentMoves) {
       if (m.ppLineId === null) continue;
       if (!recentMovesByPpLineId.has(m.ppLineId)) recentMovesByPpLineId.set(m.ppLineId, []);
+      if (!allMovesByPpLineId.has(m.ppLineId))    allMovesByPpLineId.set(m.ppLineId, []);
       const arr = recentMovesByPpLineId.get(m.ppLineId)!;
       if (arr.length < 5) arr.push(m);
+      allMovesByPpLineId.get(m.ppLineId)!.push(m);
     }
 
     const result = rows.map(row => {
-      const extLines = extLinesByPpLineId.get(row.line.id) ?? [];
-      const varScore = varScoreByPpLineId.get(row.line.id) ?? null;
+      const extLines    = extLinesByPpLineId.get(row.line.id) ?? [];
+      const varScore    = varScoreByPpLineId.get(row.line.id) ?? null;
       const recentMoves = recentMovesByPpLineId.get(row.line.id) ?? [];
+      const allMoves    = allMovesByPpLineId.get(row.line.id) ?? [];
+      const sharpResult = allMoves.length >= 2 ? detectSharpMoney(allMoves) : null;
 
       const bookLines: Record<string, number> = {};
       for (const l of extLines) {
@@ -309,6 +315,12 @@ router.get("/market-intel", async (req, res) => {
           direction: m.moveDirection,
           at: m.capturedAt,
         })),
+
+        sharpSignal:      sharpResult?.signal      ?? null,
+        sharpConfidence:  sharpResult?.confidence  ?? null,
+        sharpExplanation: sharpResult?.explanation ?? null,
+        sharpSide:        sharpResult?.sharpSide   ?? null,
+        sharpPublicPct:   sharpResult?.estimatedPublicPct ?? null,
 
         scoring: scoreReasoning,
 

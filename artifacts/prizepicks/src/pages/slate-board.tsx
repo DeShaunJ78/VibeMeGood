@@ -61,6 +61,11 @@ type MarketIntelRow = {
   ourProjection: OurProjection | null;
   streak: { count: number; type: string | null } | null;
   recentMoves: { book: string; from: unknown; to: unknown; direction: string | null; at: unknown }[];
+  sharpSignal:      "sharp" | "public" | "neutral" | null;
+  sharpConfidence:  "low" | "medium" | "high" | null;
+  sharpExplanation: string | null;
+  sharpSide:        "over" | "under" | null;
+  sharpPublicPct:   number | null;
   scoring: Record<string, unknown> | null;
   variance: {
     volatilityRating: string | null;
@@ -338,6 +343,7 @@ export default function SlateBoard() {
   const [optPickCount, setOptPickCount] = useState(4);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sharpOnly, setSharpOnly] = useState(false);
   const [visibleCount, setVisibleCount] = useState(75);
   const [sortCol, setSortCol] = useState<string>("projGap");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -435,6 +441,11 @@ export default function SlateBoard() {
       ourProjection: mi?.ourProjection ?? null,
       streak: mi?.streak ?? null,
       recentMoves: mi?.recentMoves ?? [],
+      sharpSignal:      (mi?.sharpSignal      ?? null) as "sharp" | "public" | "neutral" | null,
+      sharpConfidence:  (mi?.sharpConfidence  ?? null) as "low" | "medium" | "high" | null,
+      sharpExplanation: mi?.sharpExplanation ?? null,
+      sharpSide:        (mi?.sharpSide        ?? null) as "over" | "under" | null,
+      sharpPublicPct:   mi?.sharpPublicPct   ?? null,
       scoring: mi?.scoring ?? null,
       variance: mi?.variance ?? null,
       fairProb: mi?.fairProb ?? null,
@@ -471,6 +482,11 @@ export default function SlateBoard() {
       ourProjection: mi.ourProjection,
       streak: mi.streak,
       recentMoves: mi.recentMoves,
+      sharpSignal:      (mi.sharpSignal      ?? null) as "sharp" | "public" | "neutral" | null,
+      sharpConfidence:  (mi.sharpConfidence  ?? null) as "low" | "medium" | "high" | null,
+      sharpExplanation: mi.sharpExplanation ?? null,
+      sharpSide:        (mi.sharpSide        ?? null) as "over" | "under" | null,
+      sharpPublicPct:   mi.sharpPublicPct   ?? null,
       scoring: mi.scoring,
       variance: mi.variance ?? null,
       fairProb: mi.fairProb ?? null,
@@ -493,6 +509,9 @@ export default function SlateBoard() {
         r.playerName.toLowerCase().includes(q) ||
         (r.teamAbbr ?? "").toLowerCase().includes(q)
       );
+    }
+    if (sharpOnly) {
+      rows = rows.filter(r => r.sharpSignal === "sharp");
     }
     return [...rows].sort((a, b) => {
       let cmp = 0;
@@ -522,7 +541,7 @@ export default function SlateBoard() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [allRows, lineTypeFilter, minEdge, searchQuery, sortCol, sortDir]);
+  }, [allRows, lineTypeFilter, minEdge, searchQuery, sortCol, sortDir, sharpOnly]);
 
   const watchCount  = useMemo(() => playerRows.filter(r => r.isWatched).length,   [playerRows]);
   const noPlayCount = useMemo(() => playerRows.filter(r => r.actionTag === "NO-PLAY").length, [playerRows]);
@@ -774,6 +793,16 @@ export default function SlateBoard() {
               >
                 <Zap className="w-3.5 h-3.5" /> {optLoaded ? "Re-run" : "Optimizer"}
               </Button>
+              <Button
+                onClick={() => setSharpOnly(v => !v)}
+                size="sm"
+                variant={sharpOnly ? "default" : "outline"}
+                className={sharpOnly
+                  ? "font-mono text-xs gap-1.5 bg-amber-700 hover:bg-amber-600 text-white"
+                  : "font-mono text-xs gap-1.5 border-slate-700 text-muted-foreground hover:text-amber-300"}
+              >
+                ⚡ {sharpOnly ? "Sharp Only" : "Sharp"}
+              </Button>
               <SyncProjectionsButton />
               <ForceSyncButton />
             </div>
@@ -1007,7 +1036,20 @@ export default function SlateBoard() {
                               </TooltipContent>
                             </Tooltip>
                           ) : (
-                            <ActionTagBadge tag={row.actionTag} />
+                            <div className="flex items-center gap-1 justify-center">
+                              <ActionTagBadge tag={row.actionTag} />
+                              {row.sharpSignal === "sharp" && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="text-amber-400 text-[11px] cursor-help leading-none">⚡</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="left" className="font-mono text-xs max-w-xs">
+                                    <p className="font-bold text-amber-400 mb-1">Sharp Signal — {row.sharpConfidence} confidence</p>
+                                    <p className="text-slate-300 leading-relaxed">{row.sharpExplanation}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </div>
                           )}
                         </TableCell>
 
@@ -1128,11 +1170,21 @@ export default function SlateBoard() {
         </SheetContent>
       </Sheet>
 
-      <PropDetailSheet
-        ppLineId={selectedPropId}
-        open={!!selectedPropId}
-        onOpenChange={open => !open && setSelectedPropId(null)}
-      />
+      {(() => {
+        const sharpRow = selectedPropId ? miMap.get(selectedPropId) : undefined;
+        return (
+          <PropDetailSheet
+            ppLineId={selectedPropId}
+            open={!!selectedPropId}
+            onOpenChange={open => !open && setSelectedPropId(null)}
+            sharpSignal={sharpRow?.sharpSignal ?? null}
+            sharpConfidence={sharpRow?.sharpConfidence ?? null}
+            sharpExplanation={sharpRow?.sharpExplanation ?? null}
+            sharpSide={sharpRow?.sharpSide ?? null}
+            sharpPublicPct={sharpRow?.sharpPublicPct ?? null}
+          />
+        );
+      })()}
 
       {/* Optimizer Dialog */}
       <Dialog open={optimizerOpen} onOpenChange={setOptimizerOpen}>

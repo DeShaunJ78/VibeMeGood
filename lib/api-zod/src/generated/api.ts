@@ -1507,6 +1507,49 @@ export const SyncPaceRatingsResponse = zod.object({
 
 
 /**
+ * @summary Compute and store sharp money signals for all line moves in the last 24h
+ */
+export const ComputeSharpSignalsResponse = zod.object({
+  "status": zod.string(),
+  "sharpCount": zod.number(),
+  "publicCount": zod.number(),
+  "neutralCount": zod.number(),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Get all props with a detected sharp signal today
+ */
+export const GetSharpSignalsResponseItem = zod.object({
+  "ppLineId": zod.number(),
+  "playerName": zod.string(),
+  "statType": zod.string(),
+  "lineValue": zod.number(),
+  "sport": zod.string(),
+  "signal": zod.enum(['sharp', 'public', 'neutral']),
+  "confidence": zod.enum(['low', 'medium', 'high']),
+  "explanation": zod.string(),
+  "estimatedPublicPct": zod.number(),
+  "sharpSide": zod.string().nullish(),
+  "publicSide": zod.string().nullish(),
+  "moveCount": zod.number()
+})
+export const GetSharpSignalsResponse = zod.array(GetSharpSignalsResponseItem)
+
+
+/**
+ * @summary Count of sharp / public / neutral signals today
+ */
+export const GetSharpSummaryResponse = zod.object({
+  "sharp": zod.number(),
+  "public": zod.number(),
+  "neutral": zod.number(),
+  "total": zod.number()
+})
+
+
+/**
  * @summary Compare lines for one player prop across all pick-em platforms
  */
 export const GetPlatformLinesByPropQueryParams = zod.object({

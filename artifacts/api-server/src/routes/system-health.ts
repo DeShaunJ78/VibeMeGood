@@ -4,8 +4,9 @@ import {
   dataPullLogsTable, ppLinesTable, externalLinesTable,
   ourProjectionsTable, entriesTable, varianceScoresTable,
   probabilityCalibrationTable, playerGameLogsTable, teamPaceRatingsTable,
+  lineMoveEventsTable,
 } from "@workspace/db/schema";
-import { desc, count, isNotNull, eq, sql, and, max } from "drizzle-orm";
+import { desc, count, isNotNull, eq, sql, and, max, gte } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { simulateEntry } from "../lib/simulation/entry-simulator";
 
@@ -117,7 +118,8 @@ async function checkDataFreshness(): Promise<CheckResult[]> {
 }
 
 async function checkDatabaseHealth(): Promise<CheckResult[]> {
-  const [ppCount, projCount, extCount, entryCount, calCount, gameLogCount, paceCount, paceLatest] = await Promise.all([
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [ppCount, projCount, extCount, entryCount, calCount, gameLogCount, paceCount, paceLatest, sharpCount] = await Promise.all([
     db.select({ n: count() }).from(ppLinesTable).where(eq(ppLinesTable.isActive, true)),
     db.select({ n: sql<number>`count(distinct player_id)` }).from(ourProjectionsTable),
     db.select({ n: sql<number>`count(distinct pp_line_id)` }).from(externalLinesTable).where(isNotNull(externalLinesTable.noVigOverProb)),
@@ -126,6 +128,9 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
     db.select({ n: count() }).from(playerGameLogsTable),
     db.select({ n: count() }).from(teamPaceRatingsTable),
     db.select({ t: max(teamPaceRatingsTable.computedAt) }).from(teamPaceRatingsTable),
+    db.select({ n: count() }).from(lineMoveEventsTable).where(
+      and(gte(lineMoveEventsTable.capturedAt, since24h), eq(lineMoveEventsTable.sharpSignal, "sharp")),
+    ),
   ]);
 
   const pp = Number(ppCount[0]?.n ?? 0);
@@ -135,6 +140,7 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
   const cal = Number(calCount[0]?.n ?? 0);
   const gameLogs = Number(gameLogCount[0]?.n ?? 0);
   const pace = Number(paceCount[0]?.n ?? 0);
+  const sharp = Number(sharpCount[0]?.n ?? 0);
   const paceTs = paceLatest[0]?.t ?? null;
   const paceAgeMins = paceTs ? (Date.now() - paceTs.getTime()) / 60000 : Infinity;
   const fmtPaceAge = paceAgeMins === Infinity ? "never synced" : paceAgeMins < 60 ? `${Math.round(paceAgeMins)}m ago` : `${(paceAgeMins / 60).toFixed(0)}h ago`;
@@ -194,6 +200,15 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
           : `${pace} teams rated (${fmtPaceAge})`,
       lastUpdated: paceTs ? paceTs.toISOString() : null,
       fixAction: pace === 0 ? "pace" : null,
+    },
+    {
+      name: "Sharp Detector",
+      status: sharp > 0 ? "green" : "amber",
+      detail: sharp === 0
+        ? "Detector active — no sharp signals stored today. Run Sync Sharp to compute."
+        : `${sharp} sharp signal events detected today`,
+      lastUpdated: null,
+      fixAction: sharp === 0 ? "sharp" : null,
     },
   ];
 }

@@ -37,6 +37,7 @@ import simulationRouter from "./simulation";
 import historicalHitRatesRouter from "./historical-hit-rates";
 import platformLinesRouter from "./platform-lines";
 import paceRouter from "./pace";
+import sharpRouter from "./sharp";
 
 const router: IRouter = Router();
 
@@ -78,5 +79,6 @@ router.use(simulationRouter);
 router.use(historicalHitRatesRouter);
 router.use(platformLinesRouter);
 router.use(paceRouter);
+router.use(sharpRouter);
 
 export default router;

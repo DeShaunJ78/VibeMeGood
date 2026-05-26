@@ -683,6 +683,54 @@ export interface PaceSyncResult {
   total: number;
 }
 
+export type SharpSignalRowSignal = typeof SharpSignalRowSignal[keyof typeof SharpSignalRowSignal];
+
+
+export const SharpSignalRowSignal = {
+  sharp: 'sharp',
+  public: 'public',
+  neutral: 'neutral',
+} as const;
+
+export type SharpSignalRowConfidence = typeof SharpSignalRowConfidence[keyof typeof SharpSignalRowConfidence];
+
+
+export const SharpSignalRowConfidence = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export interface SharpSignalRow {
+  ppLineId: number;
+  playerName: string;
+  statType: string;
+  lineValue: number;
+  sport: string;
+  signal: SharpSignalRowSignal;
+  confidence: SharpSignalRowConfidence;
+  explanation: string;
+  estimatedPublicPct: number;
+  sharpSide?: string | null;
+  publicSide?: string | null;
+  moveCount: number;
+}
+
+export interface SharpSyncResult {
+  status: string;
+  sharpCount: number;
+  publicCount: number;
+  neutralCount: number;
+  total: number;
+}
+
+export interface SharpSummary {
+  sharp: number;
+  public: number;
+  neutral: number;
+  total: number;
+}
+
 export interface PlatformLineEntry {
   platform: string;
   lineValue: number;

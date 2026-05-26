@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, numeric, varchar, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, numeric, varchar, timestamp, text } from "drizzle-orm/pg-core";
 import { ppLinesTable } from "./pp-lines";
 
 export const lineMoveEventsTable = pgTable("line_move_events", {
@@ -11,6 +11,9 @@ export const lineMoveEventsTable = pgTable("line_move_events", {
   moveDirection: varchar("move_direction", { length: 10 }),
   sequenceNumber: integer("sequence_number"),
   capturedAt: timestamp("captured_at").defaultNow(),
+  sharpSignal: varchar("sharp_signal", { length: 10 }),
+  sharpConfidence: varchar("sharp_confidence", { length: 10 }),
+  sharpExplanation: text("sharp_explanation"),
 });
 
 export type LineMoveEvent = typeof lineMoveEventsTable.$inferSelect;

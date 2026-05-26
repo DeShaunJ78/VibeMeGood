@@ -49,6 +49,8 @@ tags:
     description: Lineup portfolio factory operations
   - name: pace
     description: Team pace rating operations
+  - name: sharp
+    description: Sharp money detection and reverse line movement signals
 
 paths:
   /healthz:
@@ -1188,6 +1190,45 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PaceSyncResult" }
 
+  # ─── SHARP MONEY DETECTION ───────────────────────────────────────────
+  /sharp/compute:
+    post:
+      operationId: computeSharpSignals
+      tags: [sharp]
+      summary: Compute and store sharp money signals for all line moves in the last 24h
+      responses:
+        "200":
+          description: Computation result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SharpSyncResult" }
+
+  /sharp/signals:
+    get:
+      operationId: getSharpSignals
+      tags: [sharp]
+      summary: Get all props with a detected sharp signal today
+      responses:
+        "200":
+          description: Array of sharp signal rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SharpSignalRow" }
+
+  /sharp/summary:
+    get:
+      operationId: getSharpSummary
+      tags: [sharp]
+      summary: Count of sharp / public / neutral signals today
+      responses:
+        "200":
+          description: Summary counts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SharpSummary" }
+
   # ─── PLATFORM LINE COMPARISON ───────────────────────────────────────
   /platform-lines/by-prop:
     get:
@@ -1941,6 +1982,43 @@ components:
         seeded:   { type: integer }
         total:    { type: integer }
       required: [status, computed, seeded, total]
+
+    # ─── SHARP MONEY DETECTION ────────────────────────────────────────
+    SharpSignalRow:
+      type: object
+      properties:
+        ppLineId:           { type: integer }
+        playerName:         { type: string }
+        statType:           { type: string }
+        lineValue:          { type: number }
+        sport:              { type: string }
+        signal:             { type: string, enum: [sharp, public, neutral] }
+        confidence:         { type: string, enum: [low, medium, high] }
+        explanation:        { type: string }
+        estimatedPublicPct: { type: integer }
+        sharpSide:          { type: string, nullable: true }
+        publicSide:         { type: string, nullable: true }
+        moveCount:          { type: integer }
+      required: [ppLineId, playerName, statType, lineValue, sport, signal, confidence, explanation, estimatedPublicPct, moveCount]
+
+    SharpSyncResult:
+      type: object
+      properties:
+        status:      { type: string }
+        sharpCount:  { type: integer }
+        publicCount: { type: integer }
+        neutralCount: { type: integer }
+        total:       { type: integer }
+      required: [status, sharpCount, publicCount, neutralCount, total]
+
+    SharpSummary:
+      type: object
+      properties:
+        sharp:   { type: integer }
+        public:  { type: integer }
+        neutral: { type: integer }
+        total:   { type: integer }
+      required: [sharp, public, neutral, total]
 
     # ─── PLATFORM LINE COMPARISON ────────────────────────────────────
     PlatformLineEntry:
