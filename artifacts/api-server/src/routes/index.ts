@@ -38,6 +38,7 @@ import historicalHitRatesRouter from "./historical-hit-rates";
 import platformLinesRouter from "./platform-lines";
 import paceRouter from "./pace";
 import sharpRouter from "./sharp";
+import nflAdvancedRouter from "./nfl-advanced";
 
 const router: IRouter = Router();
 
@@ -80,5 +81,6 @@ router.use(historicalHitRatesRouter);
 router.use(platformLinesRouter);
 router.use(paceRouter);
 router.use(sharpRouter);
+router.use(nflAdvancedRouter);
 
 export default router;

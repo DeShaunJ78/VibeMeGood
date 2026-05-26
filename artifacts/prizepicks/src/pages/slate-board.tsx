@@ -597,6 +597,31 @@ export default function SlateBoard() {
     return m;
   }, [paceGames]);
 
+  type NflAdvRow = {
+    playerName: string;
+    snapPct: number | null;
+    targetShare: number | null;
+    wopr: number | null;
+    position: string | null;
+  };
+  const { data: nflAdvData = [] } = useQuery<NflAdvRow[]>({
+    queryKey: ["nfl-advanced-slate"],
+    queryFn: async (): Promise<NflAdvRow[]> => {
+      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const r = await fetch(`${base}/api/nfl-advanced/slate`);
+      return r.ok ? (r.json() as Promise<NflAdvRow[]>) : [];
+    },
+    staleTime: 60 * 60 * 1000,
+  });
+
+  const nflAdvMap = useMemo(() => {
+    const m = new Map<string, NflAdvRow>();
+    for (const row of nflAdvData) m.set(row.playerName.toLowerCase(), row);
+    return m;
+  }, [nflAdvData]);
+
+  const isNflSlate = sport === "NFL";
+
   useEffect(() => {
     const t = setTimeout(() => setSearchQuery(searchInput), 150);
     return () => clearTimeout(t);
@@ -851,6 +876,9 @@ export default function SlateBoard() {
                   <SortTh col="pOver" label="P(Over)" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="w-20 text-center" />
                   <TableHead className="hidden md:table-cell w-14 font-mono text-xs text-center">Streak</TableHead>
                   <TableHead className="hidden lg:table-cell w-20 font-mono text-xs text-center">Pace</TableHead>
+                  {isNflSlate && <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-center">Snap%</TableHead>}
+                  {isNflSlate && <TableHead className="hidden lg:table-cell w-20 font-mono text-xs text-center">Tgt Shr</TableHead>}
+                  {isNflSlate && <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-center">WOPR</TableHead>}
                   <TableHead className="w-24 font-mono text-xs text-center">Action</TableHead>
                   {varianceEnabled && <SortTh col="fatigue" label="Fatigue" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-22 text-center" />}
                   {varianceEnabled && <SortTh col="blowout" label="Blowout%" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-22 text-center" />}
@@ -1017,6 +1045,80 @@ export default function SlateBoard() {
                             );
                           })()}
                         </TableCell>
+
+                        {/* NFL Advanced Metrics */}
+                        {isNflSlate && (() => {
+                          const adv = nflAdvMap.get(row.playerName.toLowerCase());
+                          const snapPct   = adv?.snapPct   ?? null;
+                          const tgtShare  = adv?.targetShare ?? null;
+                          const wopr      = adv?.wopr       ?? null;
+                          const isWrTeRb  = ["WR","TE","RB"].includes(adv?.position ?? row.position ?? "");
+
+                          const snapColor = snapPct == null ? "text-slate-600"
+                            : snapPct >= 0.75 ? "text-emerald-400"
+                            : snapPct >= 0.50 ? "text-amber-400"
+                            : "text-rose-400";
+
+                          const tgtColor = tgtShare == null ? "text-slate-600"
+                            : tgtShare >= 0.20 ? "text-emerald-400"
+                            : tgtShare >= 0.10 ? "text-amber-400"
+                            : "text-rose-400";
+
+                          return (
+                            <>
+                              <TableCell className="hidden lg:table-cell text-center font-mono text-xs">
+                                {snapPct != null ? (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className={`cursor-help font-bold ${snapColor}`}>
+                                        {(snapPct * 100).toFixed(0)}%
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="font-mono text-xs">
+                                      <p className="font-bold mb-0.5">Snap Count %</p>
+                                      <p className="text-slate-400">
+                                        {snapPct >= 0.75 ? "High snap share — full usage" : snapPct >= 0.50 ? "Moderate snap share" : "Low snap share — caution"}
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ) : <span className="text-slate-600">—</span>}
+                              </TableCell>
+                              <TableCell className="hidden lg:table-cell text-center font-mono text-xs">
+                                {isWrTeRb && tgtShare != null ? (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className={`cursor-help font-bold ${tgtColor}`}>
+                                        {(tgtShare * 100).toFixed(0)}%
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="font-mono text-xs">
+                                      <p className="font-bold mb-0.5">Target Share</p>
+                                      <p className="text-slate-400">
+                                        {tgtShare >= 0.20 ? "High target share — featured receiver" : tgtShare >= 0.10 ? "Moderate involvement" : "Low target share"}
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ) : <span className="text-slate-600">—</span>}
+                              </TableCell>
+                              <TableCell className="hidden lg:table-cell text-center font-mono text-xs">
+                                {isWrTeRb && wopr != null ? (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="cursor-help font-bold text-cyan-400">
+                                        {wopr.toFixed(2)}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="font-mono text-xs">
+                                      <p className="font-bold mb-0.5">WOPR — Weighted Opportunity Rating</p>
+                                      <p className="text-slate-400">Combined target share + air yards share. Higher = more passing game involvement.</p>
+                                      <p className="text-slate-400 mt-0.5">{wopr >= 0.50 ? "Elite involvement" : wopr >= 0.30 ? "Solid involvement" : "Limited role"}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ) : <span className="text-slate-600">—</span>}
+                              </TableCell>
+                            </>
+                          );
+                        })()}
 
                         {/* Action */}
                         <TableCell className="text-center">

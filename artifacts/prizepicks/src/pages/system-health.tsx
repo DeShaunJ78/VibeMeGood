@@ -45,6 +45,9 @@ async function triggerSync(action: string): Promise<void> {
     "projections":    "/api/sync/projections",
     "injuries":       "/api/sync/injuries",
     "variance":       "/api/sync/variance",
+    "pace":           "/api/admin/sync/pace",
+    "sharp":          "/api/sharp/compute",
+    "nfl-advanced":   "/api/admin/sync/nfl-advanced",
   };
   const path = map[action];
   if (!path) return;

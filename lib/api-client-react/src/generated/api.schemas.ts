@@ -683,6 +683,37 @@ export interface PaceSyncResult {
   total: number;
 }
 
+export interface NflAdvancedRow {
+  playerName: string;
+  team: string;
+  /** @nullable */
+  position?: string | null;
+  season: number;
+  /** @nullable */
+  week?: number | null;
+  /** @nullable */
+  snapCount?: number | null;
+  /** @nullable */
+  snapPct?: number | null;
+  /** @nullable */
+  targetShare?: number | null;
+  /** @nullable */
+  airYards?: number | null;
+  /** @nullable */
+  airYardsShare?: number | null;
+  /** @nullable */
+  wopr?: number | null;
+  /** @nullable */
+  racr?: number | null;
+  /** @nullable */
+  targets?: number | null;
+}
+
+export interface NflAdvancedSyncResult {
+  status: string;
+  logId: number;
+}
+
 export type SharpSignalRowSignal = typeof SharpSignalRowSignal[keyof typeof SharpSignalRowSignal];
 
 

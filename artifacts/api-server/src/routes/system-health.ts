@@ -4,7 +4,7 @@ import {
   dataPullLogsTable, ppLinesTable, externalLinesTable,
   ourProjectionsTable, entriesTable, varianceScoresTable,
   probabilityCalibrationTable, playerGameLogsTable, teamPaceRatingsTable,
-  lineMoveEventsTable,
+  lineMoveEventsTable, nflAdvancedMetricsTable,
 } from "@workspace/db/schema";
 import { desc, count, isNotNull, eq, sql, and, max, gte } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -119,7 +119,7 @@ async function checkDataFreshness(): Promise<CheckResult[]> {
 
 async function checkDatabaseHealth(): Promise<CheckResult[]> {
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [ppCount, projCount, extCount, entryCount, calCount, gameLogCount, paceCount, paceLatest, sharpCount] = await Promise.all([
+  const [ppCount, projCount, extCount, entryCount, calCount, gameLogCount, paceCount, paceLatest, sharpCount, nflAdvCount, nflAdvLatest] = await Promise.all([
     db.select({ n: count() }).from(ppLinesTable).where(eq(ppLinesTable.isActive, true)),
     db.select({ n: sql<number>`count(distinct player_id)` }).from(ourProjectionsTable),
     db.select({ n: sql<number>`count(distinct pp_line_id)` }).from(externalLinesTable).where(isNotNull(externalLinesTable.noVigOverProb)),
@@ -131,6 +131,8 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
     db.select({ n: count() }).from(lineMoveEventsTable).where(
       and(gte(lineMoveEventsTable.capturedAt, since24h), eq(lineMoveEventsTable.sharpSignal, "sharp")),
     ),
+    db.select({ n: count() }).from(nflAdvancedMetricsTable),
+    db.select({ t: max(nflAdvancedMetricsTable.computedAt) }).from(nflAdvancedMetricsTable),
   ]);
 
   const pp = Number(ppCount[0]?.n ?? 0);
@@ -141,9 +143,13 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
   const gameLogs = Number(gameLogCount[0]?.n ?? 0);
   const pace = Number(paceCount[0]?.n ?? 0);
   const sharp = Number(sharpCount[0]?.n ?? 0);
+  const nflAdv = Number(nflAdvCount[0]?.n ?? 0);
   const paceTs = paceLatest[0]?.t ?? null;
+  const nflAdvTs = nflAdvLatest[0]?.t ?? null;
   const paceAgeMins = paceTs ? (Date.now() - paceTs.getTime()) / 60000 : Infinity;
+  const nflAdvAgeMins = nflAdvTs ? (Date.now() - nflAdvTs.getTime()) / (60000 * 60 * 24) : Infinity;
   const fmtPaceAge = paceAgeMins === Infinity ? "never synced" : paceAgeMins < 60 ? `${Math.round(paceAgeMins)}m ago` : `${(paceAgeMins / 60).toFixed(0)}h ago`;
+  const fmtNflAdvAge = nflAdvAgeMins === Infinity ? "never synced" : nflAdvAgeMins < 1 ? "today" : `${Math.round(nflAdvAgeMins)}d ago`;
 
   return [
     {
@@ -209,6 +215,17 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
         : `${sharp} sharp signal events detected today`,
       lastUpdated: null,
       fixAction: sharp === 0 ? "sharp" : null,
+    },
+    {
+      name: "NFL Advanced Metrics",
+      status: nflAdv === 0 ? "red" : nflAdvAgeMins > 7 ? "amber" : "green",
+      detail: nflAdv === 0
+        ? "No records — run Sync NFL Advanced to load snap counts and target share"
+        : nflAdvAgeMins > 7
+          ? `${nflAdv.toLocaleString()} records, last sync ${fmtNflAdvAge} (run weekly on Tuesday)`
+          : `${nflAdv.toLocaleString()} records, synced ${fmtNflAdvAge}`,
+      lastUpdated: nflAdvTs ? nflAdvTs.toISOString() : null,
+      fixAction: nflAdv === 0 ? "nfl-advanced" : null,
     },
   ];
 }

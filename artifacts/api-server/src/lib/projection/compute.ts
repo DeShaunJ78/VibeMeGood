@@ -4,6 +4,7 @@ import {
   injuriesTable, matchupHistoryTable, gamesTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
+import { getSnapPctAdjustment } from "../sync/nfl-advanced";
 import { pOverLine, percentileAtLine, volatilityPct } from "./normal-dist";
 import {
   getPrior, minGamesForConfidence,
@@ -278,10 +279,17 @@ export async function computeAllProjections(): Promise<number> {
         opponentTeamId,
       );
 
+      // Apply snap% adjustment for NFL players
+      let adjustedMean = result.mean;
+      if (player.sport.toUpperCase() === "NFL") {
+        const snapAdj = await getSnapPctAdjustment(player.fullName);
+        adjustedMean = Math.round(result.mean * snapAdj * 100) / 100;
+      }
+
       const payload = {
         playerId: line.playerId,
         statType: line.statType,
-        projectedValue: result.mean.toString(),
+        projectedValue: adjustedMean.toString(),
         weightedAvg: result.mean.toString(),
         gamesUsed: result.gamesUsed,
         confidence: result.pOver >= 60 && result.dataQualityScore >= 70 ? "high"

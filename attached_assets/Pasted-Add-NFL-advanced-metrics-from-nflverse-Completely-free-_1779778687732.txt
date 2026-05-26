@@ -1,0 +1,111 @@
+Add NFL advanced metrics from nflverse.
+Completely free, no API key required.
+Data comes from GitHub CSV files that update
+automatically after every NFL game.
+
+STEP 1 — Test and download these URLs:
+
+Snap counts 2024:
+https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_2024.csv
+
+Snap counts 2023:
+https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_2023.csv
+
+Player stats 2024 (air yards, target share):
+https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_2024.csv
+
+Player stats 2023:
+https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_2023.csv
+
+Confirmed working from Replit environment.
+Column names confirmed:
+snap_counts: player, team, position, week,
+season, offense_snaps, offense_pct
+player_stats: player_name, recent_team,
+target_share, air_yards_share,
+receiving_air_yards, wopr, racr, targets
+
+STEP 2 — Database table
+Create nfl_advanced_metrics table:
+- id
+- playerName
+- team
+- position
+- season (integer)
+- week (integer, null for season totals)
+- snapCount
+- snapPct
+- targetShare
+- airYards
+- airYardsShare
+- wopr
+- racr
+- targets
+- computedAt
+- unique on (playerName, team, season, week)
+
+STEP 3 — Ingest snap counts
+Download both CSVs (2023 and 2024).
+For each row upsert into nfl_advanced_metrics:
+playerName = player column
+snapCount = offense_snaps
+snapPct = offense_pct
+Match week, team, position, season
+
+STEP 4 — Ingest player stats
+Download both player stats CSVs.
+Match players by playerName + team + week.
+Upsert these fields:
+targetShare, airYards (receiving_air_yards),
+airYardsShare, wopr, racr, targets
+
+STEP 5 — Display on Player Board
+Add these columns for NFL slates only.
+Hide for NBA/MLB/NHL:
+
+Snap% column:
+Green: above 75%
+Amber: 50-75%
+Red: below 50%
+
+Target Share column (WR/TE/RB only):
+Green: above 20%
+Amber: 10-20%
+Red: below 10%
+
+WOPR column (WR/TE only):
+Shows weighted opportunity rating
+Higher = more involved in passing game
+No color threshold needed
+
+STEP 6 — Snap% adjustment on projections
+Apply to NFL player projections:
+snapPct above 0.80: no adjustment
+snapPct 0.60-0.80: -3% on projected FPTS
+snapPct below 0.60: -8% on projected FPTS
+
+STEP 7 — Admin endpoint
+POST /api/admin/sync/nfl-advanced
+Downloads all 4 CSVs and ingests them.
+Returns record counts per season.
+
+STEP 8 — Cron schedule
+Add to scheduler:
+Every Tuesday at 6am download fresh data
+(after Monday Night Football finalizes)
+
+STEP 9 — Health check
+Add: NFL Advanced Metrics check
+Green: table has current season records
+Amber: records over 7 days old
+Red: zero records
+
+STEP 10 — Verify
+Trigger POST /api/admin/sync/nfl-advanced
+Report:
+- Total records ingested per season
+- Sample data for Tyreek Hill:
+  snap%, target share, air yards, WOPR
+- Confirm Snap% and Target Share columns
+  appear on Player Board for NFL slates
+- Confirm columns are hidden for NBA slates

@@ -1,0 +1,89 @@
+Add NFL advanced metrics from nflverse.
+Completely free, no API key required.
+
+SOURCE URLS (confirmed accessible from Replit):
+
+Snap counts:
+https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_2024.csv
+https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_2023.csv
+
+Player stats (air yards, target share):
+https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_2024.csv
+https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_2023.csv
+
+Column names confirmed:
+snap_counts: player, team, position, week,
+season, offense_snaps, offense_pct
+player_stats: player_display_name, recent_team,
+target_share, air_yards_share,
+receiving_air_yards, wopr, racr, targets
+
+STEP 1 — Database table
+Create nfl_advanced_metrics table:
+- id, playerName, team, position
+- season, week
+- snapCount, snapPct
+- targetShare, airYards, airYardsShare
+- wopr, racr, targets
+- computedAt
+- unique on (playerName, team, season, week)
+
+STEP 2 — Ingest both seasons
+Download all 4 CSVs.
+Upsert snap counts first.
+Match player stats by player_display_name
++ team + week and upsert metrics.
+
+STEP 3 — Display on Slate Board
+For NFL props only show in prop detail sheet:
+
+Snap%: 97% (high usage)
+Target Share: 31.1% (featured receiver)
+Air Yards/game: 141 yards downfield
+WOPR: 0.83 (elite opportunity)
+
+Color code snap%:
+Green: above 75%
+Amber: 50-75%
+Red: below 50%
+
+Color code target share:
+Green: above 20%
+Amber: 10-20%
+Red: below 10%
+
+STEP 4 — Convergence signal
+If WOPR above 0.6 AND model projects over:
+"✅ High opportunity — target share and
+air yards confirm the projection"
+
+If WOPR below 0.3 AND model projects over:
+"⚠️ Low opportunity — target share suggests
+projection may be too high. Investigate."
+
+STEP 5 — Snap% adjustment
+Apply to NFL player projections:
+snapPct above 0.80: no adjustment
+snapPct 0.60-0.80: -3% adjustment
+snapPct below 0.60: -8% adjustment
+
+STEP 6 — Admin endpoint
+POST /api/admin/sync/nfl-advanced
+Downloads all 4 CSVs and ingests them.
+Returns record counts.
+
+STEP 7 — Cron schedule
+Tuesday 6am — sync nfl advanced metrics
+
+STEP 8 — Health check
+Add NFL Advanced Metrics check:
+Green: current season records exist
+Amber: over 7 days old
+Red: zero records
+
+VERIFY:
+Trigger POST /api/admin/sync/nfl-advanced
+Report total records ingested.
+Show Tyreek Hill sample data.
+Confirm NFL prop detail sheet shows
+snap%, target share, air yards, WOPR.

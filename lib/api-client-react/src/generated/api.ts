@@ -70,6 +70,8 @@ import type {
   ListTeamsParams,
   ListWatchlistParams,
   MarkAllAlertsRead200,
+  NflAdvancedRow,
+  NflAdvancedSyncResult,
   PaceSyncResult,
   PayoutConfig,
   PayoutConfigInput,
@@ -5469,6 +5471,153 @@ export const useSyncPaceRatings = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getSyncPaceRatingsMutationOptions(options));
+    }
+
+export const getGetNflAdvancedSlateUrl = () => {
+
+
+
+
+  return `/api/nfl-advanced/slate`
+}
+
+/**
+ * @summary Get NFL advanced metrics (snap%, target share, WOPR) for all players
+ */
+export const getNflAdvancedSlate = async ( options?: RequestInit): Promise<NflAdvancedRow[]> => {
+
+  return customFetch<NflAdvancedRow[]>(getGetNflAdvancedSlateUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetNflAdvancedSlateQueryKey = () => {
+    return [
+    `/api/nfl-advanced/slate`
+    ] as const;
+    }
+
+
+export const getGetNflAdvancedSlateQueryOptions = <TData = Awaited<ReturnType<typeof getNflAdvancedSlate>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNflAdvancedSlate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetNflAdvancedSlateQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNflAdvancedSlate>>> = ({ signal }) => getNflAdvancedSlate({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getNflAdvancedSlate>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetNflAdvancedSlateQueryResult = NonNullable<Awaited<ReturnType<typeof getNflAdvancedSlate>>>
+export type GetNflAdvancedSlateQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get NFL advanced metrics (snap%, target share, WOPR) for all players
+ */
+
+export function useGetNflAdvancedSlate<TData = Awaited<ReturnType<typeof getNflAdvancedSlate>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNflAdvancedSlate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetNflAdvancedSlateQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getSyncNflAdvancedUrl = () => {
+
+
+
+
+  return `/api/admin/sync/nfl-advanced`
+}
+
+/**
+ * @summary Download and ingest nflverse snap counts and player stats (2023 + 2024)
+ */
+export const syncNflAdvanced = async ( options?: RequestInit): Promise<NflAdvancedSyncResult> => {
+
+  return customFetch<NflAdvancedSyncResult>(getSyncNflAdvancedUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSyncNflAdvancedMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncNflAdvanced>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncNflAdvanced>>, TError,void, TContext> => {
+
+const mutationKey = ['syncNflAdvanced'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncNflAdvanced>>, void> = () => {
+
+
+          return  syncNflAdvanced(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncNflAdvancedMutationResult = NonNullable<Awaited<ReturnType<typeof syncNflAdvanced>>>
+
+    export type SyncNflAdvancedMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Download and ingest nflverse snap counts and player stats (2023 + 2024)
+ */
+export const useSyncNflAdvanced = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncNflAdvanced>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof syncNflAdvanced>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSyncNflAdvancedMutationOptions(options));
     }
 
 export const getComputeSharpSignalsUrl = () => {

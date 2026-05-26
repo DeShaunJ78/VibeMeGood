@@ -12,6 +12,7 @@ import { computeAllVarianceScores } from "../lib/variance";
 import { syncFatigueData } from "../lib/sync/fatigue";
 import { syncInjuries } from "../lib/sync/injuries";
 import { syncProjections } from "../lib/projections/sync";
+import { syncNflAdvancedMetrics } from "../lib/sync/nfl-advanced";
 
 const router = Router();
 
@@ -103,6 +104,32 @@ router.post("/sync/scores", async (req, res) => {
 
 router.post("/sync/fatigue", async (req, res) => {
   await runSync("internal", "fatigue", syncFatigueData, res);
+});
+
+// Admin: sync NFL advanced metrics (snap counts + player stats) from nflverse
+router.post("/admin/sync/nfl-advanced", async (req, res) => {
+  const [log] = await db.insert(dataPullLogsTable).values({
+    provider: "nflverse",
+    jobName: "nfl-advanced-metrics",
+    status: "running",
+    startedAt: new Date(),
+  }).returning();
+
+  res.json({ status: "started", logId: log.id });
+
+  try {
+    const totalUpserted = await syncNflAdvancedMetrics();
+    await db.update(dataPullLogsTable)
+      .set({ status: "success", recordsProcessed: totalUpserted, finishedAt: new Date() })
+      .where(eq(dataPullLogsTable.id, log.id));
+    req.log.info({ totalUpserted }, "NFL advanced metrics sync OK");
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    req.log.error({ err }, "NFL advanced metrics sync failed");
+    await db.update(dataPullLogsTable)
+      .set({ status: "error", errorMessage, finishedAt: new Date() })
+      .where(eq(dataPullLogsTable.id, log.id));
+  }
 });
 
 // Admin: sync FP/NHL projections for one or all sports

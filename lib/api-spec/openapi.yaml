@@ -1190,6 +1190,33 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PaceSyncResult" }
 
+  # ─── NFL ADVANCED METRICS ────────────────────────────────────────────
+  /nfl-advanced/slate:
+    get:
+      operationId: getNflAdvancedSlate
+      tags: [nfl]
+      summary: Get NFL advanced metrics (snap%, target share, WOPR) for all players
+      responses:
+        "200":
+          description: Array of NFL advanced metric rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NflAdvancedRow" }
+
+  /admin/sync/nfl-advanced:
+    post:
+      operationId: syncNflAdvanced
+      tags: [nfl]
+      summary: Download and ingest nflverse snap counts and player stats (2023 + 2024)
+      responses:
+        "200":
+          description: Sync started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NflAdvancedSyncResult" }
+
   # ─── SHARP MONEY DETECTION ───────────────────────────────────────────
   /sharp/compute:
     post:
@@ -1982,6 +2009,32 @@ components:
         seeded:   { type: integer }
         total:    { type: integer }
       required: [status, computed, seeded, total]
+
+    # ─── NFL ADVANCED METRICS ─────────────────────────────────────────
+    NflAdvancedRow:
+      type: object
+      properties:
+        playerName:   { type: string }
+        team:         { type: string }
+        position:     { type: ["string", "null"] }
+        season:       { type: integer }
+        week:         { type: ["integer", "null"] }
+        snapCount:    { type: ["integer", "null"] }
+        snapPct:      { type: ["number", "null"] }
+        targetShare:  { type: ["number", "null"] }
+        airYards:     { type: ["number", "null"] }
+        airYardsShare: { type: ["number", "null"] }
+        wopr:         { type: ["number", "null"] }
+        racr:         { type: ["number", "null"] }
+        targets:      { type: ["integer", "null"] }
+      required: [playerName, team, season]
+
+    NflAdvancedSyncResult:
+      type: object
+      properties:
+        status:        { type: string }
+        logId:         { type: integer }
+      required: [status, logId]
 
     # ─── SHARP MONEY DETECTION ────────────────────────────────────────
     SharpSignalRow:

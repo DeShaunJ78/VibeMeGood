@@ -11,6 +11,7 @@ import { computeAllVarianceScores } from "./variance";
 import { syncFatigueData } from "./sync/fatigue";
 import { syncInjuries } from "./sync/injuries";
 import { syncProjections } from "./projections/sync";
+import { syncNflAdvancedMetrics } from "./sync/nfl-advanced";
 
 async function logPull(provider: string, jobName: string, fn: () => Promise<number>) {
   const [log] = await db.insert(dataPullLogsTable).values({
@@ -115,6 +116,11 @@ export function startCronJobs() {
       logger.error({ err }, "Stale data check failed");
     }
   });
+
+  // NFL advanced metrics every Tuesday at 6 AM (after MNF finalizes)
+  cron.schedule("0 6 * * 2", () =>
+    logPull("nflverse", "nfl-advanced-metrics", syncNflAdvancedMetrics)
+  );
 
   logger.info("Cron jobs started");
 }

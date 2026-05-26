@@ -65,6 +65,8 @@ export * from './listPropScoresParams';
 export * from './listTeamsParams';
 export * from './listWatchlistParams';
 export * from './markAllAlertsRead200';
+export * from './nflAdvancedRow';
+export * from './nflAdvancedSyncResult';
 export * from './paceSyncResult';
 export * from './payoutConfig';
 export * from './payoutConfigInput';

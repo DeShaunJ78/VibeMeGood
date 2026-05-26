@@ -1507,6 +1507,36 @@ export const SyncPaceRatingsResponse = zod.object({
 
 
 /**
+ * @summary Get NFL advanced metrics (snap%, target share, WOPR) for all players
+ */
+export const GetNflAdvancedSlateResponseItem = zod.object({
+  "playerName": zod.string(),
+  "team": zod.string(),
+  "position": zod.string().nullish(),
+  "season": zod.number(),
+  "week": zod.number().nullish(),
+  "snapCount": zod.number().nullish(),
+  "snapPct": zod.number().nullish(),
+  "targetShare": zod.number().nullish(),
+  "airYards": zod.number().nullish(),
+  "airYardsShare": zod.number().nullish(),
+  "wopr": zod.number().nullish(),
+  "racr": zod.number().nullish(),
+  "targets": zod.number().nullish()
+})
+export const GetNflAdvancedSlateResponse = zod.array(GetNflAdvancedSlateResponseItem)
+
+
+/**
+ * @summary Download and ingest nflverse snap counts and player stats (2023 + 2024)
+ */
+export const SyncNflAdvancedResponse = zod.object({
+  "status": zod.string(),
+  "logId": zod.number()
+})
+
+
+/**
  * @summary Compute and store sharp money signals for all line moves in the last 24h
  */
 export const ComputeSharpSignalsResponse = zod.object({
