@@ -1,0 +1,122 @@
+Do a full stringent audit of VibeMeGood.
+Test every page every button every feature.
+Report WORKING or BROKEN for each item.
+Do not fix anything yet.
+
+1. Slate Board
+   - Players and PP lines loading?
+   - Projection gap showing?
+   - True Edge showing for matched props?
+   - Hit probability showing?
+   - Position column present and sortable?
+   - Pace column showing?
+   - All column sorts working?
+   - Sharp signal badge showing?
+   - Sharp Only filter working?
+   - WNBA filter showing and working?
+   - Sync Projections button working?
+   - Loads in under 2 seconds?
+
+2. Prop Detail Sheet
+   - Opens when clicking a prop?
+   - Historical hit rates showing?
+   - Line Shopping panel showing?
+   - Underdog lines in line shopping?
+   - Better line badge on Slate Board?
+   - Game Pace panel showing?
+   - Why This Edge panel when variance ON?
+   - Sharp Signal panel showing?
+   - NFL advanced metrics showing for NFL?
+   - Convergence signals working?
+
+3. Entry Builder
+   - Builds multi-leg entries?
+   - Break-even panel with 2+ picks?
+   - Break-even rate correct (3-pick = 55%)?
+   - EV calculating correctly?
+   - Payout shift warning triggering?
+   - Simulation toggle visible?
+   - Simulation runs when toggled ON?
+   - Both independent and simulated prob show?
+   - Runs selector working (1k/5k/10k/25k)?
+
+4. Journal
+   - Empty state (no seed data)?
+   - Can log paper entry manually?
+   - Sort controls working?
+   - Filters working?
+
+5. Variance pages (toggle ON)
+   - All 4 variance pages load with data?
+   - Experimental Lab loads with disclaimer?
+   - Sorts working on variance pages?
+   - Badges showing on Slate Board?
+   - Why This Edge in prop detail?
+
+6. Shark Chat
+   - Loads at /shark?
+   - Paper Trade Mode banner showing?
+   - Answers VibeMeGood questions correctly?
+   - 3-pick break-even answers 55%?
+   - Refuses real money recommendations?
+   - Conversation persists navigation?
+   - Draft input persists navigation?
+   - Clear Chat button visible and works?
+
+7. Health Check
+   - All checks running at /health?
+   - Simulation Engine GREEN?
+   - Quick Fix buttons working?
+   - Overall banner accurate?
+
+8. Settings
+   - Variance Intelligence toggle working?
+   - All signal sub-toggles saving?
+   - Experimental Lab requires confirmation?
+   - Variance Compute button working?
+
+9. Sync functions
+   - PP Lines sync working?
+   - External odds sync working?
+   - Projections sync working?
+   - Injuries sync working?
+   - Variance compute working?
+   - Platform lines (Underdog) sync working?
+
+10. Navigation
+    - All sidebar pages load without errors?
+    - No 404 errors on any route?
+    - Shark Chat in sidebar?
+    - System Status pinned at top?
+    - Variance pages hidden when toggle OFF?
+    - Variance pages show when toggle ON?
+
+11. Pick'em Math
+    - Break-even panel appears with 2+ picks?
+    - Green/amber/red indicator correct?
+    - Optimal entry type recommendation shows?
+    - Payout shift detection working?
+    - Both standard and adjusted EV show
+      when shift detected?
+
+12. WNBA
+    - WNBA props show when filter selected?
+    - WNBA in all sport filter dropdowns?
+
+13. Multi-platform comparison
+    - Underdog lines showing in prop detail?
+    - Better line badge on Slate Board
+      when Underdog has better number?
+
+14. Simulation
+    - Toggle appears in Entry Builder?
+    - Runs selector shows 1k/5k/10k/25k?
+    - Loading indicator shows while running?
+    - Results show both probabilities
+      side by side?
+    - Positive correlation shows higher
+      simulated probability?
+
+For every BROKEN item explain exactly
+what is wrong.
+List all broken items together at the end.
