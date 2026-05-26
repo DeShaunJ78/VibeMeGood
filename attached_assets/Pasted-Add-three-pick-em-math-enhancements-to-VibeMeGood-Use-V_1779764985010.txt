@@ -1,0 +1,117 @@
+Add three pick'em math enhancements to VibeMeGood.
+Use VibeMeGood-PickemMath.md as the spec.
+
+ENHANCEMENT 1 — Break-Even Win Rate Display
+
+Create lib/analytics/pickem-math.ts
+
+const ENTRY_TYPES = {
+  "2-pick-power":  { multiplier: 3,    breakEven: 0.5774 },
+  "3-pick-power":  { multiplier: 6,    breakEven: 0.5503 },
+  "4-pick-power":  { multiplier: 10,   breakEven: 0.5623 },
+  "5-pick-power":  { multiplier: 12,   breakEven: 0.5743 },
+  "5-pick-flex":   { multiplier: 8,    breakEven: 0.5283 },
+  "6-pick-power":  { multiplier: 25,   breakEven: 0.5743 },
+  "6-pick-flex":   { multiplier: 15,   breakEven: 0.5188 },
+}
+
+function getBreakEven(entryType: string): number
+function getOptimalEntryType(legCount: number): string
+function pickemEV(legProbs: number[], multiplier: number): number
+
+Formula for pickemEV:
+EV = (leg1_prob × leg2_prob × ... × legN_prob) 
+     × multiplier − 1
+
+This is NOT sportsbook EV. Pick'em has fixed 
+payouts so only the joint probability matters.
+
+Add a panel above the Entry Builder showing:
+- Selected entry type (2-pick power, 3-pick, etc)
+- Payout multiplier
+- Break-even win rate per leg
+  "Each leg must hit above 55.0% to be +EV"
+- Current entry EV from model hit probabilities
+- Green/amber/red indicator:
+  Green: EV above 5%
+  Amber: EV 0-5%
+  Red: EV negative
+- Recommendation:
+  "3-pick power is optimal for 3 legs 
+  (55.0% break-even per leg)"
+
+ENHANCEMENT 2 — Verify and Fix EV Formula
+
+Find where VibeMeGood currently calculates 
+entry EV. Verify it uses this exact formula:
+
+EV = (product of all leg probabilities) 
+     × multiplier − 1
+
+If it uses sportsbook EV formula instead, 
+replace it with the pick'em formula above.
+
+Test with known values:
+Two legs at 60% each, 3x multiplier:
+0.60 × 0.60 × 3 - 1 = 0.08 = 8% EV ✓
+
+Two legs at 50% each, 3x multiplier:
+0.50 × 0.50 × 3 - 1 = -0.25 = -25% EV ✓
+
+Three legs at 55% each, 6x multiplier:
+0.55 × 0.55 × 0.55 × 6 - 1 = 0.0 = 0% EV ✓
+
+Report whether formula was correct or needed fixing.
+
+ENHANCEMENT 3 — Payout Shift Detection
+
+Add detectPayoutShift() to pickem-math.ts:
+
+function detectPayoutShift(legs: EntryLeg[]): {
+  hasShift: boolean
+  estimatedMultiplier: number
+  warning: string | null
+}
+
+Rules for detecting payout shifts:
+
+STRONG correlation — likely shift:
+- Two players same team, same game, both overs
+  for correlated stats (QB pass yards + WR 
+  receiving yards)
+- Two receivers same team both on receiving 
+  yards over
+- Two players same game high team total
+
+NEGATIVE correlation — platform may adjust:
+- QB rushing yards + WR receiving yards
+
+When shift detected show warning:
+"⚠️ Payout shift likely — PrizePicks may 
+reduce your multiplier from 6x to 5.5-5.7x 
+due to correlated legs. Actual EV may be 
+lower than shown."
+
+Show both:
+- Standard EV (at full multiplier)
+- Adjusted EV (at estimated reduced multiplier)
+
+Show tip:
+"To avoid payout shifts: mix teams, mix games, 
+or take opposite sides on correlated players."
+
+VERIFY all three with these tests:
+
+Test 1: 3-pick entry, all legs at 55%
+Expected: EV = 0%, break-even exactly met
+Indicator: amber
+
+Test 2: 2-pick entry, both legs at 60%
+Expected: EV = 8%, above break-even of 57.7%
+Indicator: green
+
+Test 3: 2 receivers same team, both overs
+Expected: payout shift warning shown
+Adjusted EV lower than standard EV
+
+Report pass or fail for all 3 tests.

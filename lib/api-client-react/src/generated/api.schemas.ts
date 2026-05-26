@@ -865,6 +865,9 @@ export type ListEntriesParams = {
 result?: string;
 entryType?: string;
 since?: string;
+dateFrom?: string;
+dateTo?: string;
+sport?: string;
 search?: string;
 };
 

@@ -5,7 +5,7 @@ import {
   entriesTable, entryPicksTable, playersTable, ppLinesTable, clvRecordsTable,
   behavioralLogsTable, userSettingsTable, type InsertEntry,
 } from "@workspace/db/schema";
-import { eq, and, gte, inArray, desc, type SQL } from "drizzle-orm";
+import { eq, and, gte, lte, inArray, desc, type SQL } from "drizzle-orm";
 import { broadcast } from "../lib/sse";
 
 function getTimeOfDay(): string {
@@ -88,11 +88,29 @@ router.get("/entries/loss-limit-status", async (req, res): Promise<void> => {
 
 router.get("/entries", async (req, res) => {
   try {
-    const { result, entryType, since, search } = req.query as Record<string, string>;
+    const { result, entryType, since, dateFrom, dateTo, sport, search } = req.query as Record<string, string>;
     const conditions: SQL[] = [];
     if (result) conditions.push(eq(entriesTable.result, result));
     if (entryType) conditions.push(eq(entriesTable.entryType, entryType));
-    if (since) conditions.push(gte(entriesTable.entryDate, since));
+    // dateFrom / dateTo take precedence over legacy `since`
+    const from = dateFrom ?? since;
+    if (from) conditions.push(gte(entriesTable.entryDate, from));
+    if (dateTo) conditions.push(lte(entriesTable.entryDate, dateTo));
+
+    // sport filter: find entries where at least one pick's player has that sport
+    if (sport) {
+      const sportPicks = await db
+        .select({ entryId: entryPicksTable.entryId })
+        .from(entryPicksTable)
+        .innerJoin(playersTable, eq(entryPicksTable.playerId, playersTable.id))
+        .where(eq(playersTable.sport, sport));
+      const sportEntryIds = [...new Set(sportPicks.map(r => r.entryId))];
+      if (sportEntryIds.length === 0) {
+        res.json([]);
+        return;
+      }
+      conditions.push(inArray(entriesTable.id, sportEntryIds));
+    }
 
     const entries = conditions.length
       ? await db.select().from(entriesTable).where(and(...conditions))

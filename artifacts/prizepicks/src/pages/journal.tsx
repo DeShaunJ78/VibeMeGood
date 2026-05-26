@@ -11,8 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle } from "lucide-react";
+import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X } from "lucide-react";
 import { format } from "date-fns";
+
+const SPORTS = ["NFL", "NBA", "MLB", "NHL", "WNBA", "MMA", "PGA", "NASCAR", "SOCCER"];
+
+const RESULT_OPTIONS = ["win", "loss", "partial", "pending", "refund"];
 
 const RESULT_STYLES: Record<string, { label: string; className: string }> = {
   win:     { label: "WIN",     className: "bg-emerald-900/50 text-emerald-300 border-emerald-700/50" },
@@ -524,13 +528,26 @@ function NewEntryModal({ open, onClose }: { open: boolean; onClose: () => void }
 }
 
 export default function Journal() {
-  const [search, setSearch]   = useState("");
-  const [newOpen, setNewOpen] = useState(false);
+  const [search, setSearch]     = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo]     = useState("");
+  const [result, setResult]     = useState("");
+  const [sport, setSport]       = useState("");
+  const [newOpen, setNewOpen]   = useState(false);
   const qc = useQueryClient();
 
+  const params = {
+    ...(search   ? { search }   : {}),
+    ...(dateFrom ? { dateFrom } : {}),
+    ...(dateTo   ? { dateTo }   : {}),
+    ...(result   ? { result }   : {}),
+    ...(sport    ? { sport }    : {}),
+  };
+  const hasParams = Object.keys(params).length > 0;
+
   const { data: entries, isLoading } = useListEntries(
-    search ? { search } : undefined,
-    { query: { queryKey: getListEntriesQueryKey(search ? { search } : undefined) } }
+    hasParams ? params : undefined,
+    { query: { queryKey: getListEntriesQueryKey(hasParams ? params : undefined) } }
   );
 
   const list = entries ?? [];
@@ -540,13 +557,24 @@ export default function Journal() {
     const s = Number(e.stake);
     return sum + (e.result === "win" || e.result === "partial" ? p - s : -s);
   }, 0);
-  const wins = list.filter((e: any) => e.result === "win").length;
-  const losses = list.filter((e: any) => e.result === "loss").length;
+  const wins    = list.filter((e: any) => e.result === "win").length;
+  const losses  = list.filter((e: any) => e.result === "loss").length;
   const pending = list.filter((e: any) => e.result === "pending").length;
 
+  const activeFilterCount = [dateFrom, dateTo, result, sport].filter(Boolean).length;
+
+  function clearFilters() {
+    setDateFrom("");
+    setDateTo("");
+    setResult("");
+    setSport("");
+    setSearch("");
+  }
+
   return (
-    <div className="space-y-4 h-full flex flex-col">
-      <div className="flex items-center justify-between border-b border-border pb-4 shrink-0">
+    <div className="space-y-3 h-full flex flex-col">
+      {/* ── Header row ── */}
+      <div className="flex items-center justify-between border-b border-border pb-3 shrink-0">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold tracking-tight">Journal</h1>
           <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
@@ -561,7 +589,7 @@ export default function Journal() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="relative w-52">
+          <div className="relative w-44">
             <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search notes…"
@@ -579,14 +607,94 @@ export default function Journal() {
         </div>
       </div>
 
+      {/* ── Filter bar ── */}
+      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+        <Filter className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+
+        {/* Date From */}
+        <div className="flex items-center gap-1">
+          <label className="text-[10px] font-mono text-slate-500 uppercase">From</label>
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+            className="bg-slate-900 border-slate-800 font-mono text-xs h-7 w-32 px-2"
+          />
+        </div>
+
+        {/* Date To */}
+        <div className="flex items-center gap-1">
+          <label className="text-[10px] font-mono text-slate-500 uppercase">To</label>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+            className="bg-slate-900 border-slate-800 font-mono text-xs h-7 w-32 px-2"
+          />
+        </div>
+
+        {/* Result */}
+        <Select value={result || "_all"} onValueChange={v => setResult(v === "_all" ? "" : v)}>
+          <SelectTrigger className="bg-slate-900 border-slate-800 font-mono text-xs h-7 w-28">
+            <SelectValue placeholder="Result" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all" className="font-mono text-xs">All results</SelectItem>
+            {RESULT_OPTIONS.map(r => (
+              <SelectItem key={r} value={r} className="font-mono text-xs uppercase">{r}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Sport */}
+        <Select value={sport || "_all"} onValueChange={v => setSport(v === "_all" ? "" : v)}>
+          <SelectTrigger className="bg-slate-900 border-slate-800 font-mono text-xs h-7 w-24">
+            <SelectValue placeholder="Sport" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all" className="font-mono text-xs">All sports</SelectItem>
+            {SPORTS.map(s => (
+              <SelectItem key={s} value={s} className="font-mono text-xs">{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Clear button — only when filters active */}
+        {(activeFilterCount > 0 || search) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            className="font-mono text-xs h-7 px-2 text-slate-400 hover:text-white hover:bg-slate-800 gap-1"
+          >
+            <X className="w-3 h-3" />
+            Clear
+            {activeFilterCount > 0 && (
+              <span className="ml-0.5 bg-primary/20 text-primary rounded-full px-1.5 py-0 text-[10px] font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
+        )}
+      </div>
+
+      {/* ── Entry list ── */}
       <div className="flex-1 overflow-auto space-y-2 min-h-0">
         {isLoading ? (
           Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-14 bg-slate-900 rounded-lg" />
           ))
         ) : list.length === 0 ? (
-          <div className="flex items-center justify-center h-48 text-muted-foreground font-mono text-sm">
-            No entries found.
+          <div className="flex flex-col items-center justify-center h-48 gap-2 text-muted-foreground font-mono text-sm">
+            <span>No entries found.</span>
+            {hasParams && (
+              <button
+                onClick={clearFilters}
+                className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         ) : (
           list.map((entry: any) => <EntryRow key={entry.id} entry={entry} />)

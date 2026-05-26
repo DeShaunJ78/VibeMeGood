@@ -10,5 +10,8 @@ export type ListEntriesParams = {
 result?: string;
 entryType?: string;
 since?: Date;
+dateFrom?: Date;
+dateTo?: Date;
+sport?: string;
 search?: string;
 };

@@ -530,6 +530,9 @@ paths:
         - { name: result, in: query, schema: { type: string } }
         - { name: entryType, in: query, schema: { type: string } }
         - { name: since, in: query, schema: { type: string, format: date } }
+        - { name: dateFrom, in: query, schema: { type: string, format: date } }
+        - { name: dateTo, in: query, schema: { type: string, format: date } }
+        - { name: sport, in: query, schema: { type: string } }
         - { name: search, in: query, schema: { type: string } }
       responses:
         "200":

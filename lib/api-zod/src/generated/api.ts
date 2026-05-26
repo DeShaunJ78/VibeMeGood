@@ -700,6 +700,9 @@ export const ListEntriesQueryParams = zod.object({
   "result": zod.coerce.string().optional(),
   "entryType": zod.coerce.string().optional(),
   "since": zod.date().optional(),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional(),
+  "sport": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional()
 })
 
