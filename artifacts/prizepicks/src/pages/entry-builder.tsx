@@ -11,9 +11,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useEntry } from "@/lib/entry-context";
-import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown, ShieldAlert, AlertTriangle, ClipboardCheck } from "lucide-react";
+import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown, ShieldAlert, AlertTriangle, ClipboardCheck, BarChart2 } from "lucide-react";
 import { Link } from "wouter";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
+import {
+  getBreakEven,
+  getOptimalEntryType,
+  pickemEV,
+  detectPayoutShift,
+  type EntryLeg,
+} from "@workspace/analytics";
 
 import type { EntryPick } from "@/lib/entry-context";
 
@@ -138,6 +145,40 @@ export default function EntryBuilder() {
     : null;
   const activeEV = playstyle === "power" ? evResultPower : evResultFlex;
 
+  // ── Pick'em Math (Enhancement 1 + 3) ──────────────────────────────────────
+  const entryTypeKey = `${n}-pick-${playstyle}`;
+  const breakEven     = n >= 2 ? getBreakEven(entryTypeKey) : null;
+  const optimalKey    = n >= 2 ? getOptimalEntryType(n) : null;
+  const isOptimal     = optimalKey === null || optimalKey === entryTypeKey;
+
+  const legs: EntryLeg[] = picks.map(p => ({
+    playerName: p.playerName,
+    teamAbbr:   p.teamAbbr,
+    statType:   p.statType,
+    direction:  p.direction,
+    pHit:       legPHit(p) ?? undefined,
+  }));
+
+  const shiftResult = n >= 2 && playstyle === "power" && multiplier > 0
+    ? detectPayoutShift(legs, multiplier)
+    : null;
+
+  const adjustedEvPct = shiftResult?.hasShift && activeEV
+    ? pickemEV(
+        activeEV.legData.map(l => l.pHit ?? 0.5),
+        shiftResult.estimatedMultiplier,
+      ) * 100
+    : null;
+
+  const evPct       = activeEV?.evPct ?? null;
+  // Indicator thresholds: green >5%, amber -0.5% to 5% (covers break-even), red <-0.5%
+  const evDotColor  = evPct == null ? "bg-slate-700" :
+    evPct > 5    ? "bg-emerald-500" :
+    evPct >= -0.5 ? "bg-amber-400"  : "bg-rose-500";
+  const evTextColor = evPct == null ? "text-slate-500" :
+    evPct > 5    ? "text-emerald-400" :
+    evPct >= -0.5 ? "text-amber-400"  : "text-rose-400";
+
   const doSave = useCallback(async () => {
     try {
       await createEntry.mutateAsync({
@@ -199,6 +240,95 @@ export default function EntryBuilder() {
           </Button>
         </div>
       </div>
+
+      {/* ── Pick'em Math Panel ─────────────────────────────────────────────── */}
+      {n >= 2 && (
+        <div className="shrink-0 space-y-2">
+          {/* Main stat bar */}
+          <div className="flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-lg px-4 py-2.5 flex-wrap">
+            <BarChart2 className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+            <span className="font-mono text-xs font-bold text-slate-200 uppercase tracking-wider shrink-0">
+              {n}-pick {playstyle}
+            </span>
+            {multiplier > 0 && (
+              <span className="font-mono text-xs text-slate-500 shrink-0">{multiplier}×</span>
+            )}
+
+            <div className="h-3 border-l border-slate-700 mx-1 shrink-0" />
+
+            {/* Break-even */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[10px] font-mono text-slate-500 uppercase">Break-even</span>
+              <span className="font-mono text-xs font-bold text-primary">
+                {breakEven != null ? `${(breakEven * 100).toFixed(1)}%` : "—"} per leg
+              </span>
+              {breakEven != null && (
+                <span className="text-[10px] font-mono text-slate-500">
+                  (each leg must hit above {(breakEven * 100).toFixed(1)}% to be +EV)
+                </span>
+              )}
+            </div>
+
+            <div className="h-3 border-l border-slate-700 mx-1 shrink-0" />
+
+            {/* EV indicator */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <div className={`w-2 h-2 rounded-full shrink-0 ${evDotColor}`} />
+              <span className="text-[10px] font-mono text-slate-500 uppercase">Entry EV</span>
+              <span className={`font-mono text-xs font-bold ${evTextColor}`}>
+                {evPct != null ? `${evPct >= 0 ? "+" : ""}${evPct.toFixed(1)}%` : "—"}
+              </span>
+              {adjustedEvPct != null && (
+                <span className="text-[10px] font-mono text-slate-500">
+                  · adj. <span className={adjustedEvPct >= 0 ? "text-amber-500" : "text-rose-500"}>
+                    {adjustedEvPct >= 0 ? "+" : ""}{adjustedEvPct.toFixed(1)}%
+                  </span>
+                </span>
+              )}
+            </div>
+
+            {/* Recommendation if suboptimal */}
+            {!isOptimal && optimalKey && (
+              <>
+                <div className="h-3 border-l border-slate-700 mx-1 shrink-0" />
+                <span className="text-[10px] font-mono text-amber-400/80 shrink-0">
+                  Rec: {optimalKey} is optimal for {n} legs ({(getBreakEven(optimalKey) * 100).toFixed(1)}% break-even per leg)
+                </span>
+              </>
+            )}
+            {isOptimal && optimalKey && (
+              <>
+                <div className="h-3 border-l border-slate-700 mx-1 shrink-0" />
+                <span className="text-[10px] font-mono text-emerald-500/70 shrink-0">
+                  {optimalKey} is optimal for {n} legs ({(getBreakEven(optimalKey) * 100).toFixed(1)}% break-even per leg)
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* Payout shift warning */}
+          {shiftResult?.hasShift && (
+            <div className="bg-amber-950/40 border border-amber-700/50 rounded-lg px-4 py-2.5 space-y-1.5">
+              <div className="flex items-start gap-2 text-xs font-mono text-amber-300">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400" />
+                <div className="space-y-1">
+                  <div className="font-bold leading-snug">{shiftResult.warning}</div>
+                  {evPct != null && adjustedEvPct != null && (
+                    <div className="flex items-center gap-3 text-[11px] text-amber-400/80 mt-1">
+                      <span>Standard EV: <span className={evPct >= 0 ? "text-emerald-400 font-bold" : "text-rose-400 font-bold"}>{evPct >= 0 ? "+" : ""}{evPct.toFixed(1)}%</span></span>
+                      <span className="text-amber-700">→</span>
+                      <span>Adjusted EV: <span className={adjustedEvPct >= 0 ? "text-amber-400 font-bold" : "text-rose-400 font-bold"}>{adjustedEvPct >= 0 ? "+" : ""}{adjustedEvPct.toFixed(1)}%</span></span>
+                    </div>
+                  )}
+                  {shiftResult.tip && (
+                    <div className="text-[10px] text-amber-500/60 pt-0.5">{shiftResult.tip}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-5 min-h-0">
         {/* Left: Pick List */}
