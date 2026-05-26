@@ -1,0 +1,127 @@
+Do a full audit of VibeMeGood. Check every 
+page and every feature. Report WORKING or 
+BROKEN for every item. Do not fix anything 
+yet — just report.
+
+1. SLATE BOARD
+   - Players loading?
+   - PP lines showing with line values?
+   - Projection gap computing?
+   - True Edge showing for matched props?
+   - Hit probability showing?
+   - Confidence showing?
+   - Position column present and sortable?
+   - All column sorts working?
+   - Filters working (sport, stat, etc)?
+   - Sync Projections button working?
+   - Variance badges showing when toggle ON?
+
+2. PROP DETAIL SHEET
+   - Opens when clicking a prop?
+   - Shows full breakdown?
+   - Why This Edge panel shows when 
+     variance is enabled?
+   - Signal meters showing (fatigue, 
+     environment, usage, matchup)?
+
+3. ENTRY BUILDER
+   - Builds multi-leg entries?
+   - Break-even panel shows with 2+ picks?
+   - Break-even rate correct for entry type?
+     (3-pick power = 55.0%)
+   - EV calculates correctly?
+   - Payout shift warning triggers for 
+     correlated legs?
+   - Sort controls working on picks list?
+   - Simulation toggle visible?
+   - Simulation runs when toggled ON?
+   - Both independent and simulated 
+     probability show side by side?
+   - Runs selector working (1k/5k/10k/25k)?
+   - Positive correlation shows higher 
+     simulated probability?
+   - Negative correlation shows lower 
+     simulated probability?
+   - Toggle OFF returns to normal view?
+
+4. JOURNAL / PAPER LOG
+   - Loads with empty state (no seed data)?
+   - Can manually log a paper entry?
+   - Sort controls working?
+   - Filters working?
+   - Player names show correctly?
+
+5. VARIANCE PAGES (toggle ON)
+   - Stability Radar loads with data?
+   - Fatigue Tracker loads with data?
+   - Environment Board loads with data?
+   - Usage Signals loads with data?
+   - Experimental Lab loads with disclaimer?
+   - All variance page sorts working?
+   - Badges showing on Slate Board?
+   - Why This Edge in prop detail?
+   - Stable Grind mode filters correctly?
+   - Ceiling Hunter mode works?
+
+6. SHARK CHAT
+   - Loads at /shark?
+   - Paper Trade Mode banner showing?
+   - Welcome message correct?
+   - Answers VibeMeGood questions correctly?
+   - 3-pick break-even answers 55.0%?
+   - Refuses real money recommendations?
+   - DraftDuel questions redirected?
+   - Conversation persists navigation?
+   - Draft input persists navigation?
+   - Clear Chat button visible?
+   - Clear Chat confirmation works?
+
+7. HEALTH CHECK
+   - All checks running at /health?
+   - All 22+ checks showing status?
+   - Simulation Engine check GREEN?
+   - Quick Fix buttons working?
+   - Overall banner accurate?
+
+8. SETTINGS
+   - Variance Intelligence toggle working?
+   - All signal sub-toggles saving?
+   - Optimizer modes saving?
+   - Experimental Lab requires confirmation?
+   - Variance Compute button working?
+
+9. SYNC FUNCTIONS
+   - PP Lines sync working?
+   - External odds sync working?
+   - Projections sync working?
+   - Injuries sync working?
+   - Variance compute working?
+   - All syncs update health check timestamps?
+
+10. NAVIGATION
+    - All sidebar pages load without errors?
+    - No 404s on any route?
+    - Shark Chat in sidebar?
+    - System Status pinned at top?
+    - Variance Intel pages in sidebar 
+      when toggle ON?
+    - Variance pages hidden when toggle OFF?
+
+11. PICK'EM MATH
+    - Break-even panel appears with 2+ picks?
+    - Green/amber/red indicator correct?
+    - Optimal entry type recommendation shows?
+    - Payout shift detection working?
+    - Both standard and adjusted EV show 
+      when shift detected?
+
+12. DATA FRESHNESS
+    - PP lines recent?
+    - Projections recent?
+    - External odds recent?
+    - Variance scores recent?
+
+For every BROKEN item explain exactly 
+what is wrong and what page it is on.
+List all broken items together at the end
+so we can fix them in one batch.
