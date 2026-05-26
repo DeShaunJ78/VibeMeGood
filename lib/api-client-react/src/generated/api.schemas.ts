@@ -533,17 +533,45 @@ export interface PayoutConfigUpdate {
   effectiveAt?: string;
 }
 
+export interface DashboardProp {
+  ppLineId: number;
+  playerName: string;
+  sport: string;
+  statType: string;
+  lineValue: number;
+  lineType: string;
+  /** @nullable */
+  teamAbbr?: string | null;
+  /** @nullable */
+  opponentAbbr?: string | null;
+  /** @nullable */
+  pOver?: number | null;
+  /** @nullable */
+  edgeScore?: number | null;
+  actionTag: string;
+  isGated: boolean;
+  /** @nullable */
+  noPlayReason?: string | null;
+}
+
 export interface DashboardSummary {
   todaysGames: Game[];
   topInjuries: Injury[];
   biggestLineMovements: unknown[];
-  topPlayProps: SlateRow[];
+  topPlayProps: DashboardProp[];
+  topProjProps: DashboardProp[];
   watchlistCount: number;
   activePropsCount: number;
   pendingEntriesCount: number;
   /** @nullable */
   averageEdgeScore?: number | null;
   unreadAlertsCount: number;
+  playPropsCount?: number;
+  gatedPropsCount?: number;
+  /** @nullable */
+  avgModelPOver?: number | null;
+  /** @nullable */
+  avgPlayPOver?: number | null;
   dataFreshness?: unknown;
 }
 

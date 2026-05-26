@@ -251,11 +251,20 @@ export async function recalcPropScores(): Promise<void> {
 
       const finalScore = marketEdge + lineBonus + projConfirmBonus;
 
-      // --- Action tag — NO-PLAY gates first ---
+      // --- Action tag ---
+      // "insufficient_data" alone does not block PLAY — market evidence can still qualify.
+      // Hard gates (injury exclusions, etc.) always force NO-PLAY.
+      const hardNoPlay = noPlayReason && noPlayReason !== "insufficient_data";
       let actionTag: string;
-      if (noPlayReason) {
+      if (hardNoPlay) {
         actionTag = "NO-PLAY";
-      } else if (finalScore >= 4 && (pOver === null || pOver >= 52) && (dataQualityScore === null || dataQualityScore >= 50)) {
+      } else if (
+        finalScore >= 2 &&
+        (pOver === null || pOver >= 51) &&
+        (dataQualityScore === null || dataQualityScore >= 25)
+      ) {
+        actionTag = "PLAY";
+      } else if (noPlayReason === "insufficient_data" && finalScore >= 5) {
         actionTag = "PLAY";
       } else if (finalScore <= -3) {
         actionTag = "PASS";

@@ -1638,20 +1638,43 @@ components:
         effectiveAt: { type: string, format: date-time }
 
     # ─── DASHBOARD ──────────────────────────────────────────────────
+    DashboardProp:
+      type: object
+      properties:
+        ppLineId: { type: integer }
+        playerName: { type: string }
+        sport: { type: string }
+        statType: { type: string }
+        lineValue: { type: number }
+        lineType: { type: string }
+        teamAbbr: { type: ["string", "null"] }
+        opponentAbbr: { type: ["string", "null"] }
+        pOver: { type: ["number", "null"] }
+        edgeScore: { type: ["number", "null"] }
+        actionTag: { type: string }
+        isGated: { type: boolean }
+        noPlayReason: { type: ["string", "null"] }
+      required: [ppLineId, playerName, sport, statType, lineValue, lineType, actionTag, isGated]
+
     DashboardSummary:
       type: object
       properties:
         todaysGames: { type: array, items: { $ref: "#/components/schemas/Game" } }
         topInjuries: { type: array, items: { $ref: "#/components/schemas/Injury" } }
         biggestLineMovements: { type: array, items: {} }
-        topPlayProps: { type: array, items: { $ref: "#/components/schemas/SlateRow" } }
+        topPlayProps: { type: array, items: { $ref: "#/components/schemas/DashboardProp" } }
+        topProjProps: { type: array, items: { $ref: "#/components/schemas/DashboardProp" } }
         watchlistCount: { type: integer }
         activePropsCount: { type: integer }
         pendingEntriesCount: { type: integer }
         averageEdgeScore: { type: ["number", "null"] }
         unreadAlertsCount: { type: integer }
+        playPropsCount: { type: integer }
+        gatedPropsCount: { type: integer }
+        avgModelPOver: { type: ["number", "null"] }
+        avgPlayPOver: { type: ["number", "null"] }
         dataFreshness: {}
-      required: [todaysGames, topInjuries, biggestLineMovements, topPlayProps, watchlistCount, activePropsCount, pendingEntriesCount, unreadAlertsCount]
+      required: [todaysGames, topInjuries, biggestLineMovements, topPlayProps, topProjProps, watchlistCount, activePropsCount, pendingEntriesCount, unreadAlertsCount]
 
     ReviewStats:
       type: object

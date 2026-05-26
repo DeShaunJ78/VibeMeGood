@@ -1,0 +1,96 @@
+Fix all items from the audit in order of severity.
+
+FIX 1 — CRITICAL: Slate Board pagination
+The useMarketIntel hook loads 5,813 rows (7.2 MB)
+with no pagination. The browser never finishes
+loading and stays on skeleton forever.
+
+Fix with server-side pagination:
+
+1. Add pagination to GET /api/market-intel:
+   - Add query params: page (default 1), 
+     limit (default 100)
+   - Return: { data, total, page, limit, 
+     hasMore }
+   - Default to 100 rows per page
+
+2. Update the Slate Board to load paginated:
+   - Load first 100 rows on mount
+   - Add "Load More" button at bottom of table
+     or infinite scroll as user reaches bottom
+   - Show "Showing X of Y props" counter
+   - Filters still apply server-side
+
+3. Add search/filter params to the API:
+   - sport filter
+   - statType filter
+   - minEdge filter
+   So filtered results return fast without
+   loading all 5,813 rows first.
+
+Verify: Slate Board loads in under 2 seconds
+showing first 100 props. Scrolling or clicking
+Load More fetches the next page.
+
+FIX 2 — CRITICAL: Command Center schema mismatch
+The OpenAPI spec declares topPlayProps.items
+as SlateRow (20+ required fields) but the API
+returns lightweight objects. Zod validation
+fails and data stays undefined forever.
+
+Fix:
+1. Create a new lightweight schema in the
+   OpenAPI spec called DashboardProp:
+   {
+     ppLineId: number
+     playerName: string
+     pOver: number
+     edgeScore: number
+     actionTag: string
+   }
+
+2. Update the dashboard summary endpoint to
+   use DashboardProp instead of SlateRow
+   for topPlayProps and topProjProps
+
+3. Run codegen to regenerate types
+
+4. Verify Command Center loads and shows
+   content instead of permanent skeleton
+
+FIX 3 — MINOR: Health Check quick fix buttons
+System Health page Fix buttons use wrong routes:
+  /api/sync/lines → should be /api/sync/pp-lines
+  /api/sync/odds → should be /api/sync/external-odds
+
+Find all Fix button route references in the
+health check page and correct them to match
+the actual working routes confirmed in the audit.
+
+FIX 4 — DATA: Variance Scores stale
+Variance scores are 53.5 hours old.
+Trigger: POST /api/sync/variance
+Confirm variance scores update and health
+check shows GREEN for variance.
+
+FIX 5 — DATA: No PLAY-tagged props
+topPlayProps always returns empty because
+no props meet the PLAY tag threshold.
+
+Check the edge scoring threshold in the
+action tag logic. If the threshold is too
+high for current data lower it so realistic
+props get tagged as PLAY.
+
+Report what the current threshold is and
+what you changed it to.
+
+After all 5 fixes verify:
+1. Slate Board loads in under 2 seconds
+2. Command Center shows content not skeleton
+3. Health Check fix buttons all work
+4. Variance scores show GREEN on health check
+5. At least some props show PLAY tag on 
+   Command Center
+
+Report pass or fail for all 5.

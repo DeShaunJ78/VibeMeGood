@@ -15,6 +15,7 @@ export * from './anthropicMessage';
 export * from './anthropicMessageInput';
 export * from './clearAllAlerts200';
 export * from './clearReadAlerts200';
+export * from './dashboardProp';
 export * from './dashboardSummary';
 export * from './dataHealth';
 export * from './dataPullLog';

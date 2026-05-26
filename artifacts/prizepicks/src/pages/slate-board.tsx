@@ -75,12 +75,22 @@ type MarketIntelRow = {
   } | null;
 };
 
-function useMarketIntel(params: Record<string, string | undefined>) {
+type MarketIntelPage = {
+  data: MarketIntelRow[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+};
+
+function useMarketIntel(params: Record<string, string | undefined>, page: number) {
   const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v) qs.set(k, v);
-  return useQuery<MarketIntelRow[]>({
-    queryKey: ["market-intel", params],
+  qs.set("page", String(page));
+  qs.set("limit", "100");
+  return useQuery<MarketIntelPage>({
+    queryKey: ["market-intel", params, page],
     queryFn: async () => {
       const r = await fetch(`${base}/api/market-intel?${qs}`);
       if (!r.ok) throw new Error("market-intel fetch failed");
@@ -372,16 +382,44 @@ export default function SlateBoard() {
     lineType: lineTypeFilter !== "all" ? lineTypeFilter : undefined,
   };
 
+  // Pagination state for market-intel
+  const [miPage, setMiPage] = useState(1);
+  const [allMiRows, setAllMiRows] = useState<MarketIntelRow[]>([]);
+  const [miTotal, setMiTotal] = useState(0);
+  const [miHasMore, setMiHasMore] = useState(false);
+
+  // Reset pagination when filters change
+  const miParamsStr = JSON.stringify(miParams);
+  const prevMiParamsStr = useRef(miParamsStr);
+  useEffect(() => {
+    if (prevMiParamsStr.current !== miParamsStr) {
+      prevMiParamsStr.current = miParamsStr;
+      setMiPage(1);
+      setAllMiRows([]);
+      setMiTotal(0);
+      setMiHasMore(false);
+    }
+  }, [miParamsStr]);
+
   const { data: slate, isLoading: slateLoading } = useGetSlate(slateParams, {
     query: { queryKey: getGetSlateQueryKey(slateParams) },
   });
 
-  const { data: marketIntel, isLoading: miLoading } = useMarketIntel(miParams);
+  const { data: miPageData, isLoading: miLoading } = useMarketIntel(miParams, miPage);
 
-  const isLoading = slateLoading || miLoading;
+  // Accumulate pages as they load
+  useEffect(() => {
+    if (!miPageData) return;
+    setAllMiRows(prev => miPage === 1 ? miPageData.data : [...prev, ...miPageData.data]);
+    setMiTotal(miPageData.total);
+    setMiHasMore(miPageData.hasMore);
+  }, [miPageData, miPage]);
+
+  // Only block on skeleton for the very first page
+  const isLoading = slateLoading || (miPage === 1 && miLoading);
 
   // Merge market-intel into slate rows by ppLineId
-  const miMap = new Map<number, MarketIntelRow>((marketIntel ?? []).map(r => [r.ppLineId, r]));
+  const miMap = new Map<number, MarketIntelRow>(allMiRows.map(r => [r.ppLineId, r]));
 
   const mergedRows = (slate ?? []).map((row: any) => {
     const mi = miMap.get(row.ppLineId);
@@ -408,7 +446,7 @@ export default function SlateBoard() {
 
   // Market-intel rows not in slate (new from live sync)
   const slateIds = new Set((slate ?? []).map((r: any) => r.ppLineId));
-  const miOnlyRows: any[] = (marketIntel ?? [])
+  const miOnlyRows: any[] = (allMiRows ?? [])
     .filter(mi => !slateIds.has(mi.ppLineId))
     .map(mi => ({
       ppLineId: mi.ppLineId,
@@ -443,7 +481,7 @@ export default function SlateBoard() {
 
   const allRows = [...mergedRows, ...miOnlyRows];
   const teamRows = allRows.filter((r) => r.pickCategory === "team");
-  const notSynced = !marketIntel || marketIntel.length === 0;
+  const notSynced = allMiRows.length === 0 && !miLoading;
 
   const playerRows = useMemo(() => {
     let rows = allRows.filter((r) => r.pickCategory !== "team");
@@ -915,6 +953,26 @@ export default function SlateBoard() {
                 >
                   Show more ({playerRows.length - visibleCount} remaining)
                 </Button>
+              </div>
+            )}
+            {visibleCount >= playerRows.length && miHasMore && (
+              <div className="flex items-center justify-center gap-4 py-3 border-t border-slate-800">
+                <span className="text-xs font-mono text-slate-500">
+                  Showing {allMiRows.length} of {miTotal} props
+                </span>
+                <Button
+                  size="sm" variant="outline"
+                  onClick={() => setMiPage(p => p + 1)}
+                  disabled={miLoading}
+                  className="font-mono text-xs border-slate-700 text-slate-400 hover:text-foreground gap-1.5"
+                >
+                  {miLoading ? <><RefreshCw className="w-3 h-3 animate-spin" /> Loading…</> : <>Load More ({miTotal - allMiRows.length} remaining)</>}
+                </Button>
+              </div>
+            )}
+            {!miHasMore && allMiRows.length > 0 && (
+              <div className="flex justify-center py-2 border-t border-slate-800">
+                <span className="text-xs font-mono text-slate-600">All {miTotal} props loaded</span>
               </div>
             )}
           </div>

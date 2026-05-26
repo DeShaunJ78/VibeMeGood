@@ -5,20 +5,27 @@
  * PrizePicks Analytics API
  * OpenAPI spec version: 0.1.0
  */
+import type { DashboardProp } from './dashboardProp';
 import type { Game } from './game';
 import type { Injury } from './injury';
-import type { SlateRow } from './slateRow';
 
 export interface DashboardSummary {
   todaysGames: Game[];
   topInjuries: Injury[];
   biggestLineMovements: unknown[];
-  topPlayProps: SlateRow[];
+  topPlayProps: DashboardProp[];
+  topProjProps: DashboardProp[];
   watchlistCount: number;
   activePropsCount: number;
   pendingEntriesCount: number;
   /** @nullable */
   averageEdgeScore?: number | null;
   unreadAlertsCount: number;
+  playPropsCount?: number;
+  gatedPropsCount?: number;
+  /** @nullable */
+  avgModelPOver?: number | null;
+  /** @nullable */
+  avgPlayPOver?: number | null;
   dataFreshness?: unknown;
 }

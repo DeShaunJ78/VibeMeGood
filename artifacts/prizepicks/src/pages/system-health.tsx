@@ -153,7 +153,7 @@ function Section({
 }
 
 const QUICK_FIXES = [
-  { label: "Sync PP Lines",    action: "pp-lines",      endpoint: "/api/sync/prizepicks" },
+  { label: "Sync PP Lines",    action: "pp-lines",      endpoint: "/api/sync/pp-lines" },
   { label: "Sync Odds",        action: "external-odds", endpoint: "/api/sync/external-odds" },
   { label: "Sync Projections", action: "projections",   endpoint: "/api/sync/projections" },
   { label: "Sync Injuries",    action: "injuries",      endpoint: "/api/sync/injuries" },
