@@ -56,15 +56,17 @@ export function startCronJobs() {
     logPull("the-odds-api", "external-odds", syncExternalOdds)
   );
 
-  // Daily projections at 6 AM
-  cron.schedule("0 6 * * *", () =>
+  // Projections at 6 AM, 11 AM, and 2 PM daily
+  const projectionsJob = () =>
     logPull("nba-stats", "projections", async () => {
       const n = await computeAllProjections();
       await recalcPropScores();
       await computeStreaks();
       return n;
-    })
-  );
+    });
+  cron.schedule("0 6 * * *",  projectionsJob);
+  cron.schedule("0 11 * * *", projectionsJob);
+  cron.schedule("0 14 * * *", projectionsJob);
 
   // Variance scores at 6:30 AM (after projections)
   cron.schedule("30 6 * * *", () =>

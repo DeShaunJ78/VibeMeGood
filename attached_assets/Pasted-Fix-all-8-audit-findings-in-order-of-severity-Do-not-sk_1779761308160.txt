@@ -1,0 +1,92 @@
+Fix all 8 audit findings in order of severity.
+Do not skip any. Report each fix as it completes.
+
+FIX A — Variance APIs returning 500 (Critical)
+All four variance routes crash:
+/api/variance/fatigue → 500
+/api/variance/usage → 500
+/api/variance/blowout → 500
+/api/variance/stability → 500
+
+Investigate the error in each route handler.
+Fix the root cause — likely a DB query issue
+or missing table join. Do not just suppress
+the error. Find what is throwing and fix it.
+
+FIX B — hitProbability and confidence missing 
+from slate response (Critical)
+The slate board API response is missing these
+fields entirely. Find where hitProbability and
+confidence are computed and why they are not
+being included in the /api/market-intel or
+slate response. Add them.
+
+FIX C — /api/conversations is 404 (Critical)
+The AI Analyst route is not registered.
+Find the conversations route file and register
+it in the main router. If the file does not
+exist, create a stub that returns an empty
+conversations array so the page loads without
+crashing.
+
+FIX D — /api/calibration is 404 (Critical)
+The calibration route is not registered.
+Find the calibration route file and register
+it in the main router. If missing, create a
+stub endpoint that returns empty calibration
+data so the page loads.
+
+FIX E — trueEdge missing from slate response (High)
+The API returns edgeScore but the frontend
+expects trueEdge. Either:
+- Rename edgeScore to trueEdge in the API
+  response, or
+- Add trueEdge as an alias for edgeScore
+Make sure the Slate Board displays the value.
+
+FIX F — Projections sync never run (High)
+The projection scraper has never run on
+VibeMeGood. 
+
+Add automatic projection scraping the same
+way DraftDuel has it:
+
+Use FantasyPros as the primary source.
+Same scraper pattern already built in DraftDuel.
+Run at 7am, 11am, and 2pm daily.
+Add POST /api/admin/sync/projections endpoint.
+Add "Sync Projections" button to Slate Board.
+
+After wiring, trigger a manual sync and confirm
+projections populate.
+
+FIX G — picks[].playerName is null in journal (Medium)
+When expanding a journal entry, pick names
+are blank. The playerName field is null on
+every picks row.
+
+Find where journal picks are stored and
+retrieved. Fix the query to include playerName.
+Verify expanding a journal entry shows
+player names correctly.
+
+FIX H — External odds sync is 2 days stale (Medium)
+The external-odds sync last ran May 24.
+Trigger a manual sync now:
+POST /api/sync/external-odds or equivalent.
+Then add it to the cron schedule if it is
+not already there.
+Verify it runs and updates the timestamp.
+
+After all 8 fixes:
+1. Hit /api/variance/fatigue — confirm 200
+2. Hit slate endpoint — confirm hitProbability
+   and confidence are in the response
+3. Hit /api/conversations — confirm 200
+4. Hit /api/calibration — confirm 200
+5. Check slate board — confirm trueEdge shows
+6. Trigger projection sync — confirm records
+7. Expand a journal entry — confirm player names
+8. Check external odds sync timestamp — confirm fresh
+
+Report pass or fail for all 8 checks.

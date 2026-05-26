@@ -30,6 +30,7 @@ import varianceRouter from "./variance";
 import userSettingsRouter from "./user-settings";
 import lineupFactoryRouter from "./lineup-factory";
 import fatigueRouter from "./fatigue";
+import calibrationRouter from "./calibration";
 
 const router: IRouter = Router();
 
@@ -64,5 +65,6 @@ router.use(varianceRouter);
 router.use(userSettingsRouter);
 router.use(lineupFactoryRouter);
 router.use(fatigueRouter);
+router.use(calibrationRouter);
 
 export default router;
