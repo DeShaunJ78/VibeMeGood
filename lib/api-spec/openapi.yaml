@@ -1140,6 +1140,58 @@ paths:
         "400":
           description: Missing required parameters
 
+  # ─── PLATFORM LINE COMPARISON ───────────────────────────────────────
+  /platform-lines/by-prop:
+    get:
+      operationId: getPlatformLinesByProp
+      tags: [platformLines]
+      summary: Compare lines for one player prop across all pick-em platforms
+      parameters:
+        - in: query
+          name: playerName
+          required: true
+          schema: { type: string }
+        - in: query
+          name: statType
+          required: true
+          schema: { type: string }
+        - in: query
+          name: ppLineValue
+          required: true
+          schema: { type: number }
+      responses:
+        "200":
+          description: All platform lines for this prop with best-line analysis
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformLinesComparison" }
+
+  /platform-lines/better-lines:
+    get:
+      operationId: getPlatformLinesBetterLines
+      tags: [platformLines]
+      summary: All PP lines where another platform has a lower (easier) line
+      responses:
+        "200":
+          description: List of PP lines with better alternatives
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/BetterLineEntry" }
+
+  /platform-lines/sync:
+    post:
+      operationId: syncPlatformLines
+      tags: [platformLines]
+      summary: Sync lines from Underdog Fantasy (Pick6 and Betr are not publicly accessible)
+      responses:
+        "200":
+          description: Sync started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncResult" }
+
   # ─── LINEUP FACTORY ─────────────────────────────────────────────────
   /lineup-factory/generate:
     post:
@@ -1796,6 +1848,39 @@ components:
       properties:
         error: { type: string }
       required: [error]
+
+    # ─── PLATFORM LINE COMPARISON ────────────────────────────────────
+    PlatformLineEntry:
+      type: object
+      properties:
+        platform:  { type: string }
+        lineValue: { type: number }
+      required: [platform, lineValue]
+
+    PlatformLinesComparison:
+      type: object
+      properties:
+        playerName:    { type: string }
+        statType:      { type: string }
+        ppLineValue:   { type: number }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/PlatformLineEntry" }
+        bestPlatform:  { type: string }
+        bestLineValue: { type: number }
+        hasBetterLine: { type: boolean }
+      required: [playerName, statType, ppLineValue, lines, bestPlatform, bestLineValue, hasBetterLine]
+
+    BetterLineEntry:
+      type: object
+      properties:
+        ppLineId:      { type: integer }
+        playerName:    { type: string }
+        statType:      { type: string }
+        ppLineValue:   { type: number }
+        bestPlatform:  { type: string }
+        bestLineValue: { type: number }
+      required: [ppLineId, playerName, statType, ppLineValue, bestPlatform, bestLineValue]
 
     # ─── HISTORICAL HIT RATES ────────────────────────────────────────
     HitRateWindow:

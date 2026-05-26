@@ -27,6 +27,7 @@ import type {
   AnthropicError,
   AnthropicMessage,
   AnthropicMessageInput,
+  BetterLineEntry,
   ClearAllAlerts200,
   ClearReadAlerts200,
   DashboardSummary,
@@ -44,6 +45,7 @@ import type {
   Game,
   GameInput,
   GetHistoricalHitRatesParams,
+  GetPlatformLinesByPropParams,
   GetReviewStatsParams,
   GetSlateParams,
   HealthStatus,
@@ -71,6 +73,7 @@ import type {
   PayoutConfig,
   PayoutConfigInput,
   PayoutConfigUpdate,
+  PlatformLinesComparison,
   Player,
   PlayerInput,
   PlayerUpdate,
@@ -5237,6 +5240,237 @@ export function useGetHistoricalHitRates<TData = Awaited<ReturnType<typeof getHi
 
 
 
+
+export const getGetPlatformLinesByPropUrl = (params: GetPlatformLinesByPropParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/platform-lines/by-prop?${stringifiedParams}` : `/api/platform-lines/by-prop`
+}
+
+/**
+ * @summary Compare lines for one player prop across all pick-em platforms
+ */
+export const getPlatformLinesByProp = async (params: GetPlatformLinesByPropParams, options?: RequestInit): Promise<PlatformLinesComparison> => {
+
+  return customFetch<PlatformLinesComparison>(getGetPlatformLinesByPropUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPlatformLinesByPropQueryKey = (params?: GetPlatformLinesByPropParams,) => {
+    return [
+    `/api/platform-lines/by-prop`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPlatformLinesByPropQueryOptions = <TData = Awaited<ReturnType<typeof getPlatformLinesByProp>>, TError = ErrorType<unknown>>(params: GetPlatformLinesByPropParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformLinesByProp>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlatformLinesByPropQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlatformLinesByProp>>> = ({ signal }) => getPlatformLinesByProp(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlatformLinesByProp>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPlatformLinesByPropQueryResult = NonNullable<Awaited<ReturnType<typeof getPlatformLinesByProp>>>
+export type GetPlatformLinesByPropQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Compare lines for one player prop across all pick-em platforms
+ */
+
+export function useGetPlatformLinesByProp<TData = Awaited<ReturnType<typeof getPlatformLinesByProp>>, TError = ErrorType<unknown>>(
+ params: GetPlatformLinesByPropParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformLinesByProp>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPlatformLinesByPropQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPlatformLinesBetterLinesUrl = () => {
+
+
+
+
+  return `/api/platform-lines/better-lines`
+}
+
+/**
+ * @summary All PP lines where another platform has a lower (easier) line
+ */
+export const getPlatformLinesBetterLines = async ( options?: RequestInit): Promise<BetterLineEntry[]> => {
+
+  return customFetch<BetterLineEntry[]>(getGetPlatformLinesBetterLinesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPlatformLinesBetterLinesQueryKey = () => {
+    return [
+    `/api/platform-lines/better-lines`
+    ] as const;
+    }
+
+
+export const getGetPlatformLinesBetterLinesQueryOptions = <TData = Awaited<ReturnType<typeof getPlatformLinesBetterLines>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformLinesBetterLines>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlatformLinesBetterLinesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlatformLinesBetterLines>>> = ({ signal }) => getPlatformLinesBetterLines({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlatformLinesBetterLines>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPlatformLinesBetterLinesQueryResult = NonNullable<Awaited<ReturnType<typeof getPlatformLinesBetterLines>>>
+export type GetPlatformLinesBetterLinesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary All PP lines where another platform has a lower (easier) line
+ */
+
+export function useGetPlatformLinesBetterLines<TData = Awaited<ReturnType<typeof getPlatformLinesBetterLines>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformLinesBetterLines>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPlatformLinesBetterLinesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getSyncPlatformLinesUrl = () => {
+
+
+
+
+  return `/api/platform-lines/sync`
+}
+
+/**
+ * @summary Sync lines from Underdog Fantasy (Pick6 and Betr are not publicly accessible)
+ */
+export const syncPlatformLines = async ( options?: RequestInit): Promise<SyncResult> => {
+
+  return customFetch<SyncResult>(getSyncPlatformLinesUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSyncPlatformLinesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncPlatformLines>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncPlatformLines>>, TError,void, TContext> => {
+
+const mutationKey = ['syncPlatformLines'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncPlatformLines>>, void> = () => {
+
+
+          return  syncPlatformLines(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncPlatformLinesMutationResult = NonNullable<Awaited<ReturnType<typeof syncPlatformLines>>>
+
+    export type SyncPlatformLinesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Sync lines from Underdog Fantasy (Pick6 and Betr are not publicly accessible)
+ */
+export const useSyncPlatformLines = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncPlatformLines>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof syncPlatformLines>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSyncPlatformLinesMutationOptions(options));
+    }
 
 export const getGenerateLineupFactoryUrl = () => {
 

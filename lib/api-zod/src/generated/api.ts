@@ -1452,6 +1452,56 @@ export const GetHistoricalHitRatesResponse = zod.object({
 
 
 /**
+ * @summary Compare lines for one player prop across all pick-em platforms
+ */
+export const GetPlatformLinesByPropQueryParams = zod.object({
+  "playerName": zod.coerce.string(),
+  "statType": zod.coerce.string(),
+  "ppLineValue": zod.coerce.number()
+})
+
+export const GetPlatformLinesByPropResponse = zod.object({
+  "playerName": zod.string(),
+  "statType": zod.string(),
+  "ppLineValue": zod.number(),
+  "lines": zod.array(zod.object({
+  "platform": zod.string(),
+  "lineValue": zod.number()
+})),
+  "bestPlatform": zod.string(),
+  "bestLineValue": zod.number(),
+  "hasBetterLine": zod.boolean()
+})
+
+
+/**
+ * @summary All PP lines where another platform has a lower (easier) line
+ */
+export const GetPlatformLinesBetterLinesResponseItem = zod.object({
+  "ppLineId": zod.number(),
+  "playerName": zod.string(),
+  "statType": zod.string(),
+  "ppLineValue": zod.number(),
+  "bestPlatform": zod.string(),
+  "bestLineValue": zod.number()
+})
+export const GetPlatformLinesBetterLinesResponse = zod.array(GetPlatformLinesBetterLinesResponseItem)
+
+
+/**
+ * @summary Sync lines from Underdog Fantasy (Pick6 and Betr are not publicly accessible)
+ */
+export const SyncPlatformLinesResponse = zod.object({
+  "success": zod.boolean(),
+  "provider": zod.string(),
+  "jobName": zod.string(),
+  "recordsProcessed": zod.number(),
+  "message": zod.string(),
+  "logId": zod.number().optional()
+})
+
+
+/**
  * @summary Generate a portfolio of diversified PrizePicks lineups
  */
 export const generateLineupFactoryBodyPicksPerEntryMin = 2;

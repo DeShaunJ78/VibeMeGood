@@ -35,6 +35,7 @@ import systemHealthRouter from "./system-health";
 import sharkRouter from "./shark";
 import simulationRouter from "./simulation";
 import historicalHitRatesRouter from "./historical-hit-rates";
+import platformLinesRouter from "./platform-lines";
 
 const router: IRouter = Router();
 
@@ -74,5 +75,6 @@ router.use(systemHealthRouter);
 router.use(sharkRouter);
 router.use(simulationRouter);
 router.use(historicalHitRatesRouter);
+router.use(platformLinesRouter);
 
 export default router;

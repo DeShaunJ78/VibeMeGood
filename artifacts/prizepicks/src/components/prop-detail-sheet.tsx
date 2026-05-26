@@ -10,7 +10,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, ReferenceLine,
 } from "recharts";
-import { Plus, Minus, Zap, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Activity, Database, Wind, CloudRain, Shield, History } from "lucide-react";
+import { Plus, Minus, Zap, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Activity, Database, Wind, CloudRain, Shield, History, Star, Layers } from "lucide-react";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
 import { VarianceBadge } from "@/components/ui/variance-badge";
 import { useUserSettings } from "@/hooks/use-user-settings";
@@ -35,6 +35,16 @@ interface HitRates {
   last30: HitRateWindow;
   season: HitRateWindow;
   vsThisOpponent: HitRateWindow;
+}
+
+interface LineShopping {
+  playerName: string;
+  statType: string;
+  ppLineValue: number;
+  lines: Array<{ platform: string; lineValue: number }>;
+  bestPlatform: string;
+  bestLineValue: number;
+  hasBetterLine: boolean;
 }
 
 interface OurProjection {
@@ -190,6 +200,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
   const [direction, setDirection] = useState<"more" | "less">("more");
   const [variance, setVariance] = useState<VarianceData | null>(null);
   const [hitRates, setHitRates] = useState<HitRates | null>(null);
+  const [lineShopping, setLineShopping] = useState<LineShopping | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const { addPick, removePick, hasPick, updateDirection } = useEntry();
   const { data: userSettings } = useUserSettings();
@@ -223,11 +234,32 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
   }, [data, open]);
 
   useEffect(() => {
+    if (!data || !open) return;
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const playerName = data.player?.fullName;
+    const sType = data.ppLine?.statType;
+    const lineVal = data.ppLine?.lineValue;
+    if (!playerName || !sType || lineVal == null) return;
+
+    const params = new URLSearchParams({
+      playerName: String(playerName),
+      statType:   String(sType),
+      ppLineValue: String(lineVal),
+    });
+
+    fetch(`${base}/api/platform-lines/by-prop?${params}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setLineShopping(d as LineShopping); })
+      .catch(() => {});
+  }, [data, open]);
+
+  useEffect(() => {
     if (!ppLineId || !open) return;
     setData(null);
     setExplainText("");
     setLoading(true);
     setHitRates(null);
+    setLineShopping(null);
     const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     setVariance(null);
     fetch(`${base}/api/slate/${ppLineId}`)
@@ -611,6 +643,74 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
                       })()}
                     </>
                   )}
+                </div>
+              )}
+
+              {/* ── Line Shopping ── */}
+              {lineShopping && lineShopping.lines.length > 1 && (
+                <div className="px-5 py-4 border-b border-slate-800/50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Layers className="w-3 h-3 text-indigo-400" />
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                      Line Shopping
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 mb-3">
+                    {lineShopping.lines.map(({ platform, lineValue }) => {
+                      const ppLabel: Record<string, string> = {
+                        prizepicks: "PrizePicks",
+                        underdog:   "Underdog",
+                        pick6:      "Pick6",
+                        betr:       "Betr",
+                      };
+                      const label    = ppLabel[platform] ?? platform;
+                      const isCurrent = platform === "prizepicks";
+                      const isBest   = platform === lineShopping.bestPlatform && lineShopping.hasBetterLine;
+                      const diff     = lineValue - lineShopping.ppLineValue;
+                      const valColor = isCurrent
+                        ? "text-slate-300"
+                        : diff < 0 ? "text-emerald-400"
+                        : diff > 0 ? "text-rose-400"
+                        : "text-slate-400";
+                      return (
+                        <div key={platform} className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono text-slate-400 w-24 shrink-0">
+                            {label}{isCurrent ? " ←" : ""}
+                          </span>
+                          <span className={`text-sm font-mono font-bold w-12 shrink-0 ${valColor}`}>
+                            {lineValue}
+                          </span>
+                          {isBest && <Star className="w-3 h-3 text-amber-400 shrink-0" />}
+                          {!isCurrent && (
+                            <span className={`text-[9px] font-mono ${diff < 0 ? "text-emerald-400" : diff > 0 ? "text-rose-400" : "text-slate-500"}`}>
+                              {diff < 0 ? `easier (${diff.toFixed(1)})` : diff > 0 ? `harder (+${diff.toFixed(1)})` : "same"}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {lineShopping.hasBetterLine && (() => {
+                    const bestLabel: Record<string, string> = { underdog: "Underdog", pick6: "Pick6", betr: "Betr" };
+                    const bl = bestLabel[lineShopping.bestPlatform] ?? lineShopping.bestPlatform;
+                    const proj = data.ourProjection?.value;
+                    const ppEdge   = proj != null ? ((Number(proj) - lineShopping.ppLineValue)   / lineShopping.ppLineValue   * 100) : null;
+                    const bestEdge = proj != null ? ((Number(proj) - lineShopping.bestLineValue) / lineShopping.bestLineValue * 100) : null;
+                    return (
+                      <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 px-2.5 py-2 rounded space-y-0.5">
+                        <div>Best line: <span className="font-bold">{bl} at {lineShopping.bestLineValue}</span></div>
+                        {proj != null && ppEdge != null && bestEdge != null && (
+                          <div className="text-slate-300">
+                            Model projects {Number(proj).toFixed(1)} — edge is{" "}
+                            <span className="text-emerald-400 font-bold">{bestEdge >= 0 ? "+" : ""}{bestEdge.toFixed(1)}%</span> on {bl} vs{" "}
+                            <span className="text-slate-400">{ppEdge >= 0 ? "+" : ""}{ppEdge.toFixed(1)}%</span> on PrizePicks
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 

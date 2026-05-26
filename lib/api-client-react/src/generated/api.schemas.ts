@@ -645,6 +645,30 @@ export interface AnthropicError {
   error: string;
 }
 
+export interface PlatformLineEntry {
+  platform: string;
+  lineValue: number;
+}
+
+export interface PlatformLinesComparison {
+  playerName: string;
+  statType: string;
+  ppLineValue: number;
+  lines: PlatformLineEntry[];
+  bestPlatform: string;
+  bestLineValue: number;
+  hasBetterLine: boolean;
+}
+
+export interface BetterLineEntry {
+  ppLineId: number;
+  playerName: string;
+  statType: string;
+  ppLineValue: number;
+  bestPlatform: string;
+  bestLineValue: number;
+}
+
 export interface HitRateWindow {
   hits: number;
   total: number;
@@ -958,5 +982,11 @@ playerId: number;
 statType: string;
 line: number;
 opponentTeamId?: number;
+};
+
+export type GetPlatformLinesByPropParams = {
+playerName: string;
+statType: string;
+ppLineValue: number;
 };
 

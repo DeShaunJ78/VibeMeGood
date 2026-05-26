@@ -529,6 +529,26 @@ export default function SlateBoard() {
   const playCount   = useMemo(() => playerRows.filter(r => r.actionTag === "PLAY").length,    [playerRows]);
   const visibleRows = useMemo(() => playerRows.slice(0, visibleCount), [playerRows, visibleCount]);
 
+  const { data: betterLinesData = [] } = useQuery<Array<{
+    ppLineId: number;
+    bestPlatform: string;
+    bestLineValue: number;
+  }>>({
+    queryKey: ["platform-lines-better"],
+    queryFn: async () => {
+      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const r = await fetch(`${base}/api/platform-lines/better-lines`);
+      return r.ok ? (r.json() as Promise<Array<{ ppLineId: number; bestPlatform: string; bestLineValue: number }>>) : [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const betterLineMap = useMemo(() => {
+    const m = new Map<number, { platform: string; lineValue: number }>();
+    for (const b of betterLinesData) m.set(b.ppLineId, { platform: b.bestPlatform, lineValue: b.bestLineValue });
+    return m;
+  }, [betterLinesData]);
+
   useEffect(() => {
     const t = setTimeout(() => setSearchQuery(searchInput), 150);
     return () => clearTimeout(t);
@@ -828,7 +848,20 @@ export default function SlateBoard() {
                         <TableCell className="hidden md:table-cell font-mono text-xs text-muted-foreground">{row.teamAbbr ?? "—"}</TableCell>
                         <TableCell className="hidden md:table-cell font-mono text-xs text-muted-foreground">{row.opponentAbbr ?? "—"}</TableCell>
                         <TableCell className="font-mono text-xs">{row.statType}</TableCell>
-                        <TableCell className="font-mono text-sm font-bold text-right text-cyan-400">{row.lineValue}</TableCell>
+                        <TableCell className="font-mono text-sm font-bold text-right">
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className="text-cyan-400">{row.lineValue}</span>
+                            {betterLineMap.has(row.ppLineId) && (() => {
+                              const bl = betterLineMap.get(row.ppLineId)!;
+                              const pLabel = bl.platform === "underdog" ? "UD" : bl.platform.charAt(0).toUpperCase() + bl.platform.slice(1);
+                              return (
+                                <span className="text-[9px] font-mono font-medium text-emerald-400 bg-emerald-950/50 border border-emerald-800/40 rounded px-1 py-px leading-none whitespace-nowrap">
+                                  ↓{bl.lineValue} {pLabel}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </TableCell>
                         <TableCell className="text-center"><LineTypeBadge type={row.lineType} /></TableCell>
 
                         {/* Market avg */}

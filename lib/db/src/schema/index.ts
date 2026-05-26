@@ -33,3 +33,4 @@ export * from "./variance-scores";
 export * from "./fatigue-data";
 export * from "./referee-data";
 export * from "./experimental-signals";
+export * from "./platform-lines";
