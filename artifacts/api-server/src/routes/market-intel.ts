@@ -4,7 +4,7 @@ import { db } from "@workspace/db";
 import {
   ppLinesTable, externalLinesTable, propScoresTable, playersTable,
   ourProjectionsTable, playerStreaksTable, lineMoveEventsTable, syncRunsTable,
-  varianceScoresTable,
+  varianceScoresTable, platformLinesTable, playerGameLogsTable,
 } from "@workspace/db/schema";
 import { eq, and, or, isNull, desc, gte, asc, inArray, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -107,8 +107,10 @@ router.get("/market-intel", async (req, res) => {
     const total = Number(countResult[0]?.total ?? 0);
 
     const ppLineIds = rows.map(r => r.line.id);
+    const uniquePlayerIds = [...new Set(rows.map(r => r.line.playerId))];
+    const uniquePlayerNames = [...new Set(rows.map(r => r.player.fullName))];
 
-    const [allExtLines, allVarScores, allRecentMoves] = ppLineIds.length
+    const [allExtLines, allVarScores, allRecentMoves, allPlatformLines, allGameLogs] = ppLineIds.length
       ? await Promise.all([
           db
             .select()
@@ -147,8 +149,28 @@ router.get("/market-intel", async (req, res) => {
             .from(lineMoveEventsTable)
             .where(inArray(lineMoveEventsTable.ppLineId, ppLineIds))
             .orderBy(desc(lineMoveEventsTable.capturedAt)),
+
+          uniquePlayerNames.length
+            ? db
+                .select()
+                .from(platformLinesTable)
+                .where(inArray(platformLinesTable.playerName, uniquePlayerNames))
+            : Promise.resolve([] as (typeof platformLinesTable.$inferSelect)[]),
+
+          uniquePlayerIds.length
+            ? db
+                .select({
+                  playerId:       playerGameLogsTable.playerId,
+                  statType:       playerGameLogsTable.statType,
+                  value:          playerGameLogsTable.value,
+                  gameDate:       playerGameLogsTable.gameDate,
+                })
+                .from(playerGameLogsTable)
+                .where(inArray(playerGameLogsTable.playerId, uniquePlayerIds))
+                .orderBy(desc(playerGameLogsTable.gameDate))
+            : Promise.resolve([] as { playerId: number; statType: string; value: string; gameDate: Date }[]),
         ])
-      : [[], [], []];
+      : [[], [], [], [], []];
 
     const extLinesByPpLineId = new Map<number, typeof allExtLines>();
     for (const l of allExtLines) {
@@ -180,6 +202,23 @@ router.get("/market-intel", async (req, res) => {
       allMovesByPpLineId.get(m.ppLineId)!.push(m);
     }
 
+    // Platform lines map: lowercase(playerName):lowercase(statType) → {platform → lineValue}
+    const platformLinesByKey = new Map<string, Map<string, number>>();
+    for (const pl of allPlatformLines) {
+      const key = `${pl.playerName.toLowerCase()}:${pl.statType.toLowerCase()}`;
+      if (!platformLinesByKey.has(key)) platformLinesByKey.set(key, new Map());
+      platformLinesByKey.get(key)!.set(pl.platform, Number(pl.lineValue));
+    }
+
+    // Game logs map: playerId:statType → values[] (most recent first)
+    type GameLogEntry = { value: number; };
+    const gameLogsByKey = new Map<string, GameLogEntry[]>();
+    for (const gl of allGameLogs) {
+      const key = `${gl.playerId}:${gl.statType.toLowerCase()}`;
+      if (!gameLogsByKey.has(key)) gameLogsByKey.set(key, []);
+      gameLogsByKey.get(key)!.push({ value: Number(gl.value) });
+    }
+
     const result = rows.map(row => {
       const extLines    = extLinesByPpLineId.get(row.line.id) ?? [];
       const varScore    = varScoreByPpLineId.get(row.line.id) ?? null;
@@ -191,6 +230,14 @@ router.get("/market-intel", async (req, res) => {
       for (const l of extLines) {
         const val = l.lineValue || l.overLine;
         if (val) bookLines[l.bookName] = parseFloat(val.toString());
+      }
+      // Also include pick'em platform lines (Underdog, etc.) in the book comparison
+      const platKey = `${row.player.fullName.toLowerCase()}:${row.line.statType.toLowerCase()}`;
+      const platLines = platformLinesByKey.get(platKey);
+      if (platLines) {
+        for (const [platform, lineVal] of platLines) {
+          bookLines[platform] = lineVal;
+        }
       }
 
       const vals = Object.values(bookLines);
@@ -263,6 +310,60 @@ router.get("/market-intel", async (req, res) => {
 
       const scoreReasoning = (row.score?.reasoning as Record<string, unknown> | null) ?? null;
 
+      // FIX 3 — Convergence signal: compare model pOver vs historical hit rate
+      const glKey = `${row.line.playerId}:${row.line.statType.toLowerCase()}`;
+      const gameLogs = gameLogsByKey.get(glKey) ?? [];
+      const last30 = gameLogs.slice(0, 30);
+      const histHits = last30.filter(g => g.value > ppLine).length;
+      const histRate = last30.length >= 5 ? (histHits / last30.length) * 100 : null;
+
+      let convergenceSignal: {
+        direction: "over" | "under" | "diverging";
+        strength: "green" | "amber";
+        histRate: number;
+        modelRate: number;
+        message: string;
+      } | null = null;
+
+      if (histRate !== null && pOver !== null) {
+        const diff = Math.abs(pOver - histRate);
+        if (pOver >= 55 && histRate >= 55) {
+          convergenceSignal = {
+            direction: "over", strength: "green", histRate, modelRate: pOver,
+            message: `Model (${pOver.toFixed(1)}%) & history (${histRate.toFixed(1)}%) both favor OVER`,
+          };
+        } else if (pOver < 45 && histRate < 45) {
+          convergenceSignal = {
+            direction: "under", strength: "green", histRate, modelRate: pOver,
+            message: `Model (${pOver.toFixed(1)}%) & history (${histRate.toFixed(1)}%) both favor UNDER`,
+          };
+        } else if (diff > 8) {
+          convergenceSignal = {
+            direction: "diverging", strength: "amber", histRate, modelRate: pOver,
+            message: `Model (${pOver.toFixed(1)}%) and history (${histRate.toFixed(1)}%) disagree by ${diff.toFixed(1)}%`,
+          };
+        }
+      }
+
+      // FIX 4 — Dynamic streak: compute from game logs when player_streaks table is sparse
+      let streakData: { count: number; type: string | null } | null = row.streak
+        ? { count: Math.abs(row.streak.currentStreak ?? 0), type: row.streak.streakType }
+        : null;
+
+      if (!streakData && gameLogs.length >= 2) {
+        const firstVal = gameLogs[0].value;
+        const firstIsOver = firstVal > ppLine;
+        let streakCount = 1;
+        for (let i = 1; i < gameLogs.length; i++) {
+          const isOver = gameLogs[i].value > ppLine;
+          if (isOver === firstIsOver) streakCount++;
+          else break;
+        }
+        if (streakCount >= 2) {
+          streakData = { count: streakCount, type: firstIsOver ? "over" : "under" };
+        }
+      }
+
       return {
         ppLineId: row.line.id,
         playerId: row.player.id,
@@ -303,10 +404,8 @@ router.get("/market-intel", async (req, res) => {
           isStale,
         } : null,
 
-        streak: row.streak ? {
-          count: Math.abs(row.streak.currentStreak ?? 0),
-          type: row.streak.streakType,
-        } : null,
+        streak: streakData,
+        convergenceSignals: convergenceSignal,
 
         recentMoves: recentMoves.map(m => ({
           book: m.bookName,

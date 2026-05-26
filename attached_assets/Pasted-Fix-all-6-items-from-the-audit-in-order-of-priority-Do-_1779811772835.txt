@@ -1,0 +1,119 @@
+Fix all 6 items from the audit in order 
+of priority. Do not skip any.
+
+FIX 1 — NFL sport filter (Critical)
+The Slate Board sends sport=NFL but the DB
+stores NFL data as "NFLSZN" causing 0 rows.
+
+Fix the sport filter to handle both:
+When user selects NFL filter, query for
+both sport="NFL" AND sport="NFLSZN"
+
+Or normalize all NFL data to "NFL" on ingest.
+Pick whichever is cleaner and apply it
+consistently everywhere sport is filtered.
+
+Verify: selecting NFL filter returns rows.
+
+FIX 2 — Underdog lines missing (Critical)
+The external_lines table has no Underdog rows.
+The platform_lines sync was built but is not
+populating external_lines correctly.
+
+Check:
+1. Does the platform_lines table have 
+   Underdog data?
+   SELECT COUNT(*) FROM platform_lines 
+   WHERE platform = 'underdog'
+
+2. If yes — the join from platform_lines
+   to external_lines is broken. Fix the
+   market-intel route to pull from
+   platform_lines for pick'em platform
+   comparisons.
+
+3. If no — the Underdog sync is not running.
+   Trigger POST /api/platform-lines/sync
+   and confirm Underdog data populates.
+
+Verify: Underdog lines show in prop detail
+sheet line shopping panel.
+
+FIX 3 — Convergence Signals empty (Critical)
+convergenceSignals key is absent from the
+market-intel API response.
+
+Find where convergenceSignals should be
+computed in market-intel.ts.
+
+It should compare:
+- Model hit probability (pOver)
+- Historical hit rate (from player_game_logs)
+
+If both point same direction (both above 55%
+or both below 55%) show green convergence.
+If they diverge by more than 8% show amber
+warning.
+
+Add convergenceSignals to the market-intel
+response and verify it shows in prop detail.
+
+FIX 4 — Historical hit rates empty (Critical)
+streak returns null for all props.
+The historical hit rate panel in prop detail
+shows nothing.
+
+Check if the historical-hit-rates endpoint
+exists and returns data:
+GET /api/historical-hit-rates?playerName=LeBron James&statType=points&line=27.5
+
+If the endpoint doesn't exist build it:
+Query player_game_logs for this player
+and stat type. Compare each value to the
+line. Return last10, last30, season,
+vsOpponent hit rates.
+
+Wire the response into the prop detail
+sheet streak/hit-rate panel.
+
+Verify: clicking a prop shows historical
+hit rates with color coded percentages.
+
+FIX 5 — Simulation Engine health check (Medium)
+The simulation engine check is missing from
+system-health API response entirely.
+
+Add checkSimulationEngine() to the health
+check that runs a test simulation:
+POST /api/simulation/entry with 2 test legs
+If it returns a valid result: GREEN
+If it errors: RED
+
+Add to the Promise.all in runAllChecks().
+
+Verify: /health shows Simulation Engine
+as a green check.
+
+FIX 6 — Silent 50% fallback (Medium)
+When a pick has no projection data the
+simulation silently uses 50% hit probability.
+User has no idea this is happening.
+
+Add a visible warning in the simulation
+results panel when fallback is used:
+
+"⚠️ Some picks are missing projection data.
+Using 50% probability as fallback.
+Add projections for more accurate results."
+
+Show which specific picks are using fallback.
+
+VERIFY ALL 6:
+1. NFL filter returns rows on Slate Board
+2. Underdog lines show in line shopping
+3. Convergence signal shows in prop detail
+4. Historical hit rates show in prop detail
+5. Simulation Engine shows GREEN on health check
+6. Warning shows when simulation uses fallback
+
+Report pass or fail for all 6.

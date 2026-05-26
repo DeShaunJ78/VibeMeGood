@@ -101,7 +101,10 @@ router.get("/slate", async (req, res) => {
     });
 
     let filtered = rows;
-    if (sport) filtered = filtered.filter(r => r.sport === sport);
+    if (sport) {
+      const sportsToMatch = sport === "NFL" ? ["NFL", "NFLSZN"] : [sport];
+      filtered = filtered.filter(r => sportsToMatch.includes(r.sport));
+    }
     if (actionTag) filtered = filtered.filter(r => r.actionTag === actionTag);
     if (minEdgeScore) filtered = filtered.filter(r => r.edgeScore !== null && r.edgeScore >= Number(minEdgeScore));
     if (maxRiskScore) filtered = filtered.filter(r => r.riskScore !== null && r.riskScore <= Number(maxRiskScore));

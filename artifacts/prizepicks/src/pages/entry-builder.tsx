@@ -505,6 +505,21 @@ export default function EntryBuilder() {
                     </div>
                   )}
 
+                  {/* FIX 6 — Fallback warning when picks have no projection data */}
+                  {picks.some(p => p.pOver == null) && (
+                    <div className="bg-amber-950/30 border border-amber-800/30 rounded px-3 py-2 space-y-1">
+                      <div className="text-[11px] font-mono text-amber-400 font-bold">
+                        ⚠️ Missing projection data — using 50% fallback
+                      </div>
+                      <div className="text-[10px] font-mono text-amber-400/70 leading-relaxed">
+                        Some picks are missing projection data. Using 50% probability as fallback. Add projections for more accurate results.
+                      </div>
+                      <div className="text-[10px] font-mono text-amber-500/50 pt-0.5">
+                        Affected: {picks.filter(p => p.pOver == null).map(p => p.playerName).join(", ")}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Reliability note */}
                   <div className="text-[10px] font-mono text-slate-500 leading-relaxed">
                     Simulated probability accounts for correlation between legs. Use this number for correlated entries.
