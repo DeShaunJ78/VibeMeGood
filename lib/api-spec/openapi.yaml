@@ -1108,6 +1108,38 @@ paths:
           content:
             text/event-stream: {}
 
+  # ─── HISTORICAL HIT RATES ───────────────────────────────────────────
+  /historical-hit-rates:
+    get:
+      operationId: getHistoricalHitRates
+      tags: [historicalHitRates]
+      summary: Historical hit rates for a player prop vs a specific line value
+      parameters:
+        - in: query
+          name: playerId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: statType
+          required: true
+          schema: { type: string }
+        - in: query
+          name: line
+          required: true
+          schema: { type: number }
+        - in: query
+          name: opponentTeamId
+          required: false
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Historical hit rates by window (last10, last30, season, vsThisOpponent)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistoricalHitRates" }
+        "400":
+          description: Missing required parameters
+
   # ─── LINEUP FACTORY ─────────────────────────────────────────────────
   /lineup-factory/generate:
     post:
@@ -1764,6 +1796,27 @@ components:
       properties:
         error: { type: string }
       required: [error]
+
+    # ─── HISTORICAL HIT RATES ────────────────────────────────────────
+    HitRateWindow:
+      type: object
+      properties:
+        hits:  { type: integer }
+        total: { type: integer }
+        rate:  { type: number }
+      required: [hits, total, rate]
+
+    HistoricalHitRates:
+      type: object
+      properties:
+        playerName:     { type: string }
+        statType:       { type: string }
+        line:           { type: number }
+        last10:         { $ref: "#/components/schemas/HitRateWindow" }
+        last30:         { $ref: "#/components/schemas/HitRateWindow" }
+        season:         { $ref: "#/components/schemas/HitRateWindow" }
+        vsThisOpponent: { $ref: "#/components/schemas/HitRateWindow" }
+      required: [playerName, statType, line, last10, last30, season, vsThisOpponent]
 
     # ─── LINEUP FACTORY ──────────────────────────────────────────────
     LineupFactoryConfig:

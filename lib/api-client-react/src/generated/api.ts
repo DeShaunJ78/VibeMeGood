@@ -43,9 +43,11 @@ import type {
   ExternalLine,
   Game,
   GameInput,
+  GetHistoricalHitRatesParams,
   GetReviewStatsParams,
   GetSlateParams,
   HealthStatus,
+  HistoricalHitRates,
   Injury,
   InjuryInput,
   LineupConfirmation,
@@ -5151,6 +5153,90 @@ export const useSendAnthropicMessage = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getSendAnthropicMessageMutationOptions(options));
     }
+
+export const getGetHistoricalHitRatesUrl = (params: GetHistoricalHitRatesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/historical-hit-rates?${stringifiedParams}` : `/api/historical-hit-rates`
+}
+
+/**
+ * @summary Historical hit rates for a player prop vs a specific line value
+ */
+export const getHistoricalHitRates = async (params: GetHistoricalHitRatesParams, options?: RequestInit): Promise<HistoricalHitRates> => {
+
+  return customFetch<HistoricalHitRates>(getGetHistoricalHitRatesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetHistoricalHitRatesQueryKey = (params?: GetHistoricalHitRatesParams,) => {
+    return [
+    `/api/historical-hit-rates`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetHistoricalHitRatesQueryOptions = <TData = Awaited<ReturnType<typeof getHistoricalHitRates>>, TError = ErrorType<void>>(params: GetHistoricalHitRatesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHistoricalHitRates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetHistoricalHitRatesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getHistoricalHitRates>>> = ({ signal }) => getHistoricalHitRates(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getHistoricalHitRates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetHistoricalHitRatesQueryResult = NonNullable<Awaited<ReturnType<typeof getHistoricalHitRates>>>
+export type GetHistoricalHitRatesQueryError = ErrorType<void>
+
+
+/**
+ * @summary Historical hit rates for a player prop vs a specific line value
+ */
+
+export function useGetHistoricalHitRates<TData = Awaited<ReturnType<typeof getHistoricalHitRates>>, TError = ErrorType<void>>(
+ params: GetHistoricalHitRatesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHistoricalHitRates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetHistoricalHitRatesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getGenerateLineupFactoryUrl = () => {
 

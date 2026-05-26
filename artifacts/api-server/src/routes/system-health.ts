@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import {
   dataPullLogsTable, ppLinesTable, externalLinesTable,
   ourProjectionsTable, entriesTable, varianceScoresTable,
-  probabilityCalibrationTable,
+  probabilityCalibrationTable, playerGameLogsTable,
 } from "@workspace/db/schema";
 import { desc, count, isNotNull, eq, sql, and, max } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -117,12 +117,13 @@ async function checkDataFreshness(): Promise<CheckResult[]> {
 }
 
 async function checkDatabaseHealth(): Promise<CheckResult[]> {
-  const [ppCount, projCount, extCount, entryCount, calCount] = await Promise.all([
+  const [ppCount, projCount, extCount, entryCount, calCount, gameLogCount] = await Promise.all([
     db.select({ n: count() }).from(ppLinesTable).where(eq(ppLinesTable.isActive, true)),
     db.select({ n: sql<number>`count(distinct player_id)` }).from(ourProjectionsTable),
     db.select({ n: sql<number>`count(distinct pp_line_id)` }).from(externalLinesTable).where(isNotNull(externalLinesTable.noVigOverProb)),
     db.select({ n: count() }).from(entriesTable),
     db.select({ n: count() }).from(probabilityCalibrationTable),
+    db.select({ n: count() }).from(playerGameLogsTable),
   ]);
 
   const pp = Number(ppCount[0]?.n ?? 0);
@@ -130,6 +131,7 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
   const ext = Number(extCount[0]?.n ?? 0);
   const entries = Number(entryCount[0]?.n ?? 0);
   const cal = Number(calCount[0]?.n ?? 0);
+  const gameLogs = Number(gameLogCount[0]?.n ?? 0);
 
   return [
     {
@@ -164,6 +166,15 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
       name: "Calibration Records",
       status: cal > 0 ? "green" : "amber",
       detail: cal === 0 ? "No records yet — populates as picks settle" : `${cal} calibration records`,
+      lastUpdated: null,
+      fixAction: null,
+    },
+    {
+      name: "Historical Game Logs",
+      status: gameLogs >= 100 ? "green" : gameLogs > 0 ? "amber" : "red",
+      detail: gameLogs === 0
+        ? "No records — historical hit rates unavailable"
+        : `${gameLogs.toLocaleString()} game log records across all players`,
       lastUpdated: null,
       fixAction: null,
     },

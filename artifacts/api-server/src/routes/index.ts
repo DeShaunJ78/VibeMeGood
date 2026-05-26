@@ -34,6 +34,7 @@ import calibrationRouter from "./calibration";
 import systemHealthRouter from "./system-health";
 import sharkRouter from "./shark";
 import simulationRouter from "./simulation";
+import historicalHitRatesRouter from "./historical-hit-rates";
 
 const router: IRouter = Router();
 
@@ -72,5 +73,6 @@ router.use(calibrationRouter);
 router.use(systemHealthRouter);
 router.use(sharkRouter);
 router.use(simulationRouter);
+router.use(historicalHitRatesRouter);
 
 export default router;

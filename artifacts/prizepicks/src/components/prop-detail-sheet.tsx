@@ -10,7 +10,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, ReferenceLine,
 } from "recharts";
-import { Plus, Minus, Zap, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Activity, Database, Wind, CloudRain, Shield } from "lucide-react";
+import { Plus, Minus, Zap, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Activity, Database, Wind, CloudRain, Shield, History } from "lucide-react";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
 import { VarianceBadge } from "@/components/ui/variance-badge";
 import { useUserSettings } from "@/hooks/use-user-settings";
@@ -19,6 +19,22 @@ interface PropDetailSheetProps {
   ppLineId: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+interface HitRateWindow {
+  hits: number;
+  total: number;
+  rate: number;
+}
+
+interface HitRates {
+  playerName: string;
+  statType: string;
+  line: number;
+  last10: HitRateWindow;
+  last30: HitRateWindow;
+  season: HitRateWindow;
+  vsThisOpponent: HitRateWindow;
 }
 
 interface OurProjection {
@@ -173,15 +189,45 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
   const [explaining, setExplaining] = useState(false);
   const [direction, setDirection] = useState<"more" | "less">("more");
   const [variance, setVariance] = useState<VarianceData | null>(null);
+  const [hitRates, setHitRates] = useState<HitRates | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const { addPick, removePick, hasPick, updateDirection } = useEntry();
   const { data: userSettings } = useUserSettings();
+
+  useEffect(() => {
+    if (!data || !open) return;
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const pid = data.player?.id;
+    const sType = data.ppLine?.statType;
+    const lineVal = data.ppLine?.lineValue;
+    if (!pid || !sType || lineVal == null) return;
+
+    let opponentTeamId: number | null = null;
+    if (data.game && data.player?.teamId) {
+      opponentTeamId = data.game.homeTeamId === data.player.teamId
+        ? data.game.awayTeamId
+        : data.game.homeTeamId;
+    }
+
+    const params = new URLSearchParams({
+      playerId: String(pid),
+      statType:  String(sType),
+      line:      String(lineVal),
+    });
+    if (opponentTeamId) params.append("opponentTeamId", String(opponentTeamId));
+
+    fetch(`${base}/api/historical-hit-rates?${params}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setHitRates(d as HitRates); })
+      .catch(() => {});
+  }, [data, open]);
 
   useEffect(() => {
     if (!ppLineId || !open) return;
     setData(null);
     setExplainText("");
     setLoading(true);
+    setHitRates(null);
     const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     setVariance(null);
     fetch(`${base}/api/slate/${ppLineId}`)
@@ -478,6 +524,93 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
                     </span>
                     <span className="text-slate-600">recent →</span>
                   </div>
+                </div>
+              )}
+
+              {/* ── Historical Hit Rates ── */}
+              {hitRates && (
+                <div className="px-5 py-4 border-b border-slate-800/50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <History className="w-3 h-3 text-violet-400" />
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                      Historical Hit Rates vs {lineValue} Line
+                    </div>
+                  </div>
+
+                  {hitRates.season.total === 0 ? (
+                    <div className="text-[11px] font-mono text-slate-500 bg-slate-900 border border-slate-800 rounded px-3 py-2">
+                      No game log data for this player — hit rates unavailable
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-1.5 mb-3">
+                        {(
+                          [
+                            { label: "Last 10 games", w: hitRates.last10 },
+                            { label: "Last 30 games", w: hitRates.last30 },
+                            { label: "Season",        w: hitRates.season },
+                            ...(hitRates.vsThisOpponent.total > 0
+                              ? [{ label: "vs Opponent", w: hitRates.vsThisOpponent }]
+                              : []),
+                          ] as { label: string; w: HitRateWindow }[]
+                        ).map(({ label, w }) => {
+                          const rateColor =
+                            w.total === 0      ? "text-slate-500" :
+                            w.rate >= 60       ? "text-emerald-400" :
+                            w.rate >= 52       ? "text-amber-400"   :
+                                                 "text-rose-400";
+                          const barColor =
+                            w.total === 0      ? "bg-slate-700" :
+                            w.rate >= 60       ? "bg-emerald-500" :
+                            w.rate >= 52       ? "bg-amber-500"   :
+                                                 "bg-rose-500";
+                          return (
+                            <div key={label} className="flex items-center gap-2">
+                              <span className="text-[10px] font-mono text-slate-400 w-24 shrink-0">{label}</span>
+                              <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                {w.total > 0 && (
+                                  <div
+                                    className={`h-full rounded-full ${barColor}`}
+                                    style={{ width: `${Math.max(2, w.rate)}%` }}
+                                  />
+                                )}
+                              </div>
+                              <span className={`text-sm font-mono font-bold w-12 text-right shrink-0 ${rateColor}`}>
+                                {w.total === 0 ? "—" : `${w.rate.toFixed(0)}%`}
+                              </span>
+                              <span className="text-[9px] font-mono text-slate-500 w-14 text-right shrink-0">
+                                {w.total === 0 ? "no data" : `${w.hits}/${w.total} over`}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Convergence signal */}
+                      {pOver != null && hitRates.last30.total >= 5 && (() => {
+                        const modelPct = pOver;
+                        const histPct  = hitRates.last30.rate;
+                        const agree = (modelPct >= 55 && histPct >= 55) || (modelPct < 50 && histPct < 50);
+                        const diff  = Math.abs(modelPct - histPct);
+                        if (diff < 8) return null;
+                        return agree ? (
+                          <div className="flex items-start gap-1.5 text-[10px] font-mono text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 px-2.5 py-2 rounded">
+                            <CheckCircle className="w-3 h-3 mt-0.5 shrink-0" />
+                            <span>
+                              Model and history agree — model {modelPct.toFixed(0)}% / last 30 {histPct.toFixed(0)}%
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-start gap-1.5 text-[10px] font-mono text-amber-400 bg-amber-950/30 border border-amber-800/40 px-2.5 py-2 rounded">
+                            <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                            <span>
+                              Model says {modelPct.toFixed(0)}% but history shows {histPct.toFixed(0)}% (last 30) — investigate before acting
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
                 </div>
               )}
 

@@ -1415,6 +1415,43 @@ export const SendAnthropicMessageBody = zod.object({
 
 
 /**
+ * @summary Historical hit rates for a player prop vs a specific line value
+ */
+export const GetHistoricalHitRatesQueryParams = zod.object({
+  "playerId": zod.coerce.number(),
+  "statType": zod.coerce.string(),
+  "line": zod.coerce.number(),
+  "opponentTeamId": zod.coerce.number().optional()
+})
+
+export const GetHistoricalHitRatesResponse = zod.object({
+  "playerName": zod.string(),
+  "statType": zod.string(),
+  "line": zod.number(),
+  "last10": zod.object({
+  "hits": zod.number(),
+  "total": zod.number(),
+  "rate": zod.number()
+}),
+  "last30": zod.object({
+  "hits": zod.number(),
+  "total": zod.number(),
+  "rate": zod.number()
+}),
+  "season": zod.object({
+  "hits": zod.number(),
+  "total": zod.number(),
+  "rate": zod.number()
+}),
+  "vsThisOpponent": zod.object({
+  "hits": zod.number(),
+  "total": zod.number(),
+  "rate": zod.number()
+})
+})
+
+
+/**
  * @summary Generate a portfolio of diversified PrizePicks lineups
  */
 export const generateLineupFactoryBodyPicksPerEntryMin = 2;

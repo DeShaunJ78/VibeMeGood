@@ -645,6 +645,22 @@ export interface AnthropicError {
   error: string;
 }
 
+export interface HitRateWindow {
+  hits: number;
+  total: number;
+  rate: number;
+}
+
+export interface HistoricalHitRates {
+  playerName: string;
+  statType: string;
+  line: number;
+  last10: HitRateWindow;
+  last30: HitRateWindow;
+  season: HitRateWindow;
+  vsThisOpponent: HitRateWindow;
+}
+
 export type LineupFactoryConfigFormat = typeof LineupFactoryConfigFormat[keyof typeof LineupFactoryConfigFormat];
 
 
@@ -935,5 +951,12 @@ limit?: number;
 export type GetReviewStatsParams = {
 since?: string;
 until?: string;
+};
+
+export type GetHistoricalHitRatesParams = {
+playerId: number;
+statType: string;
+line: number;
+opponentTeamId?: number;
 };
 
