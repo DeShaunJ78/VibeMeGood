@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import {
   dataPullLogsTable, ppLinesTable, externalLinesTable,
   ourProjectionsTable, entriesTable, varianceScoresTable,
-  probabilityCalibrationTable, playerGameLogsTable,
+  probabilityCalibrationTable, playerGameLogsTable, teamPaceRatingsTable,
 } from "@workspace/db/schema";
 import { desc, count, isNotNull, eq, sql, and, max } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -117,13 +117,15 @@ async function checkDataFreshness(): Promise<CheckResult[]> {
 }
 
 async function checkDatabaseHealth(): Promise<CheckResult[]> {
-  const [ppCount, projCount, extCount, entryCount, calCount, gameLogCount] = await Promise.all([
+  const [ppCount, projCount, extCount, entryCount, calCount, gameLogCount, paceCount, paceLatest] = await Promise.all([
     db.select({ n: count() }).from(ppLinesTable).where(eq(ppLinesTable.isActive, true)),
     db.select({ n: sql<number>`count(distinct player_id)` }).from(ourProjectionsTable),
     db.select({ n: sql<number>`count(distinct pp_line_id)` }).from(externalLinesTable).where(isNotNull(externalLinesTable.noVigOverProb)),
     db.select({ n: count() }).from(entriesTable),
     db.select({ n: count() }).from(probabilityCalibrationTable),
     db.select({ n: count() }).from(playerGameLogsTable),
+    db.select({ n: count() }).from(teamPaceRatingsTable),
+    db.select({ t: max(teamPaceRatingsTable.computedAt) }).from(teamPaceRatingsTable),
   ]);
 
   const pp = Number(ppCount[0]?.n ?? 0);
@@ -132,6 +134,10 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
   const entries = Number(entryCount[0]?.n ?? 0);
   const cal = Number(calCount[0]?.n ?? 0);
   const gameLogs = Number(gameLogCount[0]?.n ?? 0);
+  const pace = Number(paceCount[0]?.n ?? 0);
+  const paceTs = paceLatest[0]?.t ?? null;
+  const paceAgeMins = paceTs ? (Date.now() - paceTs.getTime()) / 60000 : Infinity;
+  const fmtPaceAge = paceAgeMins === Infinity ? "never synced" : paceAgeMins < 60 ? `${Math.round(paceAgeMins)}m ago` : `${(paceAgeMins / 60).toFixed(0)}h ago`;
 
   return [
     {
@@ -177,6 +183,17 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
         : `${gameLogs.toLocaleString()} game log records across all players`,
       lastUpdated: null,
       fixAction: null,
+    },
+    {
+      name: "Team Pace Ratings",
+      status: pace === 0 ? "red" : paceAgeMins > 48 * 60 ? "amber" : "green",
+      detail: pace === 0
+        ? "No pace ratings — run Sync Pace"
+        : paceAgeMins > 48 * 60
+          ? `${pace} teams rated, last sync ${fmtPaceAge}`
+          : `${pace} teams rated (${fmtPaceAge})`,
+      lastUpdated: paceTs ? paceTs.toISOString() : null,
+      fixAction: pace === 0 ? "pace" : null,
     },
   ];
 }

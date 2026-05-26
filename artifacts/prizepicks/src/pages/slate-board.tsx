@@ -549,6 +549,35 @@ export default function SlateBoard() {
     return m;
   }, [betterLinesData]);
 
+  type TonightPace = {
+    gameId: number;
+    homeTeamId: number;
+    awayTeamId: number;
+    estimatedGamePace: number;
+    paceLabel: string;
+    paceAdjustment: number;
+    paceColor: string;
+  };
+  const { data: paceGames = [] } = useQuery<TonightPace[]>({
+    queryKey: ["pace-tonight"],
+    queryFn: async (): Promise<TonightPace[]> => {
+      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const r = await fetch(`${base}/api/pace/tonight`);
+      return r.ok ? (r.json() as Promise<TonightPace[]>) : [];
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const paceMap = useMemo(() => {
+    const m = new Map<number, { estimatedGamePace: number; paceLabel: string; paceAdjustment: number; paceColor: string }>();
+    for (const g of paceGames) {
+      const info = { estimatedGamePace: g.estimatedGamePace, paceLabel: g.paceLabel, paceAdjustment: g.paceAdjustment, paceColor: g.paceColor };
+      m.set(g.homeTeamId, info);
+      m.set(g.awayTeamId, info);
+    }
+    return m;
+  }, [paceGames]);
+
   useEffect(() => {
     const t = setTimeout(() => setSearchQuery(searchInput), 150);
     return () => clearTimeout(t);
@@ -792,6 +821,7 @@ export default function SlateBoard() {
                   <SortTh col="projGap" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-28 text-right" label="Our Proj ⇕" />
                   <SortTh col="pOver" label="P(Over)" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="w-20 text-center" />
                   <TableHead className="hidden md:table-cell w-14 font-mono text-xs text-center">Streak</TableHead>
+                  <TableHead className="hidden lg:table-cell w-20 font-mono text-xs text-center">Pace</TableHead>
                   <TableHead className="w-24 font-mono text-xs text-center">Action</TableHead>
                   {varianceEnabled && <SortTh col="fatigue" label="Fatigue" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-22 text-center" />}
                   {varianceEnabled && <SortTh col="blowout" label="Blowout%" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-22 text-center" />}
@@ -801,14 +831,14 @@ export default function SlateBoard() {
                 {isLoading ? (
                   Array.from({ length: 10 }).map((_, i) => (
                     <TableRow key={i} className="border-slate-800">
-                      {Array.from({ length: varianceEnabled ? 18 : 16 }).map((_, j) => (
+                      {Array.from({ length: varianceEnabled ? 19 : 17 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full bg-slate-800" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : playerRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={varianceEnabled ? 18 : 16} className="h-48 text-center text-muted-foreground font-mono">
+                    <TableCell colSpan={varianceEnabled ? 19 : 17} className="h-48 text-center text-muted-foreground font-mono">
                       No props — click Force Sync to load live slate
                     </TableCell>
                   </TableRow>
@@ -927,6 +957,36 @@ export default function SlateBoard() {
                           ) : (
                             <span className="text-slate-600">—</span>
                           )}
+                        </TableCell>
+
+                        {/* Pace */}
+                        <TableCell className="hidden lg:table-cell text-center">
+                          {(() => {
+                            const pace = row.teamId != null ? paceMap.get(row.teamId) : undefined;
+                            if (!pace) return <span className="text-slate-600 font-mono text-xs">—</span>;
+                            const colorClass = pace.paceColor === "fast"
+                              ? "text-emerald-400"
+                              : pace.paceColor === "slow"
+                              ? "text-rose-400"
+                              : "text-amber-400";
+                            const adj = pace.paceAdjustment;
+                            const adjStr = adj > 0 ? `+${(adj * 100).toFixed(0)}%` : adj < 0 ? `${(adj * 100).toFixed(0)}%` : "±0%";
+                            return (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex flex-col items-center gap-0.5 cursor-help">
+                                    <span className={`text-xs font-mono font-bold ${colorClass}`}>{pace.estimatedGamePace.toFixed(1)}</span>
+                                    <span className={`text-[9px] font-mono ${colorClass}`}>{adjStr}</span>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="font-mono text-xs max-w-[200px]">
+                                  <p className="font-bold mb-0.5">{pace.paceLabel}</p>
+                                  <p className="text-slate-400">Est. game pace: {pace.estimatedGamePace.toFixed(1)} poss/48</p>
+                                  <p className="text-slate-400">Projection adj: {adjStr}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            );
+                          })()}
                         </TableCell>
 
                         {/* Action */}

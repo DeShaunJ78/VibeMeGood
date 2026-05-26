@@ -37,6 +37,17 @@ interface HitRates {
   vsThisOpponent: HitRateWindow;
 }
 
+type GamePaceData = {
+  homeTeam: string;
+  awayTeam: string;
+  homeTeamPace: number;
+  awayTeamPace: number;
+  estimatedGamePace: number;
+  paceLabel: string;
+  paceAdjustment: number;
+  paceColor: "fast" | "average" | "slow";
+};
+
 interface LineShopping {
   playerName: string;
   statType: string;
@@ -107,7 +118,7 @@ type VarianceData = {
   whyItMoves: string | null;
 };
 
-function WhyThisEdgePanel({ variance }: { variance: VarianceData }) {
+function WhyThisEdgePanel({ variance, gamePace }: { variance: VarianceData; gamePace?: GamePaceData | null }) {
   const SIGNAL_LABELS: Record<string, { label: string; emoji: string; getColor: (v: number) => string }> = {
     fatigue: {
       label: "Fatigue",
@@ -169,6 +180,21 @@ function WhyThisEdgePanel({ variance }: { variance: VarianceData }) {
               </div>
             );
           })}
+          {gamePace && (() => {
+            const paceColorClass = gamePace.paceColor === "fast" ? "text-emerald-400" : gamePace.paceColor === "slow" ? "text-rose-400" : "text-amber-400";
+            const paceBgClass   = gamePace.paceColor === "fast" ? "bg-emerald-400" : gamePace.paceColor === "slow" ? "bg-rose-400" : "bg-amber-400";
+            const paceBorderClass = gamePace.paceColor === "fast" ? "border-emerald-800/50" : gamePace.paceColor === "slow" ? "border-rose-800/50" : "border-slate-800";
+            const paceBarWidth = Math.min(100, Math.max(2, (gamePace.estimatedGamePace - 95) / 13 * 100));
+            return (
+              <div className={`bg-slate-900 border rounded px-2.5 py-2 ${paceBorderClass}`}>
+                <div className="text-[10px] text-muted-foreground font-mono">🏃 Game Pace</div>
+                <div className={`text-sm font-mono font-bold mt-0.5 ${paceColorClass}`}>{gamePace.estimatedGamePace.toFixed(1)}</div>
+                <div className="h-1 bg-slate-800 rounded-full mt-1.5 overflow-hidden">
+                  <div className={`h-full rounded-full ${paceBgClass}`} style={{ width: `${paceBarWidth}%` }} />
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -201,6 +227,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
   const [variance, setVariance] = useState<VarianceData | null>(null);
   const [hitRates, setHitRates] = useState<HitRates | null>(null);
   const [lineShopping, setLineShopping] = useState<LineShopping | null>(null);
+  const [gamePace, setGamePace] = useState<GamePaceData | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const { addPick, removePick, hasPick, updateDirection } = useEntry();
   const { data: userSettings } = useUserSettings();
@@ -254,12 +281,49 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
   }, [data, open]);
 
   useEffect(() => {
+    if (!data || !open) return;
+    const homeTeamId = data.game?.homeTeamId as number | undefined;
+    const awayTeamId = data.game?.awayTeamId as number | undefined;
+    if (!homeTeamId && !awayTeamId) return;
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    fetch(`${base}/api/pace/tonight`)
+      .then(r => r.ok ? r.json() : null)
+      .then((games: Array<{
+        gameId: number; homeTeamId: number; awayTeamId: number;
+        homeTeam: string; awayTeam: string;
+        homeTeamPace: number; awayTeamPace: number;
+        estimatedGamePace: number; paceLabel: string;
+        paceAdjustment: number; paceColor: "fast" | "average" | "slow";
+      }> | null) => {
+        if (!games) return;
+        const match = games.find(g =>
+          (homeTeamId && (g.homeTeamId === homeTeamId || g.awayTeamId === homeTeamId)) ||
+          (awayTeamId && (g.homeTeamId === awayTeamId || g.awayTeamId === awayTeamId)),
+        );
+        if (match) {
+          setGamePace({
+            homeTeam: match.homeTeam,
+            awayTeam: match.awayTeam,
+            homeTeamPace: match.homeTeamPace,
+            awayTeamPace: match.awayTeamPace,
+            estimatedGamePace: match.estimatedGamePace,
+            paceLabel: match.paceLabel,
+            paceAdjustment: match.paceAdjustment,
+            paceColor: match.paceColor,
+          });
+        }
+      })
+      .catch(() => {});
+  }, [data, open]);
+
+  useEffect(() => {
     if (!ppLineId || !open) return;
     setData(null);
     setExplainText("");
     setLoading(true);
     setHitRates(null);
     setLineShopping(null);
+    setGamePace(null);
     const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     setVariance(null);
     fetch(`${base}/api/slate/${ppLineId}`)
@@ -714,6 +778,36 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
                 </div>
               )}
 
+              {/* Game Pace */}
+              {gamePace && (
+                <div className="px-5 py-4 border-b border-slate-800/50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Wind className="w-3 h-3 text-cyan-400" />
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Game Pace</div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    <div className="bg-slate-900 border border-slate-800 rounded px-2.5 py-2 text-center">
+                      <div className="text-[9px] font-mono text-muted-foreground mb-0.5">{gamePace.homeTeam}</div>
+                      <div className="text-sm font-mono font-bold text-slate-200">{gamePace.homeTeamPace.toFixed(1)}</div>
+                    </div>
+                    <div className="bg-slate-900 border border-slate-800 rounded px-2.5 py-2 text-center">
+                      <div className="text-[9px] font-mono text-muted-foreground mb-0.5">{gamePace.awayTeam}</div>
+                      <div className="text-sm font-mono font-bold text-slate-200">{gamePace.awayTeamPace.toFixed(1)}</div>
+                    </div>
+                    <div className={`bg-slate-900 border rounded px-2.5 py-2 text-center ${gamePace.paceColor === "fast" ? "border-emerald-800/50" : gamePace.paceColor === "slow" ? "border-rose-800/50" : "border-amber-800/50"}`}>
+                      <div className="text-[9px] font-mono text-muted-foreground mb-0.5">Est. Pace</div>
+                      <div className={`text-sm font-mono font-bold ${gamePace.paceColor === "fast" ? "text-emerald-400" : gamePace.paceColor === "slow" ? "text-rose-400" : "text-amber-400"}`}>
+                        {gamePace.estimatedGamePace.toFixed(1)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className={`text-[10px] font-mono flex items-center gap-1.5 ${gamePace.paceColor === "fast" ? "text-emerald-400" : gamePace.paceColor === "slow" ? "text-rose-400" : "text-amber-400"}`}>
+                    <span>{gamePace.paceColor === "fast" ? "⚡" : gamePace.paceColor === "slow" ? "🐢" : "➡"} {gamePace.paceLabel}</span>
+                    <span className="ml-auto text-slate-400">proj adj: {gamePace.paceAdjustment > 0 ? "+" : ""}{(gamePace.paceAdjustment * 100).toFixed(0)}%</span>
+                  </div>
+                </div>
+              )}
+
               {/* Score Breakdown */}
               {data.propScore && (
                 <div className="px-5 py-4 border-b border-slate-800/50">
@@ -860,7 +954,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange }: PropDetailShee
 
               {/* Variance Intelligence — Why This Edge Exists */}
               {userSettings?.varianceIntelEnabled && variance && (
-                <WhyThisEdgePanel variance={variance} />
+                <WhyThisEdgePanel variance={variance} gamePace={gamePace} />
               )}
 
               {/* AI Explain */}

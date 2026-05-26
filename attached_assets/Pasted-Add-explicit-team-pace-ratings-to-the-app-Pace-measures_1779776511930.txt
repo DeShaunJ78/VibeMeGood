@@ -1,0 +1,172 @@
+Add explicit team pace ratings to the app.
+
+Pace measures how many possessions a team
+uses per 48 minutes. Higher pace = more
+stats for everyone in that game.
+
+STEP 1 — Compute pace from existing game logs
+Create lib/analytics/pace.ts
+
+Formula:
+Possessions = FGA + (0.44 × FTA) - OREB + TOV
+
+Pace = (Possessions / MinutesPlayed) × 48
+
+function computeTeamPace(gameLogs: GameLog[]): number
+Takes all game logs for a team and computes
+their season average pace rating.
+
+function computeGamePace(
+  team1Pace: number, 
+  team2Pace: number
+): number
+Estimates tonight's game pace:
+estimatedPace = (team1Pace + team2Pace) / 2
+
+function getPaceLabel(pace: number): string
+Returns human readable label:
+Above 105:  "Elite pace" (fastest tier)
+102-105:    "Fast pace"
+98-102:     "Average pace"
+95-98:      "Slow pace"
+Below 95:   "Very slow pace"
+
+function getPaceAdjustment(pace: number): number
+Returns projection multiplier:
+Above 105:  +0.06  (6% boost)
+102-105:    +0.03  (3% boost)
+98-102:      0.00  (no adjustment)
+95-98:      -0.03  (-3% reduction)
+Below 95:   -0.06  (-6% reduction)
+
+STEP 2 — Team pace ratings table
+Create team_pace_ratings table:
+
+- id
+- teamName
+- teamAbbr
+- sport
+- season
+- paceRating (possessions per 48 min)
+- last10PaceRating (recent trend)
+- homeAwayPaceAdj (home pace vs away pace)
+- gamesComputed
+- computedAt
+- unique on (teamAbbr, sport, season)
+
+STEP 3 — Compute pace from existing data
+The player_game_logs table already has:
+- field_goals_attempted (FGA)
+- free_throws_attempted (FTA)
+- offensive_rebounds (OREB)
+- turnovers (TOV)
+- minutes_played
+
+Query game logs grouped by team and date.
+For each team compute their pace rating
+from their game logs.
+Store in team_pace_ratings table.
+
+If any of those columns are missing or
+named differently check the actual schema
+and use the correct column names.
+
+STEP 4 — Tonight's game pace estimate
+For each game on tonight's slate:
+1. Look up both teams' pace ratings
+2. Compute estimated game pace
+3. Store alongside the game record
+
+GET /api/pace/tonight
+Returns all tonight's games with:
+{
+  gameId: string
+  homeTeam: string
+  awayTeam: string
+  homeTeamPace: number
+  awayTeamPace: number
+  estimatedGamePace: number
+  paceLabel: string
+  paceAdjustment: number
+}
+
+STEP 5 — Wire into projections
+When computing player projections apply
+the pace adjustment:
+
+adjustedProjection = baseProjection × 
+  (1 + getPaceAdjustment(estimatedGamePace))
+
+Store both:
+- projectedValue (pace-adjusted)
+- baseProjectedValue (unadjusted)
+- paceAdjustment (the multiplier applied)
+- estimatedGamePace (the pace used)
+
+STEP 6 — Display on player/prop cards
+
+DraftDuel Player Board:
+Add "Pace" column showing tonight's
+estimated game pace for each player.
+Color code:
+Green: above 102 (fast game, good for stats)
+Amber: 98-102 (average)
+Red: below 98 (slow game, suppresses stats)
+
+VibeMeGood Slate Board:
+Add pace signal to each prop row.
+Show pace label and adjustment:
+"⚡ Fast pace +3%" in green
+"🐢 Slow pace -6%" in red
+
+Show in prop detail sheet:
+Home team pace: 104.2
+Away team pace: 98.6
+Tonight's estimated pace: 101.4 (Average)
+Projection adjustment: 0% (neutral)
+
+STEP 7 — Add to variance signals
+In VibeMeGood add pace as a variance signal:
+
+High pace: increases ceiling AND floor
+  (more possessions = more consistent stats)
+Low pace: suppresses both ceiling and floor
+  (fewer possessions = fewer stat opportunities)
+
+When variance engine is ON show pace
+as a signal meter alongside fatigue,
+blowout risk, usage, matchup.
+
+STEP 8 — Cron schedule
+Recompute pace ratings nightly after
+game logs sync:
+Run computeAllTeamPace() after the
+nightly game log sync at 2am.
+
+Add manual trigger:
+POST /api/admin/sync/pace
+Add "Sync Pace" button to health check
+Quick Fix toolbar.
+
+STEP 9 — Health check
+Add pace rating check:
+Green: team_pace_ratings has records
+  for current season
+Amber: records exist but over 48 hours old
+Red: zero records
+
+STEP 10 — Verify
+After building:
+1. Run POST /api/admin/sync/pace
+2. Report pace ratings for 5 NBA teams
+   Realistic range: 95-108 possessions per 48 min
+   Fast teams: Memphis, Charlotte, Golden State
+   Slow teams: Miami, New York, Cleveland
+3. Show a sample game with estimated pace
+4. Confirm Player Board / Slate Board shows
+   pace column with correct color coding
+5. Confirm projection adjustment is applied
+   for a fast-pace game
+
+Report pace ratings and confirm
+projections are adjusting correctly.

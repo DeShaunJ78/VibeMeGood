@@ -47,6 +47,8 @@ tags:
     description: Anthropic AI chat operations
   - name: lineupFactory
     description: Lineup portfolio factory operations
+  - name: pace
+    description: Team pace rating operations
 
 paths:
   /healthz:
@@ -1140,6 +1142,52 @@ paths:
         "400":
           description: Missing required parameters
 
+  # ─── TEAM PACE RATINGS ───────────────────────────────────────────────
+  /pace/tonight:
+    get:
+      operationId: getPaceTonightGames
+      tags: [pace]
+      summary: All tonight's games with estimated pace, labels, and projection adjustments
+      responses:
+        "200":
+          description: Tonight's game pace estimates
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TonightGamePace" }
+
+  /pace/team/{abbr}:
+    get:
+      operationId: getPaceTeam
+      tags: [pace]
+      summary: Season pace rating for one team
+      parameters:
+        - in: path
+          name: abbr
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Team pace rating record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeamPaceRating" }
+        "404":
+          description: Team not found
+
+  /admin/sync/pace:
+    post:
+      operationId: syncPaceRatings
+      tags: [pace]
+      summary: Compute or seed pace ratings for all teams
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaceSyncResult" }
+
   # ─── PLATFORM LINE COMPARISON ───────────────────────────────────────
   /platform-lines/by-prop:
     get:
@@ -1848,6 +1896,51 @@ components:
       properties:
         error: { type: string }
       required: [error]
+
+    # ─── TEAM PACE RATINGS ───────────────────────────────────────────
+    TonightGamePace:
+      type: object
+      properties:
+        gameId:             { type: integer }
+        homeTeamId:         { type: integer }
+        awayTeamId:         { type: integer }
+        homeTeam:           { type: string }
+        homeTeamName:       { type: string }
+        awayTeam:           { type: string }
+        awayTeamName:       { type: string }
+        sport:              { type: string }
+        startTime:          { type: string }
+        homeTeamPace:       { type: number }
+        awayTeamPace:       { type: number }
+        estimatedGamePace:  { type: number }
+        paceLabel:          { type: string }
+        paceAdjustment:     { type: number }
+        paceColor:          { type: string }
+      required: [gameId, homeTeamId, awayTeamId, homeTeam, awayTeam, sport, homeTeamPace, awayTeamPace, estimatedGamePace, paceLabel, paceAdjustment, paceColor]
+
+    TeamPaceRating:
+      type: object
+      properties:
+        id:               { type: integer }
+        teamName:         { type: string }
+        teamAbbr:         { type: string }
+        sport:            { type: string }
+        season:           { type: string }
+        paceRating:       { type: number }
+        last10PaceRating: { type: number, nullable: true }
+        homeAwayPaceAdj:  { type: number, nullable: true }
+        gamesComputed:    { type: integer, nullable: true }
+        computedAt:       { type: string }
+      required: [id, teamName, teamAbbr, sport, season, paceRating, computedAt]
+
+    PaceSyncResult:
+      type: object
+      properties:
+        status:   { type: string }
+        computed: { type: integer }
+        seeded:   { type: integer }
+        total:    { type: integer }
+      required: [status, computed, seeded, total]
 
     # ─── PLATFORM LINE COMPARISON ────────────────────────────────────
     PlatformLineEntry:

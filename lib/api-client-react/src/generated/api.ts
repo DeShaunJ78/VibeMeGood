@@ -70,6 +70,7 @@ import type {
   ListTeamsParams,
   ListWatchlistParams,
   MarkAllAlertsRead200,
+  PaceSyncResult,
   PayoutConfig,
   PayoutConfigInput,
   PayoutConfigUpdate,
@@ -90,6 +91,8 @@ import type {
   SyncResult,
   Team,
   TeamInput,
+  TeamPaceRating,
+  TonightGamePace,
   WatchlistItem,
   WatchlistItemInput,
   WatchlistItemUpdate
@@ -5240,6 +5243,230 @@ export function useGetHistoricalHitRates<TData = Awaited<ReturnType<typeof getHi
 
 
 
+
+export const getGetPaceTonightGamesUrl = () => {
+
+
+
+
+  return `/api/pace/tonight`
+}
+
+/**
+ * @summary All tonight's games with estimated pace, labels, and projection adjustments
+ */
+export const getPaceTonightGames = async ( options?: RequestInit): Promise<TonightGamePace[]> => {
+
+  return customFetch<TonightGamePace[]>(getGetPaceTonightGamesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPaceTonightGamesQueryKey = () => {
+    return [
+    `/api/pace/tonight`
+    ] as const;
+    }
+
+
+export const getGetPaceTonightGamesQueryOptions = <TData = Awaited<ReturnType<typeof getPaceTonightGames>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPaceTonightGames>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPaceTonightGamesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPaceTonightGames>>> = ({ signal }) => getPaceTonightGames({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPaceTonightGames>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPaceTonightGamesQueryResult = NonNullable<Awaited<ReturnType<typeof getPaceTonightGames>>>
+export type GetPaceTonightGamesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary All tonight's games with estimated pace, labels, and projection adjustments
+ */
+
+export function useGetPaceTonightGames<TData = Awaited<ReturnType<typeof getPaceTonightGames>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPaceTonightGames>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPaceTonightGamesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPaceTeamUrl = (abbr: string,) => {
+
+
+
+
+  return `/api/pace/team/${abbr}`
+}
+
+/**
+ * @summary Season pace rating for one team
+ */
+export const getPaceTeam = async (abbr: string, options?: RequestInit): Promise<TeamPaceRating> => {
+
+  return customFetch<TeamPaceRating>(getGetPaceTeamUrl(abbr),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPaceTeamQueryKey = (abbr: string,) => {
+    return [
+    `/api/pace/team/${abbr}`
+    ] as const;
+    }
+
+
+export const getGetPaceTeamQueryOptions = <TData = Awaited<ReturnType<typeof getPaceTeam>>, TError = ErrorType<void>>(abbr: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPaceTeam>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPaceTeamQueryKey(abbr);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPaceTeam>>> = ({ signal }) => getPaceTeam(abbr, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(abbr), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPaceTeam>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPaceTeamQueryResult = NonNullable<Awaited<ReturnType<typeof getPaceTeam>>>
+export type GetPaceTeamQueryError = ErrorType<void>
+
+
+/**
+ * @summary Season pace rating for one team
+ */
+
+export function useGetPaceTeam<TData = Awaited<ReturnType<typeof getPaceTeam>>, TError = ErrorType<void>>(
+ abbr: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPaceTeam>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPaceTeamQueryOptions(abbr,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getSyncPaceRatingsUrl = () => {
+
+
+
+
+  return `/api/admin/sync/pace`
+}
+
+/**
+ * @summary Compute or seed pace ratings for all teams
+ */
+export const syncPaceRatings = async ( options?: RequestInit): Promise<PaceSyncResult> => {
+
+  return customFetch<PaceSyncResult>(getSyncPaceRatingsUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSyncPaceRatingsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncPaceRatings>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncPaceRatings>>, TError,void, TContext> => {
+
+const mutationKey = ['syncPaceRatings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncPaceRatings>>, void> = () => {
+
+
+          return  syncPaceRatings(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncPaceRatingsMutationResult = NonNullable<Awaited<ReturnType<typeof syncPaceRatings>>>
+
+    export type SyncPaceRatingsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Compute or seed pace ratings for all teams
+ */
+export const useSyncPaceRatings = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncPaceRatings>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof syncPaceRatings>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSyncPaceRatingsMutationOptions(options));
+    }
 
 export const getGetPlatformLinesByPropUrl = (params: GetPlatformLinesByPropParams,) => {
   const normalizedParams = new URLSearchParams();

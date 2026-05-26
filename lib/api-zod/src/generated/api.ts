@@ -1452,6 +1452,61 @@ export const GetHistoricalHitRatesResponse = zod.object({
 
 
 /**
+ * @summary All tonight's games with estimated pace, labels, and projection adjustments
+ */
+export const GetPaceTonightGamesResponseItem = zod.object({
+  "gameId": zod.number(),
+  "homeTeamId": zod.number(),
+  "awayTeamId": zod.number(),
+  "homeTeam": zod.string(),
+  "homeTeamName": zod.string().optional(),
+  "awayTeam": zod.string(),
+  "awayTeamName": zod.string().optional(),
+  "sport": zod.string(),
+  "startTime": zod.string().optional(),
+  "homeTeamPace": zod.number(),
+  "awayTeamPace": zod.number(),
+  "estimatedGamePace": zod.number(),
+  "paceLabel": zod.string(),
+  "paceAdjustment": zod.number(),
+  "paceColor": zod.string()
+})
+export const GetPaceTonightGamesResponse = zod.array(GetPaceTonightGamesResponseItem)
+
+
+/**
+ * @summary Season pace rating for one team
+ */
+export const GetPaceTeamParams = zod.object({
+  "abbr": zod.coerce.string()
+})
+
+export const GetPaceTeamResponse = zod.object({
+  "id": zod.number(),
+  "teamName": zod.string(),
+  "teamAbbr": zod.string(),
+  "sport": zod.string(),
+  "season": zod.string(),
+  "paceRating": zod.number(),
+  "last10PaceRating": zod.number().nullish(),
+  "homeAwayPaceAdj": zod.number().nullish(),
+  "gamesComputed": zod.number().nullish(),
+  "computedAt": zod.string()
+})
+
+
+/**
+ * @summary Compute or seed pace ratings for all teams
+ */
+export const SyncPaceRatingsResponse = zod.object({
+  "status": zod.string(),
+  "computed": zod.number(),
+  "seeded": zod.number(),
+  "total": zod.number()
+})
+
+
+/**
  * @summary Compare lines for one player prop across all pick-em platforms
  */
 export const GetPlatformLinesByPropQueryParams = zod.object({

@@ -34,3 +34,4 @@ export * from "./fatigue-data";
 export * from "./referee-data";
 export * from "./experimental-signals";
 export * from "./platform-lines";
+export * from "./team-pace-ratings";

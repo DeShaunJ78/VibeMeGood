@@ -158,6 +158,7 @@ const QUICK_FIXES = [
   { label: "Sync Projections", action: "projections",   endpoint: "/api/sync/projections" },
   { label: "Sync Injuries",    action: "injuries",      endpoint: "/api/sync/injuries" },
   { label: "Compute Variance", action: "variance",      endpoint: "/api/sync/variance" },
+  { label: "Sync Pace",        action: "pace",          endpoint: "/api/admin/sync/pace" },
 ];
 
 export default function SystemHealth() {

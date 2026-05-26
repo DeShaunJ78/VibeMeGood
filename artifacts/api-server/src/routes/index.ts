@@ -36,6 +36,7 @@ import sharkRouter from "./shark";
 import simulationRouter from "./simulation";
 import historicalHitRatesRouter from "./historical-hit-rates";
 import platformLinesRouter from "./platform-lines";
+import paceRouter from "./pace";
 
 const router: IRouter = Router();
 
@@ -76,5 +77,6 @@ router.use(sharkRouter);
 router.use(simulationRouter);
 router.use(historicalHitRatesRouter);
 router.use(platformLinesRouter);
+router.use(paceRouter);
 
 export default router;

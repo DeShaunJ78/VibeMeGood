@@ -645,6 +645,44 @@ export interface AnthropicError {
   error: string;
 }
 
+export interface TonightGamePace {
+  gameId: number;
+  homeTeamId: number;
+  awayTeamId: number;
+  homeTeam: string;
+  homeTeamName?: string;
+  awayTeam: string;
+  awayTeamName?: string;
+  sport: string;
+  startTime?: string;
+  homeTeamPace: number;
+  awayTeamPace: number;
+  estimatedGamePace: number;
+  paceLabel: string;
+  paceAdjustment: number;
+  paceColor: string;
+}
+
+export interface TeamPaceRating {
+  id: number;
+  teamName: string;
+  teamAbbr: string;
+  sport: string;
+  season: string;
+  paceRating: number;
+  last10PaceRating?: number | null;
+  homeAwayPaceAdj?: number | null;
+  gamesComputed?: number | null;
+  computedAt: string;
+}
+
+export interface PaceSyncResult {
+  status: string;
+  computed: number;
+  seeded: number;
+  total: number;
+}
+
 export interface PlatformLineEntry {
   platform: string;
   lineValue: number;
