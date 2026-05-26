@@ -24,6 +24,7 @@ import FatigueTracker from "@/pages/variance/fatigue";
 import EnvironmentBoard from "@/pages/variance/environment";
 import UsageSignals from "@/pages/variance/usage";
 import ExperimentalLab from "@/pages/variance/lab";
+import SystemHealth from "@/pages/system-health";
 import { EntryProvider } from "@/lib/entry-context";
 
 const queryClient = new QueryClient();
@@ -107,6 +108,7 @@ function Router() {
         <Route path="/variance/environment" component={EnvironmentBoard} />
         <Route path="/variance/usage" component={UsageSignals} />
         <Route path="/variance/lab" component={ExperimentalLab} />
+        <Route path="/health" component={SystemHealth} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

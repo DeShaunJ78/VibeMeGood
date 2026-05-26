@@ -1,0 +1,146 @@
+Add a System Health Check page to VibeMeGood.
+
+Location: /health
+Sidebar label: "⚡ System Status"
+Pin it at the very top of the sidebar above 
+all other navigation items.
+
+This page runs a full diagnostic and shows
+green/amber/red status for every component.
+User clicks "Run Health Check" and sees 
+results in under 10 seconds.
+
+CHECKS TO RUN (all in parallel):
+
+DATA FRESHNESS
+- PP Lines: when was last PrizePicks sync?
+  Green: under 2 hours
+  Amber: 2-6 hours
+  Red: over 6 hours or zero lines
+
+- External Odds: when was last odds sync?
+  Green: under 30 minutes
+  Amber: 30 min - 2 hours
+  Red: over 2 hours
+
+- Projections: when last computed?
+  Green: under 8 hours
+  Amber: 8-16 hours
+  Red: over 16 hours or never run
+
+- Injury News: when last synced?
+  Green: under 4 hours
+  Amber: 4-12 hours
+  Red: over 12 hours
+
+- Variance Scores: when last computed?
+  Green: computed today
+  Amber: computed yesterday
+  Red: over 48 hours or never run
+
+DATABASE HEALTH
+- Total PP lines:
+  Green: above 1,000
+  Amber: 100-1,000
+  Red: under 100
+
+- Players with projections:
+  Green: above 100
+  Amber: 10-100
+  Red: zero (projections never run)
+
+- External lines with trueEdge:
+  Green: above 30
+  Amber: 1-30
+  Red: zero (no book data)
+
+- Journal entries:
+  Green: has entries (tracking started)
+  Amber: empty (not started yet)
+
+- Calibration records:
+  Green: has records
+  Amber: empty (not started yet)
+
+API CONNECTIVITY
+- PrizePicks API: ping
+  Green: responds 200
+  Red: timeout or error
+
+- The Odds API: confirm ODDS_API_KEY valid
+  Green: responds 200
+  Red: 401 or timeout
+
+- NBA ESPN API: ping
+  Green: responds 200
+  Red: timeout or error
+
+- MLB Stats API: ping
+  Green: responds 200
+  Red: timeout or error
+
+- NHL API: ping
+  Green: responds 200
+  Red: timeout or error
+
+- ESPN Injury API: ping
+  Green: responds 200
+  Red: timeout or error
+
+FEATURE STATUS
+- Variance API: ping /api/variance/fatigue
+  Green: returns 200
+  Red: 500 or error
+
+- Market Intel: ping /api/market-intel
+  Green: returns data
+  Red: empty or error
+
+- AI Analyst: ping /api/anthropic/conversations
+  Green: responds 200
+  Red: 404 or error
+
+- Calibration: ping /api/calibration
+  Green: responds 200
+  Red: 404 or error
+
+- Cron scheduler: confirm all jobs registered
+  Green: all jobs active
+  Red: jobs missing
+
+UI DISPLAY:
+
+Overall status banner at top:
+  ALL SYSTEMS GREEN ✅ — Ready to play
+  WARNINGS DETECTED ⚠️ — Check amber items
+  ISSUES FOUND ❌ — Fix red items before starting
+
+Each check shows as a row:
+  Component name
+  Status badge (GREEN/AMBER/RED)
+  Last updated timestamp
+  Inline fix button for red items
+
+Quick Fix toolbar at top:
+  "Sync PP Lines" → POST /api/sync/prizepicks
+  "Sync Odds" → POST /api/sync/external-odds
+  "Sync Projections" → POST /api/sync/projections
+  "Sync Injuries" → POST /api/sync/injuries
+  "Compute Variance" → POST /api/sync/variance
+
+Auto-refresh toggle:
+  Re-runs all checks every 5 minutes when ON.
+
+BACKEND:
+Create GET /api/system-health endpoint.
+Run all checks in parallel.
+Total response time must be under 5 seconds.
+
+VERIFY:
+After building navigate to /health
+Click Run Health Check
+Confirm all checks return a status
+Confirm overall banner shows correctly
+Confirm quick fix buttons work
+Report what the initial health check shows
+and how long it took to run.

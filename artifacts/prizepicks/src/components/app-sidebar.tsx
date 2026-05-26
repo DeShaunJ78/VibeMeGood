@@ -17,6 +17,7 @@ import {
   Wind,
   FlaskConical,
   Factory,
+  Zap,
 } from "lucide-react";
 import {
   Sidebar,
@@ -102,6 +103,31 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
+        <SidebarGroup className="pb-0">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location === "/health"}
+                  tooltip="System Status"
+                  className={cn(
+                    "transition-colors font-mono",
+                    location === "/health"
+                      ? "bg-yellow-950/60 text-yellow-300 border border-yellow-700/50 font-medium"
+                      : "text-yellow-400/80 hover:text-yellow-300 hover:bg-yellow-950/30 border border-transparent"
+                  )}
+                >
+                  <Link href="/health">
+                    <Zap size={14} />
+                    <span>⚡ System Status</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         <SidebarGroup>
           {!isCollapsed && (
             <SidebarGroupLabel className="text-xs uppercase font-mono text-muted-foreground tracking-wider mb-2">
