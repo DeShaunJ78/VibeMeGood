@@ -1,0 +1,186 @@
+Add a Shark Chat page to VibeMeGood.
+Same pattern as DraftDuel's /shark page.
+This is a completely separate chat from DraftDuel.
+
+STEP 1 — Create SharkChatContext
+Create artifacts/prizepicks/src/contexts/SharkChatContext.tsx
+
+Use localStorage for persistence.
+Storage keys must be DIFFERENT from DraftDuel:
+  "vmg_shark_messages" (not "shark_messages")
+  "vmg_shark_draft_input" (not "shark_draft_input")
+
+This prevents DraftDuel and VibeMeGood chat 
+histories from mixing.
+
+Interface:
+- messages: ChatMessage[]
+- draftInput: string
+- setDraftInput: (val: string) => void
+- sendMessage: (text: string) => void
+- clearChat: () => void
+- isLoading: boolean
+
+Welcome message:
+"Welcome. I'm your Personal Shark for VibeMeGood.
+Ask me anything about PrizePicks pick'em analytics,
+entry construction, break-even rates, payout shifts,
+variance signals, or the daily workflow.
+Paper Trade Mode is active — no real-money 
+recommendations."
+
+Wrap the provider at the top level in App.tsx
+so it never unmounts during navigation.
+
+STEP 2 — Create the Shark Chat page
+Create artifacts/prizepicks/src/pages/shark-chat.tsx
+
+Same layout as DraftDuel:
+- Dark theme matching VibeMeGood design
+- "🦈 Personal Shark" header
+- Paper Trade Mode banner (permanent, top of chat)
+- User messages on right, assistant on left
+- Typing indicator while waiting for response
+- Auto-scroll to bottom on new messages
+- Input field at bottom with send button
+- Shift+Enter for new line, Enter to send
+- Trash icon in top right → inline confirmation
+  "Clear this conversation? [Clear] [Cancel]"
+  Clears localStorage on confirm
+
+STEP 3 — Backend route
+The existing /api/shark/chat endpoint may already
+exist. Check first.
+
+If it exists, verify it accepts an "app" parameter
+that controls which knowledge folders are searched.
+
+If it does not exist, create:
+POST /api/shark/chat
+
+Request:
+{
+  "message": "string",
+  "app": "vibemegood",
+  "conversationHistory": [
+    { "role": "user", "content": "..." },
+    { "role": "assistant", "content": "..." }
+  ]
+}
+
+Response:
+{ "reply": "string" }
+
+STEP 4 — App context for VibeMeGood
+Check if app-contexts.ts exists in the VibeMeGood
+API server.
+
+If it does not exist, create:
+artifacts/api-server/src/lib/shark/app-contexts.ts
+
+VibeMeGood context:
+{
+  appName: "VibeMeGood",
+  knowledgeFolders: ["vibemegood", "shared"],
+  systemPromptPrefix: `
+ACTIVE APP: VibeMeGood
+SCOPE: PrizePicks pick'em analytics only.
+
+Do not explain PropEdge sportsbook betting 
+in this session.
+Do not explain DraftDuel DFS lineup building 
+in this session.
+
+If asked about other apps say:
+"That is a separate app. I am focused on 
+VibeMeGood right now. What do you need 
+help with here?"
+`
+}
+
+STEP 5 — Knowledge retrieval
+Check if knowledge retrieval already exists.
+
+If it does, confirm it filters by app context
+so VibeMeGood chat only searches:
+  knowledge/vibemegood/
+  knowledge/shared/
+
+If knowledge files do not exist in this project,
+create the knowledge/ folder and copy the relevant
+files from the 27-file knowledge base:
+  knowledge/shared/ (all 6 files)
+  knowledge/vibemegood/ (all 6 files)
+
+The content for these files is in the knowledge
+base we built. The assistant should be able to
+explain VibeMeGood metrics, workflow, entry
+construction, calibration, and limitations.
+
+STEP 6 — System prompt
+Use this system prompt:
+
+"You are a private pick'em analytics assistant
+for DeShaun, focused exclusively on VibeMeGood
+and PrizePicks pick'em strategy.
+
+You help with:
+- Reading and interpreting projection differences
+- Entry construction and leg selection
+- Break-even win rates by entry type
+- Payout shift detection and correlation warnings
+- Variance signals (fatigue, blowout risk, usage)
+- The daily pick'em workflow
+- Paper trading and calibration tracking
+
+You do not recommend real-money entries until
+the model is proven through paper trading.
+You ask only one question per response.
+You never fabricate current lines or projections.
+You always check data freshness before advising.
+You push back when the user is forcing action
+or skipping the workflow.
+
+Do not build a hype bot. Build a shark."
+
+STEP 7 — Add to sidebar navigation
+Add "Shark Chat" to VibeMeGood sidebar.
+Position: near the bottom of the sidebar.
+Icon: 🦈 or chat bubble icon.
+Route: /shark
+
+STEP 8 — Verify
+After building test these:
+
+1. Navigate to /shark
+   Confirm page loads with Paper Trade Mode banner
+   Confirm welcome message appears
+
+2. Ask: "What does VibeMeGood do?"
+   Confirm clear answer about PrizePicks analytics
+
+3. Ask: "What is the break-even rate for a 
+   3-pick power play?"
+   Confirm answer: 55.0%
+
+4. Ask: "What should I bet tonight with 
+   real money?"
+   Confirm it refuses and redirects to 
+   paper trading
+
+5. Ask: "What does DraftDuel do?"
+   Confirm it acknowledges but redirects
+   back to VibeMeGood
+
+6. Navigate to Slate Board then back to /shark
+   Confirm conversation is still there
+
+7. Type something, do not send, navigate away
+   and come back
+   Confirm text is still in the input field
+
+8. Click trash icon
+   Confirm inline confirmation appears
+   Confirm clearing works
+
+Report pass or fail for all 8 tests.

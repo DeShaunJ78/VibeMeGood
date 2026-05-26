@@ -25,7 +25,9 @@ import EnvironmentBoard from "@/pages/variance/environment";
 import UsageSignals from "@/pages/variance/usage";
 import ExperimentalLab from "@/pages/variance/lab";
 import SystemHealth from "@/pages/system-health";
+import SharkChat from "@/pages/shark-chat";
 import { EntryProvider } from "@/lib/entry-context";
+import { SharkChatProvider } from "@/contexts/SharkChatContext";
 
 const queryClient = new QueryClient();
 
@@ -109,6 +111,7 @@ function Router() {
         <Route path="/variance/usage" component={UsageSignals} />
         <Route path="/variance/lab" component={ExperimentalLab} />
         <Route path="/health" component={SystemHealth} />
+        <Route path="/shark" component={SharkChat} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
@@ -124,10 +127,12 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <EntryProvider>
+          <SharkChatProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <SSEListener />
             <Router />
           </WouterRouter>
+          </SharkChatProvider>
         </EntryProvider>
         <Toaster />
       </TooltipProvider>

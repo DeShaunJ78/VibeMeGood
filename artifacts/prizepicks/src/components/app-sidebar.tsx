@@ -18,6 +18,7 @@ import {
   FlaskConical,
   Factory,
   Zap,
+  MessageSquare,
 } from "lucide-react";
 import {
   Sidebar,
@@ -54,6 +55,7 @@ const INTEL_ITEMS = [
 ];
 
 const BOTTOM_ITEMS = [
+  { title: "Shark Chat", url: "/shark", icon: MessageSquare },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
 ];
 

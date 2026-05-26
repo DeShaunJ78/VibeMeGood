@@ -32,6 +32,7 @@ import lineupFactoryRouter from "./lineup-factory";
 import fatigueRouter from "./fatigue";
 import calibrationRouter from "./calibration";
 import systemHealthRouter from "./system-health";
+import sharkRouter from "./shark";
 
 const router: IRouter = Router();
 
@@ -68,5 +69,6 @@ router.use(lineupFactoryRouter);
 router.use(fatigueRouter);
 router.use(calibrationRouter);
 router.use(systemHealthRouter);
+router.use(sharkRouter);
 
 export default router;
