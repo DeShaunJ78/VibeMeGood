@@ -1,0 +1,118 @@
+Two root issues identified from code review.
+Fix both.
+
+ROOT ISSUE 1 — Projection gap showing 20.0
+The market-intel route joins ourProjectionsTable
+by playerId + statType. This only matches
+for basic stat types like "Points", "Rebounds",
+"Assists".
+
+But PP lines have exotic stat types like:
+"Points - 1st 3 Minutes"
+"Free Throws Made"
+"Free Throws Attempted"
+"Rebs+Asts"
+"Pts+Asts"
+"Blocked Shots"
+"Two Pointers Made"
+
+The projection scraper only saves these
+basic stat types per player:
+Points, Rebounds, Assists, Steals, Blocks,
+Turnovers, Three-Pointers Made
+
+So the join fails for every exotic stat type
+and 20.0 shows as the placeholder gap.
+
+FIX: In the market-intel route, when joining
+ourProjectionsTable, also try to match on
+the BASE stat type when the full stat type
+does not match.
+
+Create a function that extracts the base
+stat from exotic PP line stat types:
+
+function getBaseStatType(statType: string): string {
+  if (statType.includes("Points")) return "Points"
+  if (statType.includes("Rebound")) return "Rebounds"
+  if (statType.includes("Assist")) return "Assists"
+  if (statType.includes("Steal")) return "Steals"
+  if (statType.includes("Block")) return "Blocks"
+  if (statType.includes("Three") || statType.includes("3-PT")) return "3-Pointers Made"
+  if (statType.includes("Free Throw")) return "Free Throws Made"
+  if (statType.includes("Turnover")) return "Turnovers"
+  return statType
+}
+
+Then in the market-intel result loop when
+proj is null (no projection found), try
+fetching projection by playerId + base stat type.
+
+Also the "Rebs+Asts" combo lines should
+use Rebounds projection + Assists projection
+added together as the projected value.
+
+Same for "Pts+Asts", "Pts+Rebs",
+"Pts+Rebs+Asts" combo lines.
+
+Add a function:
+function getComboProjection(
+  statType: string,
+  projections: Map<string, number>
+): number | null {
+  Map keys are base stat types.
+  "Rebs+Asts" = projections.get("Rebounds") 
+                + projections.get("Assists")
+  "Pts+Asts" = projections.get("Points")
+               + projections.get("Assists")
+  "Pts+Rebs" = projections.get("Points")
+               + projections.get("Rebounds")
+  "Pts+Rebs+Asts" = Points + Rebounds + Assists
+  "Hits+Runs+RBIs" = Hits + Runs + RBIs
+  Return null if any component is missing.
+}
+
+Build a projections map per player before
+the result loop so combo lookups are fast.
+
+ROOT ISSUE 2 — Entry Builder not showing picks
+The EntryContext correctly wraps the app.
+Picks added on the Slate Board ARE in context.
+But the Entry Builder page may not be
+rendering the picks list when picks exist.
+
+Check entry-builder.tsx:
+1. Is the picks array from useEntry() 
+   being rendered? Or is there a condition
+   blocking the panel from showing?
+
+2. Is there a minimum pick count gate
+   preventing the panel from rendering?
+   (it should show with 0 picks as empty state
+   and with 1+ picks showing the pick list)
+
+3. Check if the "Add to Entry" button on
+   the Slate Board is actually calling
+   addPick() correctly and the pick is
+   being stored in context.
+
+Add a debug: console.log the picks array
+in entry-builder.tsx to confirm picks
+are arriving from context.
+
+Fix whatever is preventing picks from
+showing in the Entry Builder.
+
+VERIFY:
+1. Go to Slate Board filtered to NBA
+2. Click on SGA Points prop
+3. Select OVER direction
+4. Confirm the pick appears in Entry Builder
+5. Click on De'Aaron Fox Points prop
+6. Select OVER direction
+7. Confirm both picks show in Entry Builder
+8. Confirm proj gap shows a real number
+   not 20.0 for Points props
+
+Report exactly what proj gap values show
+for SGA Points and Fox Points after fix.

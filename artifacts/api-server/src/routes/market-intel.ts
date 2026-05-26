@@ -11,6 +11,50 @@ import { logger } from "../lib/logger";
 import { consensusFairProb, edgePct, holdWarning } from "../lib/analytics/odds-math";
 import { detectSharpMoney } from "../lib/propedge/sharp-detector";
 
+// ROOT ISSUE 1 — helpers for base-stat and combo projection fallback
+function getBaseStatType(statType: string): string {
+  if (/point/i.test(statType) && !statType.includes("+")) return "Points";
+  if (/rebound/i.test(statType) && !statType.includes("+")) return "Rebounds";
+  if (/assist/i.test(statType) && !statType.includes("+")) return "Assists";
+  if (/steal/i.test(statType)) return "Steals";
+  if (/block/i.test(statType)) return "Blocks";
+  if (/three|3-pt|3pt/i.test(statType)) return "3-Pointers Made";
+  if (/free throw/i.test(statType)) return "Free Throws Made";
+  if (/turnover/i.test(statType)) return "Turnovers";
+  return statType;
+}
+
+type FallbackProj = { projectedValue: number; pOver: number | null; stdDev: number | null };
+
+function getComboProjection(
+  statType: string,
+  playerMap: Map<string, FallbackProj>,
+): number | null {
+  const g = (k: string) => playerMap.get(k)?.projectedValue ?? null;
+  const s = statType.toLowerCase();
+  if (/pts\+rebs?\+asts?/i.test(s) || /points\+rebounds\+assists/i.test(s)) {
+    const pts = g("points"), reb = g("rebounds"), ast = g("assists");
+    return pts != null && reb != null && ast != null ? pts + reb + ast : null;
+  }
+  if (/pts\+asts?/i.test(s) || /points\+assists/i.test(s)) {
+    const pts = g("points"), ast = g("assists");
+    return pts != null && ast != null ? pts + ast : null;
+  }
+  if (/pts\+rebs?/i.test(s) || /points\+rebounds/i.test(s)) {
+    const pts = g("points"), reb = g("rebounds");
+    return pts != null && reb != null ? pts + reb : null;
+  }
+  if (/rebs?\+asts?/i.test(s) || /rebounds\+assists/i.test(s)) {
+    const reb = g("rebounds"), ast = g("assists");
+    return reb != null && ast != null ? reb + ast : null;
+  }
+  if (/hits?\+runs?\+rbi/i.test(s)) {
+    const h = g("hits"), r = g("runs"), rbi = g("rbis") ?? g("rbi");
+    return h != null && r != null && rbi != null ? h + r + rbi : null;
+  }
+  return null;
+}
+
 const router = Router();
 
 router.get("/market-intel", async (req, res) => {
@@ -110,7 +154,7 @@ router.get("/market-intel", async (req, res) => {
     const uniquePlayerIds = [...new Set(rows.map(r => r.line.playerId))];
     const uniquePlayerNames = [...new Set(rows.map(r => r.player.fullName))];
 
-    const [allExtLines, allVarScores, allRecentMoves, allPlatformLines, allGameLogs] = ppLineIds.length
+    const [allExtLines, allVarScores, allRecentMoves, allPlatformLines, allGameLogs, allPlayerProjections] = ppLineIds.length
       ? await Promise.all([
           db
             .select()
@@ -169,8 +213,22 @@ router.get("/market-intel", async (req, res) => {
                 .where(inArray(playerGameLogsTable.playerId, uniquePlayerIds))
                 .orderBy(desc(playerGameLogsTable.gameDate))
             : Promise.resolve([] as { playerId: number; statType: string; value: string; gameDate: Date }[]),
+
+          // ROOT ISSUE 1 — fetch all projections for all players (for base/combo fallback)
+          uniquePlayerIds.length
+            ? db
+                .select({
+                  playerId:       ourProjectionsTable.playerId,
+                  statType:       ourProjectionsTable.statType,
+                  projectedValue: ourProjectionsTable.projectedValue,
+                  pOver:          ourProjectionsTable.pOver,
+                  stdDev:         ourProjectionsTable.stdDev,
+                })
+                .from(ourProjectionsTable)
+                .where(inArray(ourProjectionsTable.playerId, uniquePlayerIds))
+            : Promise.resolve([] as { playerId: number; statType: string; projectedValue: string; pOver: string | null; stdDev: string | null }[]),
         ])
-      : [[], [], [], [], []];
+      : [[], [], [], [], [], []];
 
     const extLinesByPpLineId = new Map<number, typeof allExtLines>();
     for (const l of allExtLines) {
@@ -219,6 +277,21 @@ router.get("/market-intel", async (req, res) => {
       gameLogsByKey.get(key)!.push({ value: Number(gl.value) });
     }
 
+    // ROOT ISSUE 1 — build per-player projection maps for base/combo fallback
+    const playerProjectionMaps = new Map<number, Map<string, FallbackProj>>();
+    for (const p of allPlayerProjections) {
+      if (p.playerId == null) continue;
+      const pid = p.playerId;
+      if (!playerProjectionMaps.has(pid)) {
+        playerProjectionMaps.set(pid, new Map());
+      }
+      playerProjectionMaps.get(pid)!.set(p.statType.toLowerCase(), {
+        projectedValue: Number(p.projectedValue),
+        pOver:          p.pOver  ? Number(p.pOver)  : null,
+        stdDev:         p.stdDev ? Number(p.stdDev) : null,
+      });
+    }
+
     const result = rows.map(row => {
       const extLines    = extLinesByPpLineId.get(row.line.id) ?? [];
       const varScore    = varScoreByPpLineId.get(row.line.id) ?? null;
@@ -249,6 +322,8 @@ router.get("/market-intel", async (req, res) => {
         .map(l => new Decimal(l.noVigOverProb!.toString()));
       const fairProbDecimal = consensusFairProb(noVigDecimalProbs);
 
+      // ROOT ISSUE 1 — projPOver uses fallback pOver when exact join misses
+      // (playerProjMap / fallback not yet computed here; use row.proj directly — fallback handled below)
       const projPOver = row.proj?.pOver ? parseFloat(row.proj.pOver.toString()) : null;
       const modelProbDecimal = projPOver != null ? new Decimal(projPOver).div(100) : null;
 
@@ -299,14 +374,40 @@ router.get("/market-intel", async (req, res) => {
       }
 
       const proj = row.proj;
-      const noPlayReason = proj?.noPlayReason ?? null;
-      const pOver = proj?.pOver ? parseFloat(proj.pOver.toString()) : null;
-      const dqScore = proj?.dataQualityScore ?? null;
-      const isStale = proj?.expiresAt ? new Date() > proj.expiresAt : false;
+
+      // ROOT ISSUE 1 — override for combo/base stat types with real calculated values
+      // DB `ourProjections` has prior_only rows (value=20) for every statType including combos.
+      // For combo stat types (e.g. "Pts+Rebs"), prefer the sum of base stat projections.
+      // For base-stat mismatches, use the matching base type when the exact join missed.
+      const playerProjMap = playerProjectionMaps.get(row.line.playerId);
+      const isComboType = row.line.statType.includes("+");
+      let fallback: FallbackProj | null = null;
+      if (playerProjMap) {
+        if (isComboType) {
+          // Always prefer computed sum for combos — it beats a 20.0 prior
+          const comboVal = getComboProjection(row.line.statType, playerProjMap);
+          if (comboVal != null) fallback = { projectedValue: comboVal, pOver: null, stdDev: null };
+        }
+        if (!proj && !fallback) {
+          // Exact join missed: try base stat type
+          const baseType = getBaseStatType(row.line.statType);
+          fallback = playerProjMap.get(baseType.toLowerCase()) ?? null;
+        }
+      }
+
+      // For combos with a computed fallback, suppress the inaccurate prior-only DB row
+      const effectiveProj = (isComboType && fallback) ? null : proj;
+
+      const noPlayReason = effectiveProj?.noPlayReason ?? null;
+      const pOver = effectiveProj?.pOver
+        ? parseFloat(effectiveProj.pOver.toString())
+        : (fallback?.pOver ?? null);
+      const dqScore = effectiveProj?.dataQualityScore ?? null;
+      const isStale = effectiveProj?.expiresAt ? new Date() > effectiveProj.expiresAt : false;
       const effectiveNoPlay = noPlayReason ?? (isStale ? "stale_projection" : null);
       const sourceLabel = isStale
-        ? `${proj?.sourceLabel ?? "prior_only"} (stale)`
-        : (proj?.sourceLabel ?? null);
+        ? `${effectiveProj?.sourceLabel ?? "prior_only"} (stale)`
+        : (effectiveProj?.sourceLabel ?? (fallback ? "base_fallback" : null));
 
       const scoreReasoning = (row.score?.reasoning as Record<string, unknown> | null) ?? null;
 
@@ -390,17 +491,21 @@ router.get("/market-intel", async (req, res) => {
           : null,
         actionTag: row.score?.actionTag ?? null,
 
-        ourProjection: proj ? {
-          value: parseFloat(proj.projectedValue.toString()),
-          stdDev: proj.stdDev ? parseFloat(proj.stdDev.toString()) : null,
+        ourProjection: (effectiveProj || fallback) ? {
+          value: effectiveProj
+            ? parseFloat(effectiveProj.projectedValue.toString())
+            : fallback!.projectedValue,
+          stdDev: effectiveProj?.stdDev
+            ? parseFloat(effectiveProj.stdDev.toString())
+            : (fallback?.stdDev ?? null),
           pOver,
-          percentileAtLine: proj.percentileAtLine ? parseFloat(proj.percentileAtLine.toString()) : null,
+          percentileAtLine: effectiveProj?.percentileAtLine ? parseFloat(effectiveProj.percentileAtLine.toString()) : null,
           noPlayReason: effectiveNoPlay,
           dataQualityScore: dqScore,
           sourceLabel,
-          confidence: proj.confidence,
-          gamesUsed: proj.gamesUsed,
-          shrinkageFactor: proj.shrinkageFactor ? parseFloat(proj.shrinkageFactor.toString()) : null,
+          confidence: effectiveProj?.confidence ?? null,
+          gamesUsed: effectiveProj?.gamesUsed ?? null,
+          shrinkageFactor: effectiveProj?.shrinkageFactor ? parseFloat(effectiveProj.shrinkageFactor.toString()) : null,
           isStale,
         } : null,
 

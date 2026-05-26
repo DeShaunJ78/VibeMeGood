@@ -134,6 +134,8 @@ export default function EntryBuilder() {
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   const [simLoading, setSimLoading] = useState(false);
   const { picks, removePick, updateDirection, clearPicks } = useEntry();
+  // DEBUG — confirm picks arrive from context
+  console.log("[EntryBuilder] picks from context:", picks.length, picks.map(p => p.playerName));
 
   function togglePickSort(col: string) {
     if (pickSortCol === col) {

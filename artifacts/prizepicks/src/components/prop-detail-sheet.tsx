@@ -508,6 +508,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                 </div>
                 <Button
                   onClick={handleAddRemove}
+                  disabled={loading || !data}
                   className={`font-mono text-xs shrink-0 ${isPicked ? "bg-rose-900/50 text-rose-300 border-rose-800 hover:bg-rose-900" : "bg-primary text-primary-foreground hover:bg-primary/90"}`}
                   variant={isPicked ? "outline" : "default"}
                 >
