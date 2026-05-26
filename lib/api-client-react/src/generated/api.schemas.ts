@@ -288,6 +288,8 @@ export interface SlateRow {
   playerId: number;
   playerName: string;
   /** @nullable */
+  position?: string | null;
+  /** @nullable */
   teamAbbr?: string | null;
   /** @nullable */
   opponentAbbr?: string | null;

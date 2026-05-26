@@ -74,6 +74,7 @@ router.get("/slate", async (req, res) => {
         ppLineId: line.id,
         playerId: line.playerId,
         playerName: player?.fullName ?? "Unknown",
+        position: player?.position ?? null,
         imageUrl: player?.imageUrl ?? null,
         teamAbbr: playerTeam?.abbreviation ?? null,
         opponentAbbr,

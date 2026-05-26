@@ -280,6 +280,17 @@ interface OptResult {
   ourProjection: OurProjection | null;
 }
 
+const POSITION_ORDER: Record<string, string[]> = {
+  NBA: ["PG", "SG", "SF", "PF", "C"],
+  NFL: ["QB", "RB", "WR", "TE", "K"],
+  MLB: ["P", "C", "1B", "2B", "3B", "SS", "OF"],
+  NHL: ["C", "LW", "RW", "D", "G"],
+};
+
+function positionOrder(sport: string): string[] {
+  return POSITION_ORDER[sport.toUpperCase()] ?? [];
+}
+
 type SortDir = "asc" | "desc";
 
 function SortTh({
@@ -459,6 +470,13 @@ export default function SlateBoard() {
         }
         case "pOver":    cmp = (a.ourProjection?.pOver ?? -1) - (b.ourProjection?.pOver ?? -1); break;
         case "trueEdge": cmp = (a.trueEdge ?? -999) - (b.trueEdge ?? -999); break;
+        case "position": {
+          const order = positionOrder(a.sport ?? "");
+          const ai = order.indexOf((a.position ?? "").toUpperCase());
+          const bi = order.indexOf((b.position ?? "").toUpperCase());
+          cmp = (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+          break;
+        }
         case "fatigue":  cmp = (a.variance?.fatigueScore ?? 0) - (b.variance?.fatigueScore ?? 0); break;
         case "blowout":  cmp = (a.variance?.blowoutRisk ?? 0) - (b.variance?.blowoutRisk ?? 0); break;
         default:
@@ -696,6 +714,7 @@ export default function SlateBoard() {
                   <TableHead className="w-8 font-mono text-xs" />
                   <TableHead className="w-14 font-mono text-xs">Sport</TableHead>
                   <SortTh col="playerName" label="Player" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                  <SortTh col="position" label="Pos" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden md:table-cell w-12 text-center" />
                   <TableHead className="hidden md:table-cell w-12 font-mono text-xs">Team</TableHead>
                   <TableHead className="hidden md:table-cell w-12 font-mono text-xs">Opp</TableHead>
                   <SortTh col="statType" label="Stat" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="w-28" />
@@ -723,14 +742,14 @@ export default function SlateBoard() {
                 {isLoading ? (
                   Array.from({ length: 10 }).map((_, i) => (
                     <TableRow key={i} className="border-slate-800">
-                      {Array.from({ length: varianceEnabled ? 17 : 15 }).map((_, j) => (
+                      {Array.from({ length: varianceEnabled ? 18 : 16 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full bg-slate-800" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : playerRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={varianceEnabled ? 17 : 15} className="h-48 text-center text-muted-foreground font-mono">
+                    <TableCell colSpan={varianceEnabled ? 18 : 16} className="h-48 text-center text-muted-foreground font-mono">
                       No props — click Force Sync to load live slate
                     </TableCell>
                   </TableRow>
@@ -763,6 +782,9 @@ export default function SlateBoard() {
                               )}
                             </div>
                           </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell font-mono text-[10px] text-center text-slate-400">
+                          {row.position ?? "—"}
                         </TableCell>
                         <TableCell className="hidden md:table-cell font-mono text-xs text-muted-foreground">{row.teamAbbr ?? "—"}</TableCell>
                         <TableCell className="hidden md:table-cell font-mono text-xs text-muted-foreground">{row.opponentAbbr ?? "—"}</TableCell>

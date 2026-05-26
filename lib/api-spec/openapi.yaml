@@ -1415,6 +1415,7 @@ components:
         ppLineId: { type: integer }
         playerId: { type: integer }
         playerName: { type: string }
+        position: { type: ["string", "null"] }
         teamAbbr: { type: ["string", "null"] }
         opponentAbbr: { type: ["string", "null"] }
         sport: { type: string }
