@@ -210,6 +210,97 @@ export async function scrapeMLBStats(): Promise<ScrapedProjection[]> {
   }
 }
 
+// ---------- WNBA ----------
+
+/**
+ * ESPN common/v3 statistics API — returns per-game season averages for WNBA players.
+ * URL: https://site.api.espn.com/apis/common/v3/sports/basketball/wnba/statistics/athletes
+ * Response shape: { categories: [{name, names: string[]}], athletes: [{athlete:{displayName}, categories:[{values:number[]}]}] }
+ */
+export async function scrapeWNBAStats(): Promise<ScrapedProjection[]> {
+  const season = new Date().getFullYear();
+  // Try current year then prior year (WNBA season runs May–Oct)
+  for (const yr of [season, season - 1]) {
+    try {
+      const data = await getJson(
+        `https://site.api.espn.com/apis/common/v3/sports/basketball/wnba/statistics/athletes` +
+        `?limit=300&seasontype=2&season=${yr}`,
+      );
+
+      const athletes: unknown[] = data?.athletes ?? [];
+      if (!athletes.length) continue;
+
+      // Build flat column name list from top-level category definitions
+      const columnNames: string[] = (data.categories ?? []).flatMap(
+        (c: { names?: string[] }) => c.names ?? [],
+      );
+
+      const out: ScrapedProjection[] = [];
+
+      for (const entry of athletes as Array<{
+        athlete?: { displayName?: string };
+        categories?: Array<{ values?: unknown[] }>;
+      }>) {
+        const name = entry.athlete?.displayName;
+        if (!name) continue;
+
+        // Flatten per-athlete category values into a single array
+        const allValues: number[] = (entry.categories ?? []).flatMap(
+          (c) => (c.values ?? []).map(Number),
+        );
+
+        const get = (col: string): number => {
+          const i = columnNames.indexOf(col);
+          return i >= 0 ? (allValues[i] ?? 0) : 0;
+        };
+
+        const gp = get("gp") || get("GP");
+        if (gp < 3) continue;
+
+        // ESPN common/v3 returns per-game averages
+        const pts  = get("pts")  || get("avgPoints");
+        const reb  = get("reb")  || get("avgRebounds");
+        const ast  = get("ast")  || get("avgAssists");
+        const stl  = get("stl")  || get("avgSteals");
+        const blk  = get("blk")  || get("avgBlocks");
+        const to   = get("to")   || get("avgTurnovers");
+        const fg3m = get("fg3m") || get("avg3PointFieldGoalsMade");
+
+        const push = (statType: string, val: number) => {
+          if (val > 0) out.push({ playerName: name, sport: "WNBA", statType, projectedValue: round2(val), source: "espn_wnba" });
+        };
+
+        push("Points",           pts);
+        push("Rebounds",         reb);
+        push("Assists",          ast);
+        push("Steals",           stl);
+        push("Blocks",           blk);
+        push("Turnovers",        to);
+        push("3-Pointers Made",  fg3m);
+
+        // Combo lines
+        if (pts && reb && ast) push("Pts+Reb+Ast", round2(pts + reb + ast));
+        if (pts && reb)        push("Pts+Reb",     round2(pts + reb));
+        if (pts && ast)        push("Pts+Ast",     round2(pts + ast));
+        if (reb && ast)        push("Reb+Ast",     round2(reb + ast));
+
+        // DraftKings WNBA fantasy score
+        // Points 1pt · Reb 1.25pt · Ast 1.5pt · Stl 2pt · Blk 2pt · TO -0.5pt · 3PM 0.5pt
+        const dkfp = pts + reb * 1.25 + ast * 1.5 + stl * 2 + blk * 2 + to * -0.5 + fg3m * 0.5;
+        if (dkfp > 0) push("Fantasy Score", round2(dkfp));
+      }
+
+      logger.info({ season: yr, athletes: athletes.length, projections: out.length }, "WNBA ESPN stats scraped");
+      return out;
+    } catch (err) {
+      logger.warn({ err, season: yr }, "WNBA ESPN scrape error — will try next year or skip");
+    }
+  }
+
+  logger.warn("WNBA ESPN scrape returned no data — falling back to game logs");
+  return [];
+}
+
 // ---------- Helpers ----------
 
 function round1(n: number): number { return Math.round(n * 10) / 10; }

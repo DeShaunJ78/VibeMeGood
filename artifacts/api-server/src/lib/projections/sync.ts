@@ -4,7 +4,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { logger } from "../logger";
-import { scrapeNHLStats, scrapeMLBStats, type ScrapedProjection } from "./fp-scraper";
+import { scrapeNHLStats, scrapeMLBStats, scrapeWNBAStats, type ScrapedProjection } from "./fp-scraper";
 import { matchPlayer, type PlayerRef } from "./name-match";
 import { pOverLine, percentileAtLine } from "../projection/normal-dist";
 import { getPrior } from "../projection/priors";
@@ -117,6 +117,49 @@ async function syncFromScraped(
   return { sport, scraped: scraped.length, matched, upserted, samples };
 }
 
+// WNBA/NBA: derive projections from game logs stored in DB (season averages)
+async function syncFromGameLogs(sport: "NBA" | "WNBA", players: PlayerRef[]): Promise<SyncResult> {
+  const sportPlayers = players.filter(p => p.sport === sport);
+  const playerIdSet = new Set(sportPlayers.map(p => p.id));
+
+  const rows = await db
+    .select({
+      playerId:  playerGameLogsTable.playerId,
+      statType:  playerGameLogsTable.statType,
+      avgValue:  sql<number>`ROUND(AVG(${playerGameLogsTable.value}::numeric), 2)`,
+      gamesUsed: sql<number>`COUNT(*)`,
+    })
+    .from(playerGameLogsTable)
+    .groupBy(playerGameLogsTable.playerId, playerGameLogsTable.statType)
+    .having(sql`COUNT(*) >= 2`);
+
+  const sportRows = rows.filter(r => r.playerId != null && playerIdSet.has(r.playerId as number));
+
+  let upserted = 0;
+  const samples: SyncResult["samples"] = [];
+  const playerMap = new Map(sportPlayers.map(p => [p.id, p]));
+
+  for (const row of sportRows) {
+    const pid = row.playerId as number;
+    const val = Number(row.avgValue);
+    if (!pid || isNaN(val)) continue;
+
+    try {
+      await upsertProjection(pid, row.statType, val, "game_log_avg", sport);
+      upserted++;
+      if (samples.length < 5) {
+        const player = playerMap.get(pid);
+        if (player) samples.push({ player: player.fullName, statType: row.statType, projectedValue: val });
+      }
+    } catch (err) {
+      logger.warn({ err, playerId: pid, statType: row.statType }, `${sport} game-log upsert failed`);
+    }
+  }
+
+  logger.info({ sport, rows: sportRows.length, upserted }, `${sport} game-log projections synced`);
+  return { sport, scraped: sportRows.length, matched: sportRows.length, upserted, samples };
+}
+
 // NBA: derive projections from our own game logs (season averages)
 async function syncNBAFromGameLogs(players: PlayerRef[]): Promise<SyncResult> {
   const nbaPlayers = players.filter(p => p.sport === "NBA");
@@ -185,6 +228,15 @@ export async function syncProjections(sport?: string): Promise<SyncResult[]> {
   }
   if (!sportUpper || sportUpper === "NBA") {
     tasks.push(syncNBAFromGameLogs(allPlayers));
+  }
+  if (!sportUpper || sportUpper === "WNBA") {
+    tasks.push(
+      scrapeWNBAStats().then(scraped =>
+        scraped.length > 0
+          ? syncFromScraped("WNBA", scraped, allPlayers)
+          : syncFromGameLogs("WNBA", allPlayers),
+      ),
+    );
   }
 
   const settled = await Promise.allSettled(tasks);

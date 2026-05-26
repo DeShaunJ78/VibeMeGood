@@ -692,6 +692,7 @@ export default function SlateBoard() {
                   <SelectItem value="NFL">NFL</SelectItem>
                   <SelectItem value="MLB">MLB</SelectItem>
                   <SelectItem value="NHL">NHL</SelectItem>
+                  <SelectItem value="WNBA">WNBA</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={lineTypeFilter} onValueChange={setLineTypeFilter}>
@@ -1000,6 +1001,7 @@ export default function SlateBoard() {
                   <SelectItem value="NFL">NFL</SelectItem>
                   <SelectItem value="MLB">MLB</SelectItem>
                   <SelectItem value="NHL">NHL</SelectItem>
+                  <SelectItem value="WNBA">WNBA</SelectItem>
                 </SelectContent>
               </Select>
             </div>

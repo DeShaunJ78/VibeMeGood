@@ -65,6 +65,8 @@ export default function Injuries() {
               <SelectItem value="NBA">NBA</SelectItem>
               <SelectItem value="NFL">NFL</SelectItem>
               <SelectItem value="MLB">MLB</SelectItem>
+              <SelectItem value="NHL">NHL</SelectItem>
+              <SelectItem value="WNBA">WNBA</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -186,6 +188,7 @@ export default function Injuries() {
                   <SelectItem value="NFL">NFL</SelectItem>
                   <SelectItem value="MLB">MLB</SelectItem>
                   <SelectItem value="NHL">NHL</SelectItem>
+                  <SelectItem value="WNBA">WNBA</SelectItem>
                 </SelectContent>
               </Select>
             </div>
