@@ -243,12 +243,12 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
     },
     {
       name: "Historical Game Logs",
-      status: gameLogs >= 100 ? "green" : gameLogs > 0 ? "amber" : "red",
+      status: (gameLogs >= 1000 ? "green" : gameLogs >= 100 ? "amber" : "red") as CheckStatus,
       detail: gameLogs === 0
-        ? "No records — historical hit rates unavailable"
-        : `${gameLogs.toLocaleString()} game log records across all players`,
+        ? "No game logs — run Backfill History"
+        : `${gameLogs.toLocaleString()} game log entries`,
       lastUpdated: null,
-      fixAction: null,
+      fixAction: gameLogs < 100 ? "historical-stats" : null,
     },
     {
       name: "Team Pace Ratings",

@@ -49,7 +49,8 @@ async function triggerSync(action: string): Promise<void> {
     "pace":           "/api/admin/sync/pace",
     "sharp":          "/api/sharp/compute",
     "nfl-advanced":   "/api/admin/sync/nfl-advanced",
-    "calibration":    "/api/sync/calibration",
+    "calibration":      "/api/sync/calibration",
+    "historical-stats": "/api/sync/historical-stats",
   };
   const path = map[action];
   if (!path) return;
@@ -166,7 +167,8 @@ const QUICK_FIXES = [
   { label: "Compute Variance", action: "variance",      endpoint: "/api/sync/variance" },
   { label: "Sync Pace",        action: "pace",          endpoint: "/api/admin/sync/pace" },
   { label: "Sync Sharp",       action: "sharp",         endpoint: "/api/sharp/compute" },
-  { label: "Run Calibration", action: "calibration",   endpoint: "/api/sync/calibration" },
+  { label: "Run Calibration",  action: "calibration",      endpoint: "/api/sync/calibration" },
+  { label: "Backfill History", action: "historical-stats", endpoint: "/api/sync/historical-stats" },
 ];
 
 export default function SystemHealth() {

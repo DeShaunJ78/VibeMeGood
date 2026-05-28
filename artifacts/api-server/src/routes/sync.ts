@@ -83,6 +83,18 @@ async function syncScoresImpl(): Promise<number> {
   return 0;
 }
 
+router.post("/sync/historical-stats", async (req, res) => {
+  const { nba = true, mlb = true, nhl = true } = (req.body ?? {}) as { nba?: boolean; mlb?: boolean; nhl?: boolean };
+  res.json({ status: "started", sports: { nba, mlb, nhl } });
+  try {
+    const { backfillHistoricalStats } = await import("../lib/sync/historical-stats");
+    const result = await backfillHistoricalStats({ nba, mlb, nhl });
+    logger.info(result, "Historical backfill complete");
+  } catch (e) {
+    logger.error({ err: e }, "Historical backfill failed");
+  }
+});
+
 router.post("/sync/calibration", async (req, res) => {
   const limit = Number((req.body as { limit?: number } | undefined)?.limit ?? 5000);
   res.json({ status: "started", limit });
