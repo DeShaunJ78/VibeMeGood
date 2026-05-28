@@ -167,7 +167,11 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
     db.select({ n: count() }).from(propScoresTable).where(eq(propScoresTable.actionTag, "PLAY")),
     db.select({ oldest: min(lineMoveEventsTable.capturedAt) }).from(lineMoveEventsTable),
     db.select({ n: count() }).from(ourProjectionsTable).where(isNotNull(ourProjectionsTable.p99)),
-    db.select({ n: count() }).from(ourProjectionsTable),
+    // Denominator: only projections where data exists to compute p99 (non-prior_only).
+    // prior_only projections intentionally return p99=null (Fix 10) — exclude them
+    // from the denominator so 4% doesn't falsely flag 96% prior-only coverage as RED.
+    db.select({ n: count() }).from(ourProjectionsTable)
+      .where(sql`${ourProjectionsTable.sourceLabel} != 'prior_only'`),
   ]);
 
   const scoringTotal    = Number(scoringRows[0]?.total ?? 0);
@@ -289,10 +293,12 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
     },
     {
       name: "p99 Ceiling Coverage",
-      status: (p99Coverage >= 80 ? "green" : p99Coverage >= 40 ? "amber" : "red") as "green" | "amber" | "red",
+      // Threshold accounts for prior_only exclusion: denominator is non-prior_only projections only.
+      // 80%+ = green (well covered), 20%+ = amber (building up), <20% = red (needs attention).
+      status: (p99Coverage >= 80 ? "green" : p99Coverage >= 20 ? "amber" : "red") as "green" | "amber" | "red",
       detail: p99Coverage === 0
         ? "No p99 values — run projections"
-        : `${p99Coverage}% of projections have p99 ceiling`,
+        : `${p99Coverage}% of non-prior-only projections have p99 ceiling`,
       lastUpdated: null,
       fixAction: p99Coverage < 40 ? "projections" : null,
     },

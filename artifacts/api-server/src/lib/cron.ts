@@ -86,8 +86,11 @@ export function startCronJobs() {
   cron.schedule("0 11 * * *", fpProjectionsJob);
   cron.schedule("0 14 * * *", fpProjectionsJob);
 
-  // Variance scores at 6:30 AM (after projections)
+  // Variance scores at 6:30 AM and 6:30 PM (after projections)
   cron.schedule("30 6 * * *", () =>
+    logPull("internal", "variance-scores", computeAllVarianceScores)
+  );
+  cron.schedule("30 18 * * *", () =>
     logPull("internal", "variance-scores", computeAllVarianceScores)
   );
 

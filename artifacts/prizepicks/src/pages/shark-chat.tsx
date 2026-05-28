@@ -156,6 +156,7 @@ export default function SharkChat() {
           rows={2}
           className="resize-none bg-slate-900 border-slate-700 focus:border-primary font-mono text-sm min-h-[56px] max-h-40"
           disabled={isLoading}
+          autoFocus
         />
         <Button
           onClick={handleSend}

@@ -3,7 +3,7 @@ import {
   externalLinesTable, ppLinesTable, playersTable, propScoresTable,
   lineMoveEventsTable, ourProjectionsTable,
 } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, notInArray } from "drizzle-orm";
 import { logger } from "../logger";
 import { twoWayHold, noVigProbs } from "../analytics/odds-math";
 import { computeAllProjections } from "../projection/compute";
@@ -195,6 +195,18 @@ export async function recalcPropScores(): Promise<void> {
     .from(ppLinesTable)
     .innerJoin(playersTable, eq(ppLinesTable.playerId, playersTable.id))
     .where(eq(ppLinesTable.isActive, true));
+
+  // Remove stale prop_scores for lines that are no longer active.
+  // Without this, deactivated lines keep their old action tags (e.g. PLAY)
+  // indefinitely because the scoring loop only processes isActive=true lines.
+  const activeIds = lines.map(r => r.line.id);
+  if (activeIds.length > 0) {
+    await db.delete(propScoresTable)
+      .where(notInArray(propScoresTable.ppLineId, activeIds));
+  } else {
+    // No active lines — wipe everything
+    await db.delete(propScoresTable);
+  }
 
   for (const { line, player } of lines) {
     try {

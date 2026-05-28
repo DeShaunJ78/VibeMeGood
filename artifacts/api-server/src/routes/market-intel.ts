@@ -7,7 +7,7 @@ import {
   varianceScoresTable, platformLinesTable, playerGameLogsTable,
   probabilityCalibrationTable,
 } from "@workspace/db/schema";
-import { eq, and, or, isNull, desc, gte, asc, inArray, sql } from "drizzle-orm";
+import { eq, and, or, isNull, isNotNull, desc, gte, asc, inArray, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { consensusFairProb, edgePct, holdWarning } from "../lib/analytics/odds-math";
 import { detectSharpMoney } from "../lib/propedge/sharp-detector";
@@ -143,7 +143,10 @@ router.get("/market-intel", async (req, res) => {
       db
         .select()
         .from(syncRunsTable)
-        .where(eq(syncRunsTable.jobName, "external-odds"))
+        .where(and(
+          eq(syncRunsTable.jobName, "external-odds"),
+          isNotNull(syncRunsTable.finishedAt),
+        ))
         .orderBy(desc(syncRunsTable.finishedAt))
         .limit(1)
         .then(r => r[0]),

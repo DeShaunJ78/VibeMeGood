@@ -890,12 +890,18 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                     <ScoreBar label="Market Support" value={Number(data.propScore.marketSupportScore)} colorClass="bg-indigo-500" />
                     <ScoreBar label="Risk Score" value={Number(data.propScore.riskScore)} colorClass="bg-rose-500" />
                   </div>
-                  {data.propScore.reasoning && (
-                    <div className="mt-3 text-xs text-muted-foreground font-mono bg-slate-900 border border-slate-800 p-3 rounded space-y-1">
-                      {Object.values(data.propScore.reasoning as Record<string, string>).map((note, i) => (
-                        <div key={i} className="text-slate-400">• {note}</div>
-                      ))}
-                    </div>
+                  {data.propScore.reasoning && typeof data.propScore.reasoning === "object" && (
+                    (() => {
+                      const summary = (data.propScore.reasoning as Record<string, unknown>).reasonSummary;
+                      if (typeof summary === "string") {
+                        return (
+                          <div className="mt-3 text-xs font-mono bg-slate-900 border border-slate-800 p-3 rounded">
+                            <div className="text-slate-400">• {summary}</div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()
                   )}
                 </div>
               )}

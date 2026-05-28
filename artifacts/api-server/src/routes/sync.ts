@@ -106,6 +106,10 @@ router.post("/sync/fatigue", async (req, res) => {
   await runSync("internal", "fatigue", syncFatigueData, res);
 });
 
+router.post("/sync/variance", async (req, res) => {
+  await runSync("internal", "variance", computeAllVarianceScores, res);
+});
+
 // Admin: sync NFL advanced metrics (snap counts + player stats) from nflverse
 router.post("/admin/sync/nfl-advanced", async (req, res) => {
   const [log] = await db.insert(dataPullLogsTable).values({
