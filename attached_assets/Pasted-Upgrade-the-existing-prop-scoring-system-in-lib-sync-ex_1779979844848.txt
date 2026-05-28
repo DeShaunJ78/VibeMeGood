@@ -1,0 +1,104 @@
+Upgrade the existing prop scoring system
+in lib/sync/external-odds.ts
+
+Find the recalcPropScores() function.
+This is where actionTag and finalScore
+are computed for each prop.
+
+UPGRADE the scoring formula to this:
+
+// Gate 1 — Edge Score (uses pOver + market gap)
+const edgeScore = Math.min(100, 
+  Math.max(0, (pOver !== null ? (pOver - 50) * 2 : 0)) * 0.6 +
+  Math.max(0, (marketEdge / Math.max(ppLine, 0.1)) * 150) * 0.4
+);
+
+// Gate 2 — Stability Score (uses data quality)
+const confidenceBonus = 
+  confidence === 'high' ? 20 :
+  confidence === 'medium' ? 10 : 0;
+const stabilityScore = Math.min(100, 
+  (dataQualityScore ?? 50) + confidenceBonus
+);
+
+// Gate 3 — Market Support Score (already exists)
+// Keep existing marketSupportScore calculation unchanged
+
+// Gate 4 — Risk Score
+const isGTD = noPlayReason === 'game_time_decision';
+const stdDevNum = proj?.stdDev 
+  ? parseFloat(proj.stdDev.toString()) : 6;
+const volatilityRisk = Math.min(100, stdDevNum * 8);
+const riskScore = Math.round(
+  (isGTD ? 50 : 0) + (volatilityRisk * 0.50)
+);
+
+// Final composite score
+const overallScore = Math.round(
+  (edgeScore * 0.40) +
+  (stabilityScore * 0.30) +
+  (marketSupportScore * 0.20) +
+  ((100 - riskScore) * 0.10)
+);
+
+// Updated action tag thresholds
+const hardNoPlay = noPlayReason && 
+  noPlayReason !== "insufficient_data";
+
+let actionTag: string;
+if (hardNoPlay) {
+  actionTag = "NO-PLAY";
+} else if (
+  overallScore >= 75 &&
+  edgeScore >= 60 &&
+  riskScore <= 45
+) {
+  actionTag = "PLAY";
+} else if (
+  overallScore >= 55 &&
+  edgeScore >= 40
+) {
+  actionTag = "WATCH";
+} else if (overallScore < 55 || edgeScore < 20) {
+  actionTag = "PASS";
+} else {
+  actionTag = "WATCH";
+}
+
+// Add to reasoning jsonb:
+reasoning.gateResults = {
+  edge: edgeScore >= 60 ? 'pass' : 'fail',
+  stability: stabilityScore >= 60 ? 'pass' : 'fail',
+  market: marketSupportScore >= 50 ? 'pass' : 'fail',
+  risk: riskScore <= 45 ? 'pass' : 'fail',
+};
+reasoning.reasonSummary = 
+  `E${Math.round(edgeScore)} S${Math.round(stabilityScore)} ` +
+  `M${Math.round(marketSupportScore)} R${riskScore}`;
+
+// Update scorePayload to include new fields:
+edgeScore: edgeScore.toString(),
+stabilityScore: stabilityScore.toString(),
+riskScore: riskScore.toString(),
+finalScore: overallScore.toString(),
+actionTag,
+reasoning,
+
+After implementing run:
+pnpm run typecheck — must pass
+
+Then trigger a manual rescore:
+POST /api/sync/external-odds
+or equivalent that calls recalcPropScores()
+
+Then verify on 5 props:
+SELECT pp_line_id, action_tag, final_score,
+edge_score, stability_score, risk_score,
+reasoning
+FROM prop_scores
+LIMIT 5;
+
+Report:
+- Typecheck: PASS or FAIL
+- Sample of 5 prop scores showing new fields
+- Count of PLAY / WATCH / PASS / NO-PLAY tags

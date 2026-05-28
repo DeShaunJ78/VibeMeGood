@@ -233,62 +233,78 @@ export async function recalcPropScores(): Promise<void> {
       const noPlayReason = proj?.noPlayReason ?? null;
       const pOver = proj?.pOver ? parseFloat(proj.pOver.toString()) : null;
       const dataQualityScore = proj?.dataQualityScore ?? null;
+      const confidence = proj?.confidence ?? null;
       const sourceLabel = proj?.sourceLabel ?? "prior_only";
+      const ppLine = parseFloat(line.lineValue.toString());
 
-      // --- Score computation ---
-      const lineBonus =
-        line.lineType === "goblin" ? 8 :
-        line.lineType === "demon" ? -8 : 0;
+      // --- Gate 1: Edge Score (pOver + market gap) ---
+      const edgeScore = Math.min(100,
+        Math.max(0, (pOver !== null ? (pOver - 50) * 2 : 0)) * 0.6 +
+        Math.max(0, (marketEdge / Math.max(ppLine, 0.1)) * 150) * 0.4,
+      );
 
-      // Projection confirmation bonus: if our model agrees with market edge, boost confidence
-      let projConfirmBonus = 0;
-      if (pOver !== null && marketEdge !== 0) {
-        if (pOver > 55 && marketEdge > 0) projConfirmBonus = 3;   // model + market both bullish
-        if (pOver < 45 && marketEdge < 0) projConfirmBonus = 3;   // both bearish
-        if (pOver > 55 && marketEdge < 0) projConfirmBonus = -5;  // conflict — reduce confidence
-        if (pOver < 45 && marketEdge > 0) projConfirmBonus = -5;
-      }
+      // --- Gate 2: Stability Score (data quality + confidence bonus) ---
+      const confidenceBonus =
+        confidence === "high"   ? 20 :
+        confidence === "medium" ? 10 : 0;
+      const stabilityScore = Math.min(100, (dataQualityScore ?? 50) + confidenceBonus);
 
-      const finalScore = marketEdge + lineBonus + projConfirmBonus;
+      // marketSupportScore unchanged from above
+
+      // --- Gate 4: Risk Score (GTD flag + volatility from stdDev) ---
+      const isGTD = noPlayReason === "game_time_decision";
+      const stdDevNum = proj?.stdDev ? parseFloat(proj.stdDev.toString()) : 6;
+      const volatilityRisk = Math.min(100, stdDevNum * 8);
+      const riskScore = Math.round((isGTD ? 50 : 0) + (volatilityRisk * 0.50));
+
+      // --- Final composite score ---
+      const overallScore = Math.round(
+        (edgeScore * 0.40) +
+        (stabilityScore * 0.30) +
+        (marketSupportScore * 0.20) +
+        ((100 - riskScore) * 0.10),
+      );
 
       // --- Action tag ---
-      // "insufficient_data" alone does not block PLAY — market evidence can still qualify.
-      // Hard gates (injury exclusions, etc.) always force NO-PLAY.
       const hardNoPlay = noPlayReason && noPlayReason !== "insufficient_data";
       let actionTag: string;
       if (hardNoPlay) {
         actionTag = "NO-PLAY";
-      } else if (
-        finalScore >= 2 &&
-        (pOver === null || pOver >= 51) &&
-        (dataQualityScore === null || dataQualityScore >= 25)
-      ) {
+      } else if (overallScore >= 75 && edgeScore >= 60 && riskScore <= 45) {
         actionTag = "PLAY";
-      } else if (noPlayReason === "insufficient_data" && finalScore >= 5) {
-        actionTag = "PLAY";
-      } else if (finalScore <= -3) {
+      } else if (overallScore >= 55 && edgeScore >= 40) {
+        actionTag = "WATCH";
+      } else if (overallScore < 55 || edgeScore < 20) {
         actionTag = "PASS";
       } else {
         actionTag = "WATCH";
       }
 
-      // --- Reasoning blob (stored in jsonb for AI explainability) ---
-      const reasoning = {
+      // --- Reasoning blob ---
+      const reasoning: Record<string, unknown> = {
         marketEdge: Math.round(marketEdge * 10) / 10,
         bookCount,
         marketAvg,
-        ppLine: parseFloat(line.lineValue.toString()),
+        ppLine,
         lineType: line.lineType,
-        lineBonus,
-        projConfirmBonus,
         pOver,
         noPlayReason,
         dataQualityScore,
+        confidence,
         sourceLabel,
         projectedValue: proj?.projectedValue ?? null,
         stdDev: proj?.stdDev ?? null,
         shrinkageFactor: proj?.shrinkageFactor ?? null,
         sport: player.sport,
+        gateResults: {
+          edge:      edgeScore      >= 60 ? "pass" : "fail",
+          stability: stabilityScore >= 60 ? "pass" : "fail",
+          market:    marketSupportScore >= 50 ? "pass" : "fail",
+          risk:      riskScore      <= 45 ? "pass" : "fail",
+        },
+        reasonSummary:
+          `E${Math.round(edgeScore)} S${Math.round(stabilityScore)} ` +
+          `M${Math.round(marketSupportScore)} R${riskScore}`,
       };
 
       const scorePayload = {
@@ -296,10 +312,10 @@ export async function recalcPropScores(): Promise<void> {
         playerId: line.playerId,
         statType: line.statType,
         marketSupportScore: marketSupportScore.toString(),
-        edgeScore: marketEdge.toString(),
-        stabilityScore: dataQualityScore ? dataQualityScore.toString() : "50",
-        riskScore: line.lineType === "demon" ? "70" : "30",
-        finalScore: finalScore.toString(),
+        edgeScore: edgeScore.toString(),
+        stabilityScore: stabilityScore.toString(),
+        riskScore: riskScore.toString(),
+        finalScore: overallScore.toString(),
         actionTag,
         reasoning,
         scoredAt: new Date(),
