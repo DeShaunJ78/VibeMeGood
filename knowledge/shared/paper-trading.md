@@ -26,3 +26,18 @@ The assistant operates in Paper Trade Mode at all times.
 It will help you analyze, construct, and evaluate entries.
 It will not tell you "bet $100 on this tonight."
 That is a feature, not a limitation.
+
+## Gate Status During Paper Trading
+During paper trading most features show
+conservative signals because data is thin.
+This is correct behavior:
+- 50 PLAY props = not enough game logs yet
+- LOW SAMPLE badges everywhere = correct
+- Charts locked = not enough game logs
+- Presets locked = not enough entries
+As you log results nightly these gates
+open automatically. The model improves
+with every settled entry.
+Do not try to shortcut the gates.
+They protect you from acting on
+unvalidated signals.

@@ -1,0 +1,241 @@
+Update the Shark Chat knowledge base.
+All files are in knowledge/vibemegood/
+and knowledge/shared/
+
+UPDATE knowledge/vibemegood/metrics.md
+Replace the Edge Score and Action Tags
+sections with this:
+
+## 4-Gate Scoring System
+Every prop is scored across 4 gates:
+
+Gate 1 — Edge Score (40% weight)
+Combines your model's P(Over) with market
+gap vs external books.
+Above 60 = meaningful edge.
+Below 20 = no edge worth considering.
+
+Gate 2 — Stability Score (30% weight)
+Based on data quality score and confidence
+label from projection engine.
+High confidence (+20 bonus): 20+ games used,
+strong model fit.
+Medium confidence (+10 bonus): 8-20 games.
+Low: fewer than 8 games.
+
+Gate 3 — Market Support Score (20% weight)
+How much external sharp books agree with
+the PrizePicks line placement.
+Above 50 = books confirm the edge.
+Below 50 = books disagree.
+
+Gate 4 — Risk Score (10% weight, inverted)
+Combines GTD injury flag and volatility
+(standard deviation of player outcomes).
+Lower is better.
+Above 45 = high risk, penalizes overall score.
+
+Overall Score = 
+(Edge × 0.40) + (Stability × 0.30) +
+(Market × 0.20) + ((100-Risk) × 0.10)
+
+## Action Tags
+- PLAY: Overall ≥ 75 AND Edge ≥ 60 AND
+  Risk ≤ 45. All three gates pass.
+  Only ~50 props qualify on a full slate.
+  That is correct — conservative is right.
+- WATCH: Overall ≥ 55 AND Edge ≥ 40.
+  Worth monitoring. Not strong enough alone.
+- PASS: Overall < 55 or Edge < 20.
+  No meaningful edge. Skip it.
+- NO-PLAY: Hard gate. Player is OUT,
+  GTD, or data quality too low to project.
+  Never include in an entry.
+
+## Reading the Reason Summary
+Every prop shows: E{score} S{score} M{score} R{score}
+Example: E72 S85 M60 R24
+Edge 72, Stability 85, Market 60, Risk 24.
+All gates passing = PLAY candidate.
+
+## Confidence Badges
+LOW badge (amber): fewer than 5 game logs.
+Projection is based on prior data only.
+Treat with extra caution.
+MED label: 5-20 game logs. Growing sample.
+No badge: 20+ games. Full confidence.
+
+## LOW SAMPLE Badge
+Appears on True Edge when fewer than 30
+calibration records exist for this
+sport and stat type.
+Means: edge score calculated but not yet
+validated against real outcomes.
+Disappears as you log and settle entries.
+
+## Stale Odds Warning
+When external odds data is over 4 hours old:
+True Edge column hides completely.
+Amber banner appears: sync before acting.
+Click Sync Odds button to refresh.
+
+## p99 Ceiling
+Each pick in Entry Builder shows:
+"ceiling 99th: X.X"
+This is mean + 2.33 standard deviations.
+The monster game scenario — 1% chance of
+this outcome or better.
+Use for GPP/upside entries. Ignore for
+conservative picks.
+
+## Convergence Signal
+Only shows when 5+ game logs exist.
+Green: model projection and historical
+hit rate point same direction.
+Amber warning: they disagree by 8%+.
+Disagreement = investigate before playing.
+
+UPDATE knowledge/vibemegood/entry-construction.md
+Add these sections at the end:
+
+## Bankroll Exposure Check
+Before logging an entry the app checks
+your daily loss limit from Settings.
+Green: below 50% of daily limit used.
+Amber: 50-80% used. Slow down.
+Red: above 80%. Consider waiting.
+Set your daily loss limit in Settings
+to enable this feature.
+
+## CLV on Settled Picks
+When you mark a pick as hit or miss
+the app automatically pulls the closing
+PrizePicks line from history.
+CLV = closing line minus your entry line.
+Positive CLV (green ✅): line moved your
+direction after you locked. You beat
+the market.
+Negative CLV (red ❌): line moved against
+you. Market disagreed with your read.
+Track CLV in Journal to measure whether
+your process is finding real edge or
+getting lucky.
+
+## Expandable Row Charts
+Click the expand chevron on any prop row
+to see three charts:
+1. Recent Form: last 10 games vs tonight
+   line. Green = exceeded, red = missed.
+2. Hit Rate: historical % over this line.
+3. Distribution: normal curve showing
+   where the line falls vs your projection.
+Charts unlock when 5+ game logs exist.
+
+## Pre-Lock Refresh
+In the 2 hours before any game locks
+VibeMeGood automatically syncs PP lines
+every minute instead of every 10 minutes.
+Amber banner shows: "⚡ Pre-lock refresh
+active — syncing every minute"
+This catches late line moves that create
+or destroy edge near lock time.
+
+## Preset Filters
+Four preset filter configurations:
+Safe: Stable variance, P(Over) ≥ 58%,
+PLAY tag only.
+Upside: P(Over) ≥ 62%, any action tag.
+Late-News: Props with recent injury updates.
+My Style: Your custom saved filters.
+Unlocks after 30 paper trades logged.
+Until then: build your own filter intuition.
+
+UPDATE knowledge/shared/paper-trading.md
+Add at the end:
+
+## Gate Status During Paper Trading
+During paper trading most features show
+conservative signals because data is thin.
+This is correct behavior:
+- 50 PLAY props = not enough game logs yet
+- LOW SAMPLE badges everywhere = correct
+- Charts locked = not enough game logs
+- Presets locked = not enough entries
+As you log results nightly these gates
+open automatically. The model improves
+with every settled entry.
+Do not try to shortcut the gates.
+They protect you from acting on
+unvalidated signals.
+
+ADD new file: knowledge/vibemegood/scoring.md
+
+# How VibeMeGood Scores Props
+
+## The Projection Pipeline
+1. PrizePicks sync pulls live lines every
+   10 minutes (every minute near lock time)
+2. Projection engine computes P(Over) using:
+   - Weighted recent game logs (last 20 games,
+     exponential decay — recent games count more)
+   - Bayesian shrinkage toward population prior
+     when sample is small
+   - Opponent adjustment from matchup history
+   - Injury check (OUT = NO-PLAY immediately)
+   - Line type adjustment (goblin/demon/standard)
+3. External odds sync pulls sportsbook lines
+   and computes no-vig probability
+4. Prop scoring runs 4-Gate formula
+5. Market Intel API serves everything to
+   Slate Board in one response
+
+## MLB Park Factors
+MLB batting projections are adjusted for
+home ballpark:
+Coors Field (COL): +18% — extreme hitter park
+Great American Ball Park (CIN): +12%
+Fenway Park (BOS): +8%
+Oracle Park (SF): -10%
+Petco Park (SD): -12%
+This means a hitter playing in Colorado
+gets an 18% boost to their projected stat.
+A hitter playing in San Diego gets 12% cut.
+Only applies to batting stats
+(hits, home runs, total bases, RBIs, runs).
+Not applied to pitching stats.
+
+## Data Quality Score (DQ)
+Every projection has a DQ score 0-100.
+Starts at 100 and deductions applied:
+-20: fewer than 6 game logs
+-10: partial sample vs full confidence minimum
+-10: no opponent matchup history
+-30: GTD injury status
+-60: OUT injury status
+Below 25 DQ = NO-PLAY forced regardless
+of edge score.
+
+## Why Only 50-ish PLAY Props?
+On a 15,000 prop slate only ~50 earn PLAY.
+This is intentional and correct.
+The three simultaneous gates are strict:
+Overall ≥ 75 AND Edge ≥ 60 AND Risk ≤ 45.
+Most props fail on stability because game
+log data is still building.
+As your game log database grows over the
+season, PLAY count will grow organically.
+Never lower the thresholds to get more PLAYs.
+The selectivity is the edge.
+
+After all file updates:
+Restart the API server so Shark Chat
+loads the new knowledge.
+
+Test by asking Shark Chat:
+"What is the 4-Gate scoring system?"
+"Why are there only 50 PLAY props?"
+"What does LOW SAMPLE mean?"
+"What is p99 ceiling?"
+
+Report that all 4 questions return
+accurate answers.

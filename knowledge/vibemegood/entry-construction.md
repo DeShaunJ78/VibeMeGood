@@ -39,3 +39,55 @@ When detected: shows standard EV vs adjusted EV side-by-side with a yellow warni
 6. Set Power/Flex and stake in Entry Builder
 7. Review Pick'em Math panel
 8. Click "Log Entry" to record it
+
+## Bankroll Exposure Check
+Before logging an entry the app checks
+your daily loss limit from Settings.
+Green: below 50% of daily limit used.
+Amber: 50-80% used. Slow down.
+Red: above 80%. Consider waiting.
+Set your daily loss limit in Settings
+to enable this feature.
+
+## CLV on Settled Picks
+When you mark a pick as hit or miss
+the app automatically pulls the closing
+PrizePicks line from history.
+CLV = closing line minus your entry line.
+Positive CLV (green ✅): line moved your
+direction after you locked. You beat
+the market.
+Negative CLV (red ❌): line moved against
+you. Market disagreed with your read.
+Track CLV in Journal to measure whether
+your process is finding real edge or
+getting lucky.
+
+## Expandable Row Charts
+Click the expand chevron on any prop row
+to see three charts:
+1. Recent Form: last 10 games vs tonight
+   line. Green = exceeded, red = missed.
+2. Hit Rate: historical % over this line.
+3. Distribution: normal curve showing
+   where the line falls vs your projection.
+Charts unlock when 5+ game logs exist.
+
+## Pre-Lock Refresh
+In the 2 hours before any game locks
+VibeMeGood automatically syncs PP lines
+every minute instead of every 10 minutes.
+Amber banner shows: "⚡ Pre-lock refresh
+active — syncing every minute"
+This catches late line moves that create
+or destroy edge near lock time.
+
+## Preset Filters
+Four preset filter configurations:
+Safe: Stable variance, P(Over) ≥ 58%,
+PLAY tag only.
+Upside: P(Over) ≥ 62%, any action tag.
+Late-News: Props with recent injury updates.
+My Style: Your custom saved filters.
+Unlocks after 30 paper trades logged.
+Until then: build your own filter intuition.
