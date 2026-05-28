@@ -200,8 +200,12 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
                 {pick.lineType}
               </Badge>
             )}
+            {/* Fix 8: gap shown with tooltip noting data quality is unknown at time of entry */}
             {pick.projectionGap != null && (
-              <span className={`text-[10px] font-mono shrink-0 ${Number(pick.projectionGap) > 0 ? "text-emerald-500/70" : "text-rose-500/70"}`}>
+              <span
+                className={`text-[10px] font-mono shrink-0 ${Number(pick.projectionGap) > 0 ? "text-emerald-500/70" : "text-rose-500/70"}`}
+                title="Gap at time of entry — data quality unknown"
+              >
                 {Number(pick.projectionGap) > 0 ? "+" : ""}{Number(pick.projectionGap).toFixed(1)} edge
               </span>
             )}

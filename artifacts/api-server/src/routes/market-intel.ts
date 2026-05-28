@@ -476,7 +476,9 @@ router.get("/market-intel", async (req, res) => {
           if (isOver === firstIsOver) streakCount++;
           else break;
         }
-        if (streakCount >= 2) {
+        // Fix 7: minimum 3 consecutive games to show a streak badge.
+        // A 2-game streak is noise and should not be surfaced.
+        if (streakCount >= 3) {
           streakData = { count: streakCount, type: firstIsOver ? "over" : "under" };
         }
       }
@@ -505,7 +507,14 @@ router.get("/market-intel", async (req, res) => {
         edgeScore: marketDataStatus !== "not_synced" && row.score
           ? parseFloat(row.score.finalScore?.toString() || "0")
           : null,
-        actionTag: row.score?.actionTag ?? null,
+        // Fix 11: downgrade PLAY → WATCH when calibrationCount < 30.
+        // A PLAY tag requires both model confidence AND calibration validation.
+        actionTag: (() => {
+          const tag = row.score?.actionTag ?? null;
+          const calibCount = calibMap.get(`${row.player.sport.toLowerCase()}:${row.line.statType.toLowerCase()}`) ?? 0;
+          if (tag === "PLAY" && calibCount < 30) return "WATCH";
+          return tag;
+        })(),
 
         ourProjection: (effectiveProj || fallback) ? {
           value: effectiveProj

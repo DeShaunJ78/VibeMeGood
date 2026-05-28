@@ -215,9 +215,13 @@ export async function recalcPropScores(): Promise<void> {
         if (vals.length >= 1) {
           bookCount = vals.length;
           marketAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
-          const ppLine = parseFloat(line.lineValue.toString());
-          marketEdge = (-(ppLine - marketAvg) / marketAvg) * 100;
-          marketSupportScore = Math.max(0, Math.min(100, 50 + marketEdge * 3));
+          // Fix 9: require ≥ 2 books before letting market data influence the score.
+          // A single book could be stale or an outlier — keep marketSupportScore neutral (50).
+          if (bookCount >= 2) {
+            const ppLine = parseFloat(line.lineValue.toString());
+            marketEdge = (-(ppLine - marketAvg) / marketAvg) * 100;
+            marketSupportScore = Math.max(0, Math.min(100, 50 + marketEdge * 3));
+          }
         }
       }
 
@@ -266,7 +270,9 @@ export async function recalcPropScores(): Promise<void> {
       );
 
       // --- Action tag ---
-      const hardNoPlay = noPlayReason && noPlayReason !== "insufficient_data";
+      // Fix 1: insufficient_data (prior-only, 0 game logs) is now a hard NO-PLAY.
+      // Prior-only projections must never receive PLAY or WATCH tags.
+      const hardNoPlay = noPlayReason != null;
       let actionTag: string;
       if (hardNoPlay) {
         actionTag = "NO-PLAY";

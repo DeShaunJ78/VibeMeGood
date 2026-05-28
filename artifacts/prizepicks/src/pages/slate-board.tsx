@@ -808,8 +808,16 @@ export default function SlateBoard() {
     const ceilingHunter  = varianceEnabled && modes.ceilingHunterMode;
     const excludeVolatile = varianceEnabled && modes.excludeHighVolatility;
 
+    // Fix 2: exclude prior-only / insufficient-data props from optimizer recommendations.
+    // Requires noPlayReason to be unset AND at least 5 game logs.
     let candidates = playerRows.filter(
-      r => r.lineType === "goblin" && r.ourProjection?.pOver != null && r.ourProjection.pOver > 50,
+      r =>
+        r.lineType === "goblin" &&
+        r.ourProjection?.pOver != null &&
+        r.ourProjection.pOver > 50 &&
+        r.ourProjection?.noPlayReason == null &&
+        r.ourProjection?.gamesUsed != null &&
+        r.ourProjection.gamesUsed >= 5,
     );
 
     if (stableGrind) {
@@ -1279,12 +1287,21 @@ export default function SlateBoard() {
                           <ProjectionCell proj={proj} ppLine={row.lineValue} />
                         </TableCell>
 
-                        {/* P(over) */}
+                        {/* P(over) — Fix 5: suppress badge for prior-only / insufficient data props */}
                         <TableCell className="text-center">
-                          <POverBadge
-                            pOver={proj?.pOver}
-                            noPlayReason={proj?.noPlayReason}
-                          />
+                          {proj?.sourceLabel === "prior_only" || !proj?.gamesUsed || proj.gamesUsed < 5 ? (
+                            <span
+                              className="text-slate-600 font-mono text-xs"
+                              title="Insufficient game log data — projection based on prior only"
+                            >
+                              —
+                            </span>
+                          ) : (
+                            <POverBadge
+                              pOver={proj?.pOver}
+                              noPlayReason={proj?.noPlayReason}
+                            />
+                          )}
                         </TableCell>
 
                         {/* Streak */}

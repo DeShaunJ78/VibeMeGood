@@ -125,7 +125,7 @@ type VarianceData = {
   whyItMoves: string | null;
 };
 
-function WhyThisEdgePanel({ variance, gamePace }: { variance: VarianceData; gamePace?: GamePaceData | null }) {
+function WhyThisEdgePanel({ variance, gamePace, gamesUsed }: { variance: VarianceData; gamePace?: GamePaceData | null; gamesUsed?: number | null }) {
   const SIGNAL_LABELS: Record<string, { label: string; emoji: string; getColor: (v: number) => string }> = {
     fatigue: {
       label: "Fatigue",
@@ -164,6 +164,13 @@ function WhyThisEdgePanel({ variance, gamePace }: { variance: VarianceData; game
         <Shield className="w-3 h-3" /> Why This Edge Exists
         <VarianceBadge rating={variance.volatilityRating} size="xs" className="ml-auto" />
       </div>
+      {/* Fix 6: amber warning when variance signals are based on limited game data */}
+      {gamesUsed != null && gamesUsed < 10 && (
+        <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-400 bg-amber-950/30 border border-amber-800/40 px-2 py-1.5 rounded mb-3">
+          <AlertTriangle className="w-3 h-3 shrink-0" />
+          <span>Variance signals based on limited data ({gamesUsed} game{gamesUsed !== 1 ? "s" : ""}). Treat as directional only.</span>
+        </div>
+      )}
 
       {variance.whyItMoves && (
         <p className="text-xs text-slate-300 mb-3 leading-relaxed">{variance.whyItMoves}</p>
@@ -536,13 +543,20 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                   <div className="grid grid-cols-3 gap-2 mb-3">
                     <div className="col-span-2 bg-slate-900 border border-slate-800 p-3 rounded-lg text-center">
                       <div className="text-[10px] font-mono text-muted-foreground mb-0.5">P(OVER LINE)</div>
-                      <div className={`text-3xl font-bold font-mono ${pOverColor(pOver)}`}>
-                        {pOver != null ? `${pOver.toFixed(1)}%` : "—"}
-                      </div>
-                      {op.percentileAtLine != null && (
-                        <div className="text-[9px] font-mono text-muted-foreground mt-1">
-                          line at {op.percentileAtLine.toFixed(0)}th pct
-                        </div>
+                      {/* Fix 3: suppress colored pOver when prior-only — show grey placeholder instead */}
+                      {op.sourceLabel === "prior_only" || !op.gamesUsed || op.gamesUsed === 0 ? (
+                        <div className="text-sm font-mono text-slate-500 mt-1">— Not enough games logged</div>
+                      ) : (
+                        <>
+                          <div className={`text-3xl font-bold font-mono ${pOverColor(pOver)}`}>
+                            {pOver != null ? `${pOver.toFixed(1)}%` : "—"}
+                          </div>
+                          {op.percentileAtLine != null && (
+                            <div className="text-[9px] font-mono text-muted-foreground mt-1">
+                              line at {op.percentileAtLine.toFixed(0)}th pct
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                     <div className="bg-slate-900 border border-slate-800 p-3 rounded-lg text-center">
@@ -659,13 +673,16 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                               : []),
                           ] as { label: string; w: HitRateWindow }[]
                         ).map(({ label, w }) => {
+                          // Fix 4: require ≥ 5 games per window before showing colored bar/%.
+                          // Fewer than 5 is noise — 1/1 = "100%" is visually misleading.
+                          const hasSignal = w.total >= 5;
                           const rateColor =
-                            w.total === 0      ? "text-slate-500" :
+                            !hasSignal         ? "text-slate-500" :
                             w.rate >= 60       ? "text-emerald-400" :
                             w.rate >= 52       ? "text-amber-400"   :
                                                  "text-rose-400";
                           const barColor =
-                            w.total === 0      ? "bg-slate-700" :
+                            !hasSignal         ? "bg-slate-700" :
                             w.rate >= 60       ? "bg-emerald-500" :
                             w.rate >= 52       ? "bg-amber-500"   :
                                                  "bg-rose-500";
@@ -673,7 +690,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                             <div key={label} className="flex items-center gap-2">
                               <span className="text-[10px] font-mono text-slate-400 w-24 shrink-0">{label}</span>
                               <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                                {w.total > 0 && (
+                                {hasSignal && (
                                   <div
                                     className={`h-full rounded-full ${barColor}`}
                                     style={{ width: `${Math.max(2, w.rate)}%` }}
@@ -681,10 +698,14 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                                 )}
                               </div>
                               <span className={`text-sm font-mono font-bold w-12 text-right shrink-0 ${rateColor}`}>
-                                {w.total === 0 ? "—" : `${w.rate.toFixed(0)}%`}
+                                {!hasSignal ? "—" : `${w.rate.toFixed(0)}%`}
                               </span>
-                              <span className="text-[9px] font-mono text-slate-500 w-14 text-right shrink-0">
-                                {w.total === 0 ? "no data" : `${w.hits}/${w.total} over`}
+                              <span className="text-[9px] font-mono text-slate-500 w-20 text-right shrink-0">
+                                {w.total === 0
+                                  ? "no data"
+                                  : !hasSignal
+                                  ? `only ${w.total}g — need 5+`
+                                  : `${w.hits}/${w.total} over`}
                               </span>
                             </div>
                           );
@@ -1005,7 +1026,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
 
               {/* Variance Intelligence — Why This Edge Exists */}
               {userSettings?.varianceIntelEnabled && variance && (
-                <WhyThisEdgePanel variance={variance} gamePace={gamePace} />
+                <WhyThisEdgePanel variance={variance} gamePace={gamePace} gamesUsed={op?.gamesUsed} />
               )}
 
               {/* AI Explain */}

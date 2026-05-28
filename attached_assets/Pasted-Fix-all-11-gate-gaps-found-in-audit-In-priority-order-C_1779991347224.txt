@@ -1,0 +1,154 @@
+Fix all 11 gate gaps found in audit.
+In priority order.
+
+CRITICAL FIX 1 — Prior-only props getting
+PLAY/WATCH tags in external-odds.ts
+
+Find this line:
+const hardNoPlay = noPlayReason &&
+  noPlayReason !== "insufficient_data";
+
+Replace with:
+const hardNoPlay = noPlayReason != null;
+
+This means insufficient_data is now a
+hard NO-PLAY. Prior-only projections
+cannot receive PLAY or WATCH tags ever.
+
+CRITICAL FIX 2 — Optimizer recommending
+prior-only props in slate-board.tsx
+
+Find the runOptimizer function where
+candidates are filtered.
+Add to the filter:
+- r.ourProjection?.noPlayReason == null
+- r.ourProjection?.gamesUsed != null &&
+  r.ourProjection.gamesUsed >= 5
+
+No player with noPlayReason set or
+fewer than 5 game logs can appear in
+optimizer recommendations.
+
+HIGH FIX 3 — P(Over) big number in
+prop-detail-sheet.tsx shows prior-only
+
+When op.sourceLabel === "prior_only"
+OR op.gamesUsed === 0 OR op.gamesUsed == null:
+Replace the large colored P(Over) number
+with a grey "Insufficient data" text.
+Do not show a colored percentage.
+Show instead: "— Not enough games logged"
+
+HIGH FIX 4 — Hit rate windows with
+minimum sample gate in prop-detail-sheet.tsx
+
+For each window (last10, last30, season,
+vsOpponent):
+Only render the colored bar and percentage
+when window.total >= 5.
+When total < 5 show grey text:
+"Only {total} game(s) — need 5+ for signal"
+Do not show the colored bar or percentage.
+
+HIGH FIX 5 — POverBadge in slate-board.tsx
+shows prior-only pOver as real signal
+
+When row.ourProjection?.sourceLabel ===
+"prior_only" OR gamesUsed < 5:
+Do not render POverBadge.
+Show a grey dash instead.
+Or show a grey "—" with tooltip:
+"Insufficient game log data"
+
+MEDIUM FIX 6 — WhyThisEdgePanel variance
+scores in prop-detail-sheet.tsx
+
+Add a data depth disclaimer to the panel:
+When variance scores exist but
+gamesUsed < 10:
+Show amber banner above the panel:
+"⚠️ Variance signals based on limited
+data ({gamesUsed} games). Treat as
+directional only."
+
+When gamesUsed >= 10: show panel normally.
+
+MEDIUM FIX 7 — Streak badge shows 2-game
+streak identically to 10-game streak
+in market-intel.ts
+
+When streak count < 3:
+Do not return the streak signal at all.
+Minimum 3 consecutive games to show
+a streak badge.
+
+MEDIUM FIX 8 — projectionGap in journal.tsx
+shows gap with no data context
+
+When pick.projectionGap is not null but
+pick came from a prior-only projection
+(check sourceLabel or gamesUsed if stored):
+Add grey "(prior)" label next to the gap.
+If sourceLabel not stored at pick time:
+Add a small grey tooltip on the gap value:
+"Gap at time of entry — data quality unknown"
+
+MEDIUM FIX 9 — marketSupportScore with
+single book in external-odds.ts
+
+Change minimum book count from 1 to 2
+before computing marketSupportScore.
+
+When bookCount < 2:
+marketSupportScore = 50 (neutral)
+marketEdge = 0
+Do not let a single book drive 40% of
+the composite action tag.
+
+MEDIUM FIX 10 — p99 ceiling shows when
+prior-only in compute.ts
+
+When sourceLabel === "prior_only":
+Do not compute or save p99.
+Set p99 = null.
+A prior-only ceiling is meaningless.
+
+MEDIUM FIX 11 — Calibration LOW SAMPLE
+badge is display-only but PLAY tag still
+shows in main table.
+
+When calibrationCount < 30 AND
+actionTag === "PLAY":
+Change actionTag to "WATCH" in the
+prop_scores record.
+PLAY requires both model confidence AND
+calibration validation.
+A prop cannot be PLAY when there are
+fewer than 30 calibration records for
+that sport/stat type.
+
+After all 11 fixes:
+Run pnpm run typecheck — must pass
+Run pnpm run build — must pass
+
+Verify these specific scenarios:
+1. A player with 0 game logs shows:
+   - No POverBadge (grey dash)
+   - No PLAY or WATCH tag (NO-PLAY)
+   - No P(Over) percentage in detail sheet
+   - Not recommended by optimizer
+   - No p99 ceiling
+
+2. A player with 3 game logs shows:
+   - LOW confidence badge
+   - WATCH at best (not PLAY)
+   - Hit rate windows say "need 5+ games"
+   - Variance panel shows amber warning
+
+3. A player with 20 game logs and
+   calibrationCount < 30 shows:
+   - WATCH at best (not PLAY)
+   - LOW SAMPLE badge on True Edge
+
+Report PASS or FAIL for each of the
+11 fixes with specific confirmation.

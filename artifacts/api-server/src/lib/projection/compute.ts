@@ -16,7 +16,7 @@ import { logger } from "../logger";
 export interface ProjectionOutput {
   mean: number;
   stdDev: number;
-  p99: number;              // mean + 2.33σ — 99th percentile ceiling
+  p99: number | null;       // mean + 2.33σ — 99th percentile ceiling (null when prior_only)
   pOver: number;            // 0–100
   percentileAtLine: number; // 0–100, where line sits in distribution
   dataQualityScore: number; // 0–100 gate score
@@ -194,7 +194,8 @@ export async function computeProjection(
   const pOver = pOverLine(mean, effectiveStd, ppLine);
   const pctAtLine = percentileAtLine(mean, effectiveStd, ppLine);
   const volPct = volatilityPct(effectiveStd, ppLine);
-  const p99 = Math.round((mean + 2.33 * effectiveStd) * 100) / 100;
+  // Fix 10: p99 ceiling is meaningless for prior-only projections (no real game data).
+  const p99 = sourceLabel === "prior_only" ? null : Math.round((mean + 2.33 * effectiveStd) * 100) / 100;
 
   // --- 8. Confidence label ---
   const finalDQ = Math.max(0, Math.min(100, dataQualityScore));
@@ -329,7 +330,7 @@ export async function computeAllProjections(): Promise<number> {
           : "low",
         modelVersion: "v2",
         stdDev: result.stdDev.toString(),
-        p99: result.p99.toString(),
+        p99: result.p99 != null ? result.p99.toString() : null,
         pOver: result.pOver.toString(),
         percentileAtLine: result.percentileAtLine.toString(),
         dataQualityScore: result.dataQualityScore,
