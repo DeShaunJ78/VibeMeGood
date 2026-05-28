@@ -197,6 +197,35 @@ router.post("/sync/game-schedule", async (req, res) => {
   await runSync("espn", "game-schedule", syncGameSchedule, res);
 });
 
+router.post("/sync/game-schedule-history", async (req, res) => {
+  const { fromDate: fromStr, toDate: toStr } =
+    (req.body ?? {}) as { fromDate?: string; toDate?: string };
+
+  if (!fromStr || !toStr) {
+    res.status(400).json({ error: "fromDate and toDate required (YYYY-MM-DD)" });
+    return;
+  }
+  const fromDate = new Date(`${fromStr}T12:00:00Z`);
+  const toDate   = new Date(`${toStr}T12:00:00Z`);
+  if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+    res.status(400).json({ error: "Invalid date — use YYYY-MM-DD" });
+    return;
+  }
+
+  res.json({ status: "started", fromDate: fromStr, toDate: toStr });
+
+  try {
+    const total = await syncGameSchedule({ fromDate, toDate });
+    logger.info({ total, fromDate: fromStr, toDate: toStr },
+      "Historical game schedule sync complete");
+    broadcastSyncStatus("game-schedule-history", "success", `${total} games processed`);
+  } catch (e) {
+    logger.error({ err: e }, "Historical game schedule sync failed");
+    broadcastSyncStatus("game-schedule-history", "error",
+      e instanceof Error ? e.message : "Unknown error");
+  }
+});
+
 router.post("/sync/pp-lines", async (req, res) => {
   await runSync("prizepicks", "pp-lines", syncPpLines, res);
 });
