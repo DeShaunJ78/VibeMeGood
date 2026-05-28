@@ -2,6 +2,54 @@ import { db } from "@workspace/db";
 import { playerGameLogsTable, playersTable } from "@workspace/db/schema";
 import { logger } from "../logger";
 import { normalizeName } from "../projections/name-match";
+// CSV helpers (mirrors nfl-advanced.ts — kept local to avoid cross-module coupling)
+async function downloadCSVRaw(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": "PropEdge/1.0 nflverse-ingest" },
+    redirect: "follow",
+  });
+  if (!res.ok) throw new Error(`CSV download failed: ${res.status} ${url}`);
+  return res.text();
+}
+
+function parseCSVLine(line: string): string[] {
+  const fields: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+      else { inQuotes = !inQuotes; }
+    } else if (ch === "," && !inQuotes) {
+      fields.push(cur.trim()); cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  fields.push(cur.trim());
+  return fields;
+}
+
+function parseCSV(text: string): Array<Record<string, string>> {
+  const lines = text.trim().split("\n");
+  if (lines.length < 2) return [];
+  const headers = parseCSVLine(lines[0]);
+  const result: Array<Record<string, string>> = [];
+  for (let li = 1; li < lines.length; li++) {
+    const values = parseCSVLine(lines[li]);
+    const row: Record<string, string> = {};
+    headers.forEach((h, i) => { row[h] = values[i] ?? ""; });
+    result.push(row);
+  }
+  return result;
+}
+
+function csvNum(v: string | undefined): number {
+  if (!v || v === "NA" || v === "NaN" || v === "" || v === "Inf" || v === "-Inf") return 0;
+  const n = parseFloat(v);
+  return isNaN(n) || !isFinite(n) ? 0 : n;
+}
 
 const FETCH_HEADERS = {
   "User-Agent": "VibeMeGood/1.0 Historical Stats",
@@ -438,6 +486,120 @@ async function backfillNHL(
   return grandTotal;
 }
 
+// ─── NFL via nflverse GitHub CSV releases ─────────────────────────────────────
+//
+// One row per player per week in player_stats_{season}.csv.
+// Columns used: player_display_name, season, week, season_type,
+//   passing_yards, passing_tds, rushing_yards, rushing_tds,
+//   receptions, receiving_yards, receiving_tds, fantasy_points.
+// game_date is constructed as Thursday of week 1 + (week-1)*7 days.
+
+// NFL season week-1 Thursday dates (first game of each season)
+const NFL_SEASON_STARTS: Record<number, string> = {
+  2024: "2024-09-05",
+  2025: "2025-09-04",
+};
+
+function nflWeekToDate(season: number, week: number): string {
+  const base = NFL_SEASON_STARTS[season] ?? `${season}-09-04`;
+  const d = new Date(base);
+  d.setUTCDate(d.getUTCDate() + (week - 1) * 7);
+  return d.toISOString().slice(0, 10);
+}
+
+const NFL_STATS_URL = (season: number) =>
+  `https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_${season}.csv`;
+
+async function backfillNFL(
+  allDbPlayers: typeof playersTable.$inferSelect[],
+  seasons: number[],
+): Promise<number> {
+  const nflDbPlayers = allDbPlayers.filter(p => p.sport === "NFL");
+  if (nflDbPlayers.length === 0) return 0;
+
+  // Normalised name → DB player id
+  const nameToId = new Map<string, number>();
+  for (const p of nflDbPlayers) nameToId.set(normalizeName(p.fullName), p.id);
+
+  // Helper: resolve CSV display name → DB player id
+  function resolveNfl(displayName: string): number | null {
+    const norm = normalizeName(displayName);
+    const exact = nameToId.get(norm);
+    if (exact) return exact;
+    // Last-name + first-initial fallback
+    const parts = norm.split(" ");
+    const last = parts[parts.length - 1];
+    const init = parts[0]?.[0];
+    for (const [n, id] of nameToId) {
+      const np = n.split(" ");
+      if (np[np.length - 1] === last && np[0]?.[0] === init) return id;
+    }
+    return null;
+  }
+
+  let grandTotal = 0;
+
+  for (const season of seasons) {
+    try {
+      let rows: Array<Record<string, string>>;
+      try {
+        const text = await downloadCSVRaw(NFL_STATS_URL(season));
+        rows = parseCSV(text);
+      } catch (e) {
+        logger.warn({ season, err: e }, "NFL CSV not available — skipping season");
+        continue;
+      }
+
+      // Filter to regular season only
+      const regRows = rows.filter(r => r.season_type === "REG");
+      logger.info({ season, rows: regRows.length }, "NFL: CSV rows loaded");
+
+      const source = `nfl_csv_${season}`;
+      let count = 0;
+
+      for (const row of regRows) {
+        const dbId = resolveNfl(row.player_display_name ?? "");
+        if (!dbId) continue;
+
+        const week = parseInt(row.week ?? "0");
+        if (!week) continue;
+        const gameDate = nflWeekToDate(season, week);
+
+        const rushYds  = csvNum(row.rushing_yards);
+        const recYds   = csvNum(row.receiving_yards);
+        const passYds  = csvNum(row.passing_yards);
+        const recs     = csvNum(row.receptions);
+        const rushTds  = csvNum(row.rushing_tds);
+        const recTds   = csvNum(row.receiving_tds);
+        const passTds  = csvNum(row.passing_tds);
+
+        const logs: [string, number][] = [
+          ["Rush Yards",      rushYds],
+          ["Receiving Yards", recYds],
+          ["Pass Yards",      passYds],
+          ["Receptions",      recs],
+          ["Rush TDs",        rushTds],
+          ["Rec TDs",         recTds],
+          ["Pass TDs",        passTds],
+        ];
+
+        for (const [statType, value] of logs) {
+          await upsertLog(dbId, gameDate, statType, value, source);
+          count++;
+        }
+      }
+
+      grandTotal += count;
+      logger.info({ season, count }, "NFL season backfill complete");
+    } catch (e) {
+      logger.warn({ season, err: e }, "NFL season backfill failed");
+    }
+  }
+
+  logger.info({ grandTotal }, "NFL historical backfill complete");
+  return grandTotal;
+}
+
 // ─── Levenshtein (local copy — avoids import cycle) ──────────────────────────
 function lev(a: string, b: string): number {
   const m = a.length, n = b.length;
@@ -453,10 +615,12 @@ function lev(a: string, b: string): number {
 // ─── Main export ─────────────────────────────────────────────────────────────
 
 export async function backfillHistoricalStats(
-  options: { nba?: boolean; mlb?: boolean; nhl?: boolean } = { nba: true, mlb: true, nhl: true },
-): Promise<{ nba: number; mlb: number; nhl: number; total: number }> {
+  options: { nba?: boolean; mlb?: boolean; nhl?: boolean; nfl?: boolean } = {
+    nba: true, mlb: true, nhl: true, nfl: true,
+  },
+): Promise<{ nba: number; mlb: number; nhl: number; nfl: number; total: number }> {
   const allPlayers = await db.select().from(playersTable);
-  const results = { nba: 0, mlb: 0, nhl: 0, total: 0 };
+  const results = { nba: 0, mlb: 0, nhl: 0, nfl: 0, total: 0 };
 
   if (options.nba !== false) {
     // season param = ending year of season: 2025 = 2024-25, 2024 = 2023-24
@@ -471,7 +635,11 @@ export async function backfillHistoricalStats(
     results.nhl = await backfillNHL(allPlayers, ["20232024", "20242025"]);
   }
 
-  results.total = results.nba + results.mlb + results.nhl;
+  if (options.nfl !== false) {
+    results.nfl = await backfillNFL(allPlayers, [2024, 2025]);
+  }
+
+  results.total = results.nba + results.mlb + results.nhl + results.nfl;
   logger.info(results, "Historical stats backfill complete");
   return results;
 }
