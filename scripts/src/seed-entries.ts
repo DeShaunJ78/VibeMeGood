@@ -153,7 +153,7 @@ async function seedEntries() {
   const inserted = await db.insert(entriesTable).values(entryRows).returning();
   console.log(`Inserted ${inserted.length} entries`);
 
-  const allPicks: InsertEntryPick[] = [];
+  const allPicks: typeof entryPicksTable.$inferInsert[] = [];
   for (let i = 0; i < ENTRIES.length; i++) {
     const def = ENTRIES[i];
     const entry = inserted[i];
