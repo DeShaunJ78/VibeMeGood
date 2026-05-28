@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import {
   useGetSlate, getGetSlateQueryKey,
   useAddToWatchlist, useRemoveFromWatchlist,
@@ -16,7 +16,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge } from "@/components/ui/badges";
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
 import { TeamPicksBoard } from "@/components/team-picks-board";
-import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight, Filter } from "lucide-react";
+import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight, Filter, ChevronDown, ChevronRight } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, ReferenceLine, Cell, ResponsiveContainer, AreaChart, Area } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { useEntry, type EntryPick } from "@/lib/entry-context";
 import { VarianceBadge } from "@/components/ui/variance-badge";
@@ -80,6 +81,7 @@ type MarketIntelRow = {
     whyItMoves: string | null;
   } | null;
   calibrationCount: number;
+  gameLogs: number[];
 };
 
 type MarketIntelPage = {
@@ -374,6 +376,65 @@ function SortTh({
   );
 }
 
+// ─── Quick-filter presets ────────────────────────────────────────────────────
+type Preset = { label: string; icon: string; sport?: string; lineType?: string; minEdge?: string; actionTag?: string; sharpOnly?: boolean };
+const DEFAULT_PRESETS: Preset[] = [
+  { label: "Safe",      icon: "🛡", actionTag: "PLAY" },
+  { label: "Upside",    icon: "🚀", minEdge: "62" },
+  { label: "Late-News", icon: "📰", sharpOnly: true },
+  { label: "My Style",  icon: "⭐" },
+];
+const PRESET_LS_KEY = "vmg_filter_presets";
+
+// ─── Inline chart helpers for expandable rows ────────────────────────────────
+function normalPdf(x: number, mu: number, sigma: number) {
+  return (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * ((x - mu) / sigma) ** 2);
+}
+
+function MiniGameChart({ values, ppLine }: { values: number[]; ppLine: number }) {
+  if (!values.length) return <span className="text-slate-600 text-xs font-mono">no data</span>;
+  const data = [...values].reverse().map((v, i) => ({ g: i + 1, v, over: v > ppLine }));
+  const hitRate = Math.round(data.filter(d => d.over).length / data.length * 100);
+  return (
+    <div className="flex flex-col gap-1 min-w-0">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-mono text-slate-500 uppercase">Recent form (L{data.length})</span>
+        <span className={`text-[10px] font-mono font-bold ${hitRate >= 55 ? "text-emerald-400" : hitRate >= 45 ? "text-amber-400" : "text-rose-400"}`}>{hitRate}% over</span>
+      </div>
+      <ResponsiveContainer width="100%" height={64}>
+        <BarChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+          <XAxis dataKey="g" tick={false} axisLine={false} />
+          <YAxis domain={["auto", "auto"]} tick={false} axisLine={false} width={0} />
+          <ReferenceLine y={ppLine} stroke="#64748b" strokeDasharray="3 3" strokeWidth={1} />
+          <Bar dataKey="v" radius={[2, 2, 0, 0]} isAnimationActive={false}>
+            {data.map((e, i) => <Cell key={i} fill={e.over ? "#34d399" : "#f87171"} />)}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function DistributionChart({ mean, stdDev, ppLine }: { mean: number; stdDev: number; ppLine: number }) {
+  const lo = mean - 3.2 * stdDev;
+  const hi = mean + 3.2 * stdDev;
+  const step = (hi - lo) / 50;
+  const data = Array.from({ length: 51 }, (_, i) => ({ x: Math.round((lo + i * step) * 10) / 10, pdf: normalPdf(lo + i * step, mean, stdDev) }));
+  return (
+    <div className="flex flex-col gap-1 min-w-0">
+      <span className="text-[10px] font-mono text-slate-500 uppercase">Distribution</span>
+      <ResponsiveContainer width="100%" height={64}>
+        <AreaChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+          <XAxis dataKey="x" tick={false} axisLine={false} />
+          <YAxis hide />
+          <ReferenceLine x={ppLine} stroke="#22d3ee" strokeDasharray="3 3" strokeWidth={1.5} />
+          <Area type="monotone" dataKey="pdf" stroke="#7c3aed" fill="#7c3aed" fillOpacity={0.25} dot={false} isAnimationActive={false} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export default function SlateBoard() {
   const { data: userSettings } = useUserSettings();
   const varianceEnabled = userSettings?.varianceIntelEnabled ?? false;
@@ -384,8 +445,11 @@ export default function SlateBoard() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedPropId, setSelectedPropId] = useState<number | null>(null);
   const [optimizerOpen, setOptimizerOpen] = useState(false);
+  const [actionTagFilter, setActionTagFilter] = useState<string>("all");
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [activePreset, setActivePreset] = useState<string | null>(null);
 
-  const activeFilterCount = [sport !== "all" && sport, lineTypeFilter !== "all" && lineTypeFilter, minEdge].filter(Boolean).length;
+  const activeFilterCount = [sport !== "all" && sport, lineTypeFilter !== "all" && lineTypeFilter, minEdge, actionTagFilter !== "all" && actionTagFilter].filter(Boolean).length;
   const [optPickCount, setOptPickCount] = useState(4);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -399,6 +463,16 @@ export default function SlateBoard() {
     lastOddsSync === null ||
     Date.now() - new Date(lastOddsSync).getTime() > 4 * 60 * 60 * 1000
   );
+
+  const { data: preLockStatus } = useQuery<{ preLockActive: boolean }>({
+    queryKey: ["pre-lock-status"],
+    queryFn: async () => {
+      const b = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+      const r = await fetch(`${b}/api/system-health/pre-lock`);
+      return r.json() as Promise<{ preLockActive: boolean }>;
+    },
+    refetchInterval: 60_000,
+  });
 
   function toggleSort(col: string) {
     if (sortCol === col) {
@@ -438,6 +512,7 @@ export default function SlateBoard() {
   const miParams: Record<string, string | undefined> = {
     sport: sport !== "all" ? sport : undefined,
     lineType: lineTypeFilter !== "all" ? lineTypeFilter : undefined,
+    actionTag: actionTagFilter !== "all" ? actionTagFilter : undefined,
   };
 
   // Pagination state for market-intel
@@ -814,6 +889,49 @@ export default function SlateBoard() {
               <ForceSyncButton />
             </div>
 
+            {/* Quick-filter preset toolbar */}
+            <div className="hidden md:flex items-center gap-1.5 flex-wrap py-0.5">
+              <span className="text-[10px] font-mono text-slate-600 uppercase tracking-wider">Quick:</span>
+              {DEFAULT_PRESETS.map(p => {
+                const isActive = activePreset === p.label;
+                const getSaved = () => { try { return (JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>)[p.label] ?? null; } catch { return null; } };
+                return (
+                  <button
+                    key={p.label}
+                    onClick={() => {
+                      if (isActive) { setSport("all"); setLineTypeFilter("all"); setMinEdge(""); setActionTagFilter("all"); setSharpOnly(false); setActivePreset(null); return; }
+                      const cfg = getSaved() ?? p;
+                      if (cfg.sport !== undefined) setSport(cfg.sport); else setSport("all");
+                      if (cfg.lineType !== undefined) setLineTypeFilter(cfg.lineType); else setLineTypeFilter("all");
+                      if (cfg.minEdge !== undefined) setMinEdge(cfg.minEdge); else setMinEdge("");
+                      if (cfg.actionTag !== undefined) setActionTagFilter(cfg.actionTag); else setActionTagFilter("all");
+                      if (cfg.sharpOnly !== undefined) setSharpOnly(cfg.sharpOnly); else setSharpOnly(false);
+                      setActivePreset(p.label);
+                    }}
+                    className={`px-2 py-0.5 rounded font-mono text-[10px] border transition-colors ${isActive ? "bg-primary/20 text-primary border-primary/30" : "border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500"}`}
+                  >
+                    {p.icon} {p.label}
+                  </button>
+                );
+              })}
+              {activePreset === "My Style" && (
+                <button
+                  onClick={() => { try { const saved = JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>; saved["My Style"] = { sport, lineType: lineTypeFilter, minEdge, actionTag: actionTagFilter, sharpOnly }; localStorage.setItem(PRESET_LS_KEY, JSON.stringify(saved)); } catch {} }}
+                  className="text-[10px] font-mono text-amber-400 hover:text-amber-300 px-1"
+                >
+                  💾 save
+                </button>
+              )}
+              {activePreset && (
+                <button
+                  onClick={() => { setSport("all"); setLineTypeFilter("all"); setMinEdge(""); setActionTagFilter("all"); setSharpOnly(false); setActivePreset(null); }}
+                  className="text-[10px] font-mono text-slate-500 hover:text-rose-400 px-1"
+                >
+                  ✕ clear
+                </button>
+              )}
+            </div>
+
             {/* Desktop: full filter row */}
             <div className="hidden md:flex items-center gap-2">
               {watchCount > 0 && (
@@ -844,7 +962,7 @@ export default function SlateBoard() {
                   <SelectItem value="WNBA">WNBA</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={lineTypeFilter} onValueChange={setLineTypeFilter}>
+              <Select value={lineTypeFilter} onValueChange={v => { setLineTypeFilter(v); setActivePreset(null); }}>
                 <SelectTrigger className="w-28 bg-slate-900 border-slate-800 font-mono text-sm">
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
@@ -853,6 +971,17 @@ export default function SlateBoard() {
                   <SelectItem value="goblin">Goblin</SelectItem>
                   <SelectItem value="demon">Demon</SelectItem>
                   <SelectItem value="standard">Standard</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={actionTagFilter} onValueChange={v => { setActionTagFilter(v); setActivePreset(null); }}>
+                <SelectTrigger className="w-24 bg-slate-900 border-slate-800 font-mono text-sm">
+                  <SelectValue placeholder="Tag" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Tags</SelectItem>
+                  <SelectItem value="PLAY">PLAY</SelectItem>
+                  <SelectItem value="WATCH">WATCH</SelectItem>
+                  <SelectItem value="PASS">PASS</SelectItem>
                 </SelectContent>
               </Select>
               <Input
@@ -890,6 +1019,14 @@ export default function SlateBoard() {
           </>
         )}
       </div>
+
+      {/* Pre-lock window banner */}
+      {preLockStatus?.preLockActive && (
+        <div className="flex items-center gap-3 text-amber-300 bg-amber-950/20 border border-amber-500/30 rounded px-3 py-2 text-xs font-mono">
+          <AlertCircle className="w-4 h-4 shrink-0 animate-pulse" />
+          <span><span className="font-bold">Pre-Lock Window</span> — games start within 2 h. Lines are syncing every minute.</span>
+        </div>
+      )}
 
       {/* Stale odds banner (FS2) */}
       {oddsStale && (
@@ -973,9 +1110,11 @@ export default function SlateBoard() {
                     const isNoPlay = row.actionTag === "NO-PLAY";
                     const proj: OurProjection | null = row.ourProjection ?? null;
 
+                    const isExpanded = expandedRow === row.ppLineId;
+
                     return (
+                      <React.Fragment key={row.ppLineId}>
                       <TableRow
-                        key={row.ppLineId}
                         className={`border-slate-800 cursor-pointer transition-colors ${
                           isNoPlay ? "opacity-50 hover:opacity-70" :
                           row.isWatched ? "bg-amber-950/10 hover:bg-amber-950/20" :
@@ -984,7 +1123,15 @@ export default function SlateBoard() {
                         onClick={() => setSelectedPropId(row.ppLineId)}
                       >
                         <TableCell onClick={e => e.stopPropagation()} className="pr-0">
-                          <WatchToggle row={row} slateParams={slateParams} />
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              onClick={e => { e.stopPropagation(); setExpandedRow(v => v === row.ppLineId ? null : row.ppLineId); }}
+                              className="text-slate-700 hover:text-slate-300 transition-colors p-0.5 rounded shrink-0"
+                            >
+                              {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                            </button>
+                            <WatchToggle row={row} slateParams={slateParams} />
+                          </div>
                         </TableCell>
                         <TableCell className="font-mono text-xs text-primary">{row.sport}</TableCell>
                         <TableCell className="font-bold">
@@ -1260,6 +1407,38 @@ export default function SlateBoard() {
                           </TableCell>
                         )}
                       </TableRow>
+                      {isExpanded && (
+                        <TableRow className="border-slate-800 bg-slate-950/80">
+                          <TableCell colSpan={100} className="p-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                              <MiniGameChart values={row.gameLogs ?? []} ppLine={row.lineValue} />
+                              {proj?.stdDev != null ? (
+                                <DistributionChart mean={proj.value} stdDev={proj.stdDev} ppLine={row.lineValue} />
+                              ) : (
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-[10px] font-mono text-slate-500 uppercase">Distribution</span>
+                                  <span className="text-xs font-mono text-slate-600">No std dev data</span>
+                                </div>
+                              )}
+                              <div className="flex flex-col gap-2">
+                                <span className="text-[10px] font-mono text-slate-500 uppercase">Model Stats</span>
+                                {proj ? (
+                                  <div className="space-y-1 font-mono text-xs">
+                                    <div className="flex justify-between gap-4"><span className="text-slate-500">Projection</span><span className="text-cyan-400">{proj.value.toFixed(1)}</span></div>
+                                    <div className="flex justify-between gap-4"><span className="text-slate-500">P(Over)</span><span className={proj.pOver != null && proj.pOver >= 55 ? "text-emerald-400" : "text-slate-300"}>{proj.pOver != null ? `${proj.pOver.toFixed(1)}%` : "—"}</span></div>
+                                    <div className="flex justify-between gap-4"><span className="text-slate-500">Std Dev</span><span className="text-slate-300">{proj.stdDev != null ? proj.stdDev.toFixed(2) : "—"}</span></div>
+                                    <div className="flex justify-between gap-4"><span className="text-slate-500">DQ Score</span><span className="text-slate-300">{proj.dataQualityScore != null ? `${proj.dataQualityScore}/100` : "—"}</span></div>
+                                    <div className="flex justify-between gap-4"><span className="text-slate-500">Games</span><span className="text-slate-300">{proj.gamesUsed ?? "—"}</span></div>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs font-mono text-slate-600">No projection data</span>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      </React.Fragment>
                     );
                   })
                 )}

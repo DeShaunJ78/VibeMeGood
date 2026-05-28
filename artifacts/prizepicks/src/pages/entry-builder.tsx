@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useCreateEntry } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -156,6 +157,16 @@ export default function EntryBuilder() {
       .then(data => setPendingCount(Array.isArray(data) ? data.length : 0))
       .catch(() => {});
   }, []);
+
+  const { data: todaySummary } = useQuery<{ todayStake: number; entryCount: number }>({
+    queryKey: ["today-summary"],
+    queryFn: async () => {
+      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+      const r = await fetch(`${base}/api/entries/today-summary`);
+      return r.json() as Promise<{ todayStake: number; entryCount: number }>;
+    },
+    refetchInterval: 30_000,
+  });
 
   const runSimulation = useCallback(async (currentPicks: typeof picks, runs: number, mult: number, style: string) => {
     if (currentPicks.length < 2) { setSimResult(null); return; }
@@ -882,6 +893,27 @@ export default function EntryBuilder() {
           </Card>
         </div>
       </div>
+
+      {/* Bankroll exposure indicator */}
+      {stakeNum > 0 && picks.length >= 2 && (() => {
+        const totalExposure = (todaySummary?.todayStake ?? 0) + stakeNum;
+        const isHigh = totalExposure > 200;
+        return (
+          <div className={`p-3 rounded-lg border flex items-center justify-between gap-3 text-xs font-mono shrink-0 ${
+            isHigh ? "bg-rose-950/30 border-rose-700/40 text-rose-300" : "bg-slate-900 border-slate-800 text-slate-400"
+          }`}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <ShieldAlert className={`w-3.5 h-3.5 shrink-0 ${isHigh ? "text-rose-400" : "text-slate-500"}`} />
+              <span>Today's total exposure:</span>
+              <span className={`font-bold ${isHigh ? "text-rose-300" : "text-foreground"}`}>${totalExposure.toFixed(2)}</span>
+              <span className="text-slate-500">
+                ({todaySummary?.entryCount ?? 0} prior entr{todaySummary?.entryCount === 1 ? "y" : "ies"} + this ${stakeNum.toFixed(2)})
+              </span>
+            </div>
+            {isHigh && <span className="font-bold text-rose-400 uppercase tracking-wide shrink-0">High Exposure</span>}
+          </div>
+        );
+      })()}
 
       {pendingCount > 0 && (
         <div className="p-3 bg-amber-950/30 border border-amber-700/40 rounded-lg flex items-center justify-between gap-3">

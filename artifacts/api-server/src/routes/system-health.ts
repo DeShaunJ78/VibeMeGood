@@ -9,6 +9,7 @@ import {
 import { desc, count, isNotNull, eq, sql, and, max, min, gte } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { simulateEntry } from "../lib/simulation/entry-simulator";
+import { isPreLockActive } from "../lib/cron";
 
 const router = Router();
 
@@ -456,6 +457,10 @@ async function checkFeatureStatus(): Promise<CheckResult[]> {
     simCheck,
   ];
 }
+
+router.get("/system-health/pre-lock", (_req, res) => {
+  res.json({ preLockActive: isPreLockActive() });
+});
 
 router.get("/system-health", async (req, res) => {
   const startTime = Date.now();

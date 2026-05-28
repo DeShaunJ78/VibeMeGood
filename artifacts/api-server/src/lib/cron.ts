@@ -1,10 +1,10 @@
 import cron from "node-cron";
 import { db } from "@workspace/db";
 import {
-  dataPullLogsTable, alertsTable, ppLinesTable,
+  dataPullLogsTable, alertsTable, ppLinesTable, gamesTable,
   lineMoveEventsTable, externalLinesTable, propScoresTable, syncRunsTable,
 } from "@workspace/db/schema";
-import { eq, and, lt } from "drizzle-orm";
+import { eq, and, lt, gte, lte } from "drizzle-orm";
 import { logger } from "./logger";
 import { syncPpLines } from "./sync/prizepicks";
 import { syncExternalOdds, recalcPropScores } from "./sync/external-odds";
@@ -15,6 +15,9 @@ import { syncFatigueData } from "./sync/fatigue";
 import { syncInjuries } from "./sync/injuries";
 import { syncProjections } from "./projections/sync";
 import { syncNflAdvancedMetrics } from "./sync/nfl-advanced";
+
+export let preLockActive = false;
+export function isPreLockActive(): boolean { return preLockActive; }
 
 async function logPull(provider: string, jobName: string, fn: () => Promise<number>) {
   const [log] = await db.insert(dataPullLogsTable).values({
@@ -117,6 +120,32 @@ export function startCronJobs() {
       }
     } catch (err) {
       logger.error({ err }, "Stale data check failed");
+    }
+  });
+
+  // Pre-lock scraper — runs every minute, triggers urgent sync when games start within 2 h
+  cron.schedule("* * * * *", async () => {
+    try {
+      const now = new Date();
+      const twoHoursOut = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      const upcoming = await db
+        .selectDistinct({ gameId: ppLinesTable.gameId })
+        .from(ppLinesTable)
+        .innerJoin(gamesTable, eq(gamesTable.id, ppLinesTable.gameId as never))
+        .where(and(
+          eq(ppLinesTable.isActive, true),
+          gte(gamesTable.startTime, now),
+          lte(gamesTable.startTime, twoHoursOut),
+        ))
+        .limit(1);
+      const wasActive = preLockActive;
+      preLockActive = upcoming.length > 0;
+      if (preLockActive && !wasActive) {
+        logger.info("Pre-lock window detected — triggering urgent PP line sync");
+        await syncPpLines();
+      }
+    } catch (err) {
+      logger.error({ err }, "Pre-lock scraper error");
     }
   });
 

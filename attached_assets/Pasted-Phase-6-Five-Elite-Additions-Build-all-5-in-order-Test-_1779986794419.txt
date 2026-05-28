@@ -1,0 +1,151 @@
+Phase 6 — Five Elite Additions.
+Build all 5 in order. Test each before
+moving to the next.
+
+ITEM 1 — Aggressive Pre-Lock Scraper
+In artifacts/api-server/src/lib/cron.ts
+
+Add a job that runs every minute:
+cron.schedule("* * * * *", async () => {
+  const now = new Date();
+  const twoHoursOut = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  
+  const upcomingLocks = await db
+    .select({ id: ppLinesTable.id })
+    .from(ppLinesTable)
+    .where(and(
+      eq(ppLinesTable.isActive, true),
+      gte(ppLinesTable.lockTime, now),
+      lte(ppLinesTable.lockTime, twoHoursOut)
+    ))
+    .limit(1);
+  
+  if (upcomingLocks.length > 0) {
+    preLockActive = true;
+    await syncPpLines();
+    broadcastSyncStatus("pp-lines-prelock", "success");
+  } else {
+    preLockActive = false;
+  }
+});
+
+Declare at module level:
+export let preLockActive = false;
+
+Add preLockActive to system-health response.
+Add to slate-board.tsx:
+When preLockActive is true show amber banner:
+"⚡ Pre-lock refresh active — syncing every minute"
+
+ITEM 2 — Preset Filter Saves
+In artifacts/prizepicks/src/pages/slate-board.tsx
+
+Add preset toolbar above the filter row.
+Save to localStorage key: vmg_filter_presets
+
+Four default presets:
+Safe:      { volatility: "stable", minPOver: 58, actionTag: "PLAY" }
+Upside:    { minPOver: 62 }
+Late-News: { injuryUpdatedWithin: 120 }
+My Style:  {} (empty, user fills in)
+
+Show preset buttons above filters.
+Active preset name highlighted.
+Clear button returns to manual filters.
+When user changes filters manually
+deselect the active preset.
+
+ITEM 3 — Expandable Row Charts
+In slate-board.tsx expandable rows
+add three small Recharts charts.
+Recharts is already installed.
+
+Data comes from gameLogsByKey already
+in the market-intel response.
+
+Chart 1 — Recent Form (BarChart)
+x: game index 1-10 most recent right
+y: stat value
+Red reference line at tonight PP line value
+Green bars = exceeded line, red = missed
+
+Chart 2 — Hit Rate Bar
+Single bar showing historical hit rate
+vs tonight's line as percentage
+Color: green above 60%, amber 50-60%,
+red below 50%
+
+Chart 3 — Distribution curve
+Use proj mean and stdDev already available
+Show normal curve with vertical line
+at PP line position
+Shade the P(Over) region green
+
+Only show charts when game logs exist
+for this player and stat type.
+Show "Not enough data for charts" when
+fewer than 5 game logs.
+
+ITEM 4 — Bankroll Exposure Check
+In artifacts/prizepicks/src/pages/entry-builder.tsx
+
+Before the LOG ENTRY button show a panel:
+
+Query today's total stake:
+GET /api/entries?date=today&summary=true
+
+Show:
+Today's entries: $X staked
+This entry: $Y
+Daily limit: $Z (from user settings)
+
+Color coding:
+Green: below 50% of daily limit
+Amber: 50-80% of daily limit  
+Red: above 80% — show warning
+"Consider waiting — you are near your
+daily limit"
+
+Do not block LOG ENTRY — only warn.
+
+ITEM 5 — MLB Park Factors
+In artifacts/api-server/src/lib/projection/compute.ts
+
+After computing mean and before saving
+add park factor adjustment for MLB batters:
+
+const PARK_FACTORS: Record<string, number> = {
+  COL: 1.18, CIN: 1.12, BOS: 1.08,
+  PHI: 1.06, TEX: 1.05, NYY: 1.03,
+  TOR: 0.97, MIA: 0.95, OAK: 0.94,
+  PIT: 0.93, NYM: 0.92, TB: 0.92,
+  SF: 0.90, SD: 0.88, SEA: 0.88,
+};
+
+Apply only to MLB batting stats:
+const battingStats = [
+  "hits", "home runs", "total bases",
+  "hits+runs+rbis", "rbis", "runs",
+  "doubles", "triples", "stolen bases"
+];
+
+const isBatter = battingStats.some(s =>
+  statType.toLowerCase().includes(s));
+
+if (sport === "MLB" && isBatter && homeTeamAbbr) {
+  const factor = PARK_FACTORS[homeTeamAbbr] ?? 1.0;
+  mean = mean * factor;
+}
+
+Need homeTeamAbbr from game context.
+Query gamesTable for the game associated
+with this pp_line to get home team.
+Then query teamsTable for the abbreviation.
+
+After all 5 items:
+Run pnpm run typecheck — must pass
+Run pnpm run build — must pass
+Publish to production
+
+Report PASS or FAIL for each item
+with specific confirmation for each.

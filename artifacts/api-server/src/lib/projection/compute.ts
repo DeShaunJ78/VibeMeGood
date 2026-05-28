@@ -1,7 +1,7 @@
 import { db } from "@workspace/db";
 import {
   playerGameLogsTable, ourProjectionsTable, ppLinesTable, playersTable,
-  injuriesTable, matchupHistoryTable, gamesTable,
+  injuriesTable, matchupHistoryTable, gamesTable, teamsTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { getSnapPctAdjustment } from "../sync/nfl-advanced";
@@ -262,6 +262,22 @@ export async function computeAllProjections(): Promise<number> {
     : [];
   const gameMap = Object.fromEntries(games.map(g => [g.id, g]));
 
+  // Pre-fetch home team abbreviations for MLB park factor
+  const homeTeamIds = [...new Set(games.map(g => g.homeTeamId))];
+  const homeTeams = homeTeamIds.length
+    ? await db.select({ id: teamsTable.id, abbreviation: teamsTable.abbreviation })
+        .from(teamsTable)
+        .where(inArray(teamsTable.id, homeTeamIds))
+    : [];
+  const teamAbbrMap = new Map(homeTeams.map(t => [t.id, t.abbreviation]));
+
+  const MLB_PARK_FACTORS: Record<string, number> = {
+    COL: 1.18, CIN: 1.12, BOS: 1.08, PHI: 1.06, TEX: 1.05,
+    NYY: 1.03, TOR: 0.97, MIA: 0.95, OAK: 0.94, PIT: 0.93,
+    NYM: 0.92, TB: 0.92, SF: 0.90, SD: 0.88, SEA: 0.88,
+  };
+  const MLB_BATTING_STATS = ["hits", "home runs", "total bases", "rbis", "runs", "doubles", "triples"];
+
   let computed = 0;
 
   for (const { line, player } of activeLines) {
@@ -287,6 +303,19 @@ export async function computeAllProjections(): Promise<number> {
       if (player.sport.toUpperCase() === "NFL") {
         const snapAdj = await getSnapPctAdjustment(player.fullName);
         adjustedMean = Math.round(result.mean * snapAdj * 100) / 100;
+      }
+
+      // Apply MLB park factor for batting stats
+      if (player.sport.toUpperCase() === "MLB" && line.gameId && gameMap[line.gameId]) {
+        const game = gameMap[line.gameId];
+        const homeTeamAbbr = teamAbbrMap.get(game.homeTeamId);
+        if (homeTeamAbbr) {
+          const isBatter = MLB_BATTING_STATS.some(s => line.statType.toLowerCase().includes(s));
+          if (isBatter) {
+            const factor = MLB_PARK_FACTORS[homeTeamAbbr.toUpperCase()] ?? 1.0;
+            adjustedMean = Math.round(adjustedMean * factor * 100) / 100;
+          }
+        }
       }
 
       const payload = {

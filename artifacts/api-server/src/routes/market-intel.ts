@@ -545,6 +545,8 @@ router.get("/market-intel", async (req, res) => {
 
         calibrationCount: calibMap.get(`${row.player.sport.toLowerCase()}:${row.line.statType.toLowerCase()}`) ?? 0,
 
+        gameLogs: gameLogs.slice(0, 10).map(g => g.value),
+
         scoring: scoreReasoning,
 
         variance: varScore ? {

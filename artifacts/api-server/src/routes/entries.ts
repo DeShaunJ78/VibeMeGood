@@ -91,6 +91,21 @@ const PickResultSchema = z.object({
   closingLine: z.number().positive().optional(),
 }).passthrough();
 
+router.get("/entries/today-summary", async (req, res): Promise<void> => {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const rows = await db
+      .select({ stake: entriesTable.stake })
+      .from(entriesTable)
+      .where(eq(entriesTable.entryDate, today));
+    const totalStake = rows.reduce((s, r) => s + Number(r.stake ?? 0), 0);
+    res.json({ todayStake: Math.round(totalStake * 100) / 100, entryCount: rows.length });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/entries/loss-limit-status", async (req, res): Promise<void> => {
   try {
     const userId = (req.query.userId as string) ?? "default";
