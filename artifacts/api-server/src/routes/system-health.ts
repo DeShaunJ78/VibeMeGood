@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import {
   dataPullLogsTable, ppLinesTable, externalLinesTable,
-  ourProjectionsTable, entriesTable, varianceScoresTable,
+  ourProjectionsTable, entriesTable, entryPicksTable, varianceScoresTable,
   probabilityCalibrationTable, playerGameLogsTable, teamPaceRatingsTable,
   lineMoveEventsTable, nflAdvancedMetricsTable,
 } from "@workspace/db/schema";
@@ -119,7 +119,7 @@ async function checkDataFreshness(): Promise<CheckResult[]> {
 
 async function checkDatabaseHealth(): Promise<CheckResult[]> {
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [ppCount, projCount, extCount, entryCount, calCount, gameLogCount, paceCount, paceLatest, sharpCount, nflAdvCount, nflAdvLatest] = await Promise.all([
+  const [ppCount, projCount, extCount, entryCount, calCount, gameLogCount, paceCount, paceLatest, sharpCount, nflAdvCount, nflAdvLatest, clvCoverage] = await Promise.all([
     db.select({ n: count() }).from(ppLinesTable).where(eq(ppLinesTable.isActive, true)),
     db.select({ n: sql<number>`count(distinct player_id)` }).from(ourProjectionsTable),
     db.select({ n: sql<number>`count(distinct pp_line_id)` }).from(externalLinesTable).where(isNotNull(externalLinesTable.noVigOverProb)),
@@ -133,6 +133,10 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
     ),
     db.select({ n: count() }).from(nflAdvancedMetricsTable),
     db.select({ t: max(nflAdvancedMetricsTable.computedAt) }).from(nflAdvancedMetricsTable),
+    db.select({
+      withClv:      sql<number>`count(*) filter (where result != 'pending' and clv is not null)`,
+      totalSettled: sql<number>`count(*) filter (where result != 'pending')`,
+    }).from(entryPicksTable),
   ]);
 
   const pp = Number(ppCount[0]?.n ?? 0);
@@ -144,6 +148,9 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
   const pace = Number(paceCount[0]?.n ?? 0);
   const sharp = Number(sharpCount[0]?.n ?? 0);
   const nflAdv = Number(nflAdvCount[0]?.n ?? 0);
+  const clvWithClv     = Number(clvCoverage[0]?.withClv ?? 0);
+  const clvTotalSettled = Number(clvCoverage[0]?.totalSettled ?? 0);
+  const clvPct = clvTotalSettled > 0 ? clvWithClv / clvTotalSettled : null;
   const paceTs = paceLatest[0]?.t ?? null;
   const nflAdvTs = nflAdvLatest[0]?.t ?? null;
   const paceAgeMins = paceTs ? (Date.now() - paceTs.getTime()) / 60000 : Infinity;
@@ -226,6 +233,15 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
           : `${nflAdv.toLocaleString()} records, synced ${fmtNflAdvAge}`,
       lastUpdated: nflAdvTs ? nflAdvTs.toISOString() : null,
       fixAction: nflAdv === 0 ? "nfl-advanced" : null,
+    },
+    {
+      name: "CLV Settlement Coverage",
+      status: clvPct === null ? "amber" : clvPct >= 0.5 ? "green" : "amber",
+      detail: clvPct === null
+        ? "No settled picks yet — CLV populates as you mark results"
+        : `${clvWithClv}/${clvTotalSettled} settled picks have CLV (${Math.round(clvPct * 100)}%)`,
+      lastUpdated: null,
+      fixAction: null,
     },
   ];
 }

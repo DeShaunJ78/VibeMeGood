@@ -205,9 +205,16 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
                 {Number(pick.projectionGap) > 0 ? "+" : ""}{Number(pick.projectionGap).toFixed(1)} edge
               </span>
             )}
-            {pick.clv != null && (
-              <span className="text-slate-500 shrink-0 ml-1">CLV: {Number(pick.clv) > 0 ? "+" : ""}{Number(pick.clv).toFixed(2)}</span>
-            )}
+            {pick.result !== "pending" && pick.closingLine != null && pick.clv != null && (() => {
+              const clv = Number(pick.clv);
+              const color = clv > 0 ? "text-emerald-400" : clv < 0 ? "text-rose-400" : "text-slate-500";
+              const icon  = clv > 0 ? "✅" : clv < 0 ? "❌" : "➡️";
+              return (
+                <span className={`${color} shrink-0 ml-1 text-[10px] font-mono`}>
+                  CLV: {clv > 0 ? "+" : ""}{clv.toFixed(2)} {icon}
+                </span>
+              );
+            })()}
             <div className="ml-auto flex items-center gap-1 shrink-0">
               {pick.result === "pending" && pick.id ? (
                 <>

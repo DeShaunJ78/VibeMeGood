@@ -3,10 +3,37 @@ import { z } from "zod";
 import { db } from "@workspace/db";
 import {
   entriesTable, entryPicksTable, playersTable, ppLinesTable, clvRecordsTable,
+  ppLineHistoryTable,
   behavioralLogsTable, userSettingsTable, type InsertEntry,
 } from "@workspace/db/schema";
 import { eq, and, gte, lte, inArray, desc, type SQL } from "drizzle-orm";
 import { broadcast } from "../lib/sse";
+
+async function settlePickCLV(pick: {
+  id: number;
+  ppLineId: number | null;
+  lineValue: string;
+}): Promise<void> {
+  if (!pick.ppLineId) return;
+
+  const [closing] = await db
+    .select()
+    .from(ppLineHistoryTable)
+    .where(eq(ppLineHistoryTable.ppLineId, pick.ppLineId))
+    .orderBy(desc(ppLineHistoryTable.capturedAt))
+    .limit(1);
+
+  if (!closing) return;
+
+  const closingLine = Number(closing.lineValue);
+  const entryLine   = Number(pick.lineValue);
+  const clv         = closingLine - entryLine;
+
+  await db
+    .update(entryPicksTable)
+    .set({ closingLine: closingLine.toString(), clv: clv.toString() })
+    .where(eq(entryPicksTable.id, pick.id));
+}
 
 function getTimeOfDay(): string {
   const h = new Date().getHours();
@@ -361,6 +388,9 @@ router.patch("/entries/:entryId/picks/:pickId", async (req, res): Promise<void> 
       res.status(404).json({ error: "Pick not found" });
       return;
     }
+
+    // Settle CLV from line history for all result types (overrides active-line fallback)
+    await settlePickCLV(resultPick);
 
     res.json(resultPick);
   } catch (err) {

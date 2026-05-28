@@ -1,0 +1,87 @@
+Phase 5 — Wire CLV settlement on entry picks.
+
+When a user marks an entry pick as
+hit / miss / dnp / push the system should
+automatically populate the closing line
+and CLV for that pick.
+
+The infrastructure already exists:
+- pp_line_history table has snapshots
+- entry_picks has closingLine and clv columns
+
+STEP 1 — Add CLV computation function
+In artifacts/api-server/src/routes/entries.ts
+add this helper function:
+
+async function settlePickCLV(pick: {
+  id: number;
+  ppLineId: number | null;
+  lineValue: string;
+}): Promise<void> {
+  if (!pick.ppLineId) return;
+  
+  // Get the most recent line history snapshot
+  // (this is the closing line)
+  const [closing] = await db
+    .select()
+    .from(ppLineHistoryTable)
+    .where(eq(ppLineHistoryTable.ppLineId, pick.ppLineId))
+    .orderBy(desc(ppLineHistoryTable.capturedAt))
+    .limit(1);
+  
+  if (!closing) return;
+  
+  const closingLine = Number(closing.lineValue);
+  const entryLine = Number(pick.lineValue);
+  const clv = closingLine - entryLine;
+  // Positive CLV = you got better line than close
+  // Negative CLV = line moved against you
+  
+  await db
+    .update(entryPicksTable)
+    .set({
+      closingLine: closingLine.toString(),
+      clv: clv.toString(),
+    })
+    .where(eq(entryPicksTable.id, pick.id));
+}
+
+STEP 2 — Call it when pick result is set
+Find the PATCH /entries/:id route or wherever
+pick results are updated (hit/miss/dnp/push).
+
+After updating the pick result call:
+await settlePickCLV(pick);
+
+STEP 3 — Show CLV in Journal
+In artifacts/prizepicks/src/pages/journal.tsx
+or wherever entry picks are displayed:
+
+For each settled pick (result !== 'pending')
+show CLV if available:
+
+CLV: +0.5 ✅  (positive = good, green)
+CLV: -1.0 ❌  (negative = bad, red)
+CLV: 0.0 ➡️  (neutral, grey)
+
+Only show CLV when closingLine is populated.
+Do not show for pending picks.
+
+STEP 4 — Add to health check
+In system-health.ts add a check:
+Query count of settled picks with CLV populated
+vs total settled picks.
+If coverage below 50%: amber
+If coverage above 50%: green
+
+After all steps:
+Run pnpm run typecheck — must pass
+Run pnpm run build — must pass
+
+Test:
+1. Log a paper entry with 2+ picks
+2. Mark one pick as hit
+3. Confirm closingLine and clv populate
+4. Confirm CLV shows in Journal
+
+Report PASS or FAIL for each step.
