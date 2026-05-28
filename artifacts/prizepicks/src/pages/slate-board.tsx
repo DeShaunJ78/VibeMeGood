@@ -26,6 +26,7 @@ import { PlayerAvatar } from "@/components/ui/player-avatar";
 type OurProjection = {
   value: number;
   stdDev: number | null;
+  p99: number | null;
   pOver: number | null;
   percentileAtLine: number | null;
   noPlayReason: string | null;
@@ -78,6 +79,7 @@ type MarketIntelRow = {
     evModifier: unknown;
     whyItMoves: string | null;
   } | null;
+  calibrationCount: number;
 };
 
 type MarketIntelPage = {
@@ -86,6 +88,7 @@ type MarketIntelPage = {
   page: number;
   limit: number;
   hasMore: boolean;
+  lastOddsSync?: string | null;
 };
 
 function useMarketIntel(params: Record<string, string | undefined>, page: number) {
@@ -199,6 +202,38 @@ function ForceSyncButton() {
   );
 }
 
+function SyncOddsButton({ onDone }: { onDone?: () => void }) {
+  const [syncing, setSyncing] = useState(false);
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+
+  async function syncOdds() {
+    setSyncing(true);
+    try {
+      const res = await fetch(`${base}/api/sync/external-odds`, { method: "POST" });
+      if (!res.ok) throw new Error("sync failed");
+      toast({ title: "Odds synced", description: "External odds data refreshed." });
+      await qc.invalidateQueries({ queryKey: ["market-intel"] });
+      onDone?.();
+    } catch {
+      toast({ title: "Sync failed", variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  return (
+    <Button
+      size="sm" variant="outline" onClick={syncOdds} disabled={syncing}
+      className="gap-1.5 font-mono text-xs border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
+    >
+      <RefreshCw className={`w-3 h-3 ${syncing ? "animate-spin" : ""}`} />
+      {syncing ? "Syncing…" : "Sync Odds"}
+    </Button>
+  );
+}
+
 function MarketStatusDot({ status }: { status: MarketIntelRow["marketDataStatus"] }) {
   const cfg: Record<string, { color: string; label: string }> = {
     available:   { color: "bg-emerald-400", label: "Live market data (< 30 min)" },
@@ -224,6 +259,9 @@ function ProjectionCell({ proj, ppLine }: { proj: OurProjection | null; ppLine: 
     proj.stdDev != null ? `σ = ${proj.stdDev}` : null,
   ].filter(Boolean).join(" · ");
 
+  const showLowConf = proj.gamesUsed != null && proj.gamesUsed < 5;
+  const showMed     = proj.gamesUsed != null && proj.gamesUsed >= 5 && proj.gamesUsed < 20;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -233,10 +271,18 @@ function ProjectionCell({ proj, ppLine }: { proj: OurProjection | null; ppLine: 
             <GapIcon className="w-2.5 h-2.5" />
             {gap > 0 ? "+" : ""}{gap.toFixed(1)}
           </span>
+          {showLowConf && (
+            <span className="text-[8px] font-mono text-amber-400 bg-amber-950/40 border border-amber-800/40 rounded px-0.5 leading-tight shrink-0">LOW</span>
+          )}
+          {showMed && (
+            <span className="text-[8px] font-mono text-slate-500 leading-tight">MED</span>
+          )}
         </div>
       </TooltipTrigger>
       <TooltipContent side="top" className="font-mono text-xs max-w-xs">
         <p>{tooltipContent}</p>
+        {showLowConf && <p className="text-amber-400 mt-0.5">LOW CONFIDENCE — only {proj.gamesUsed} game{proj.gamesUsed !== 1 ? "s" : ""} of data</p>}
+        {showMed && <p className="text-slate-400 mt-0.5">MED — {proj.gamesUsed} games used, growing sample</p>}
         {proj.stdDev && <p className="text-slate-400 mt-0.5">±1σ: [{(proj.value - proj.stdDev).toFixed(1)}, {(proj.value + proj.stdDev).toFixed(1)}]</p>}
       </TooltipContent>
     </Tooltip>
@@ -347,6 +393,12 @@ export default function SlateBoard() {
   const [visibleCount, setVisibleCount] = useState(75);
   const [sortCol, setSortCol] = useState<string>("projGap");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [lastOddsSync, setLastOddsSync] = useState<string | null | undefined>(undefined);
+
+  const oddsStale = lastOddsSync !== undefined && (
+    lastOddsSync === null ||
+    Date.now() - new Date(lastOddsSync).getTime() > 4 * 60 * 60 * 1000
+  );
 
   function toggleSort(col: string) {
     if (sortCol === col) {
@@ -413,9 +465,10 @@ export default function SlateBoard() {
 
   const { data: miPageData, isLoading: miLoading } = useMarketIntel(miParams, miPage);
 
-  // Accumulate pages as they load
+  // Accumulate pages as they load; capture lastOddsSync from page 1
   useEffect(() => {
     if (!miPageData) return;
+    if (miPage === 1) setLastOddsSync(miPageData.lastOddsSync ?? null);
     setAllMiRows(prev => miPage === 1 ? miPageData.data : [...prev, ...miPageData.data]);
     setMiTotal(miPageData.total);
     setMiHasMore(miPageData.hasMore);
@@ -452,6 +505,7 @@ export default function SlateBoard() {
       marketHoldPct: mi?.marketHoldPct ?? null,
       holdRating: mi?.holdRating ?? null,
       bookHolds: mi?.bookHolds ?? [],
+      calibrationCount: mi?.calibrationCount ?? 0,
     };
   });
 
@@ -493,6 +547,7 @@ export default function SlateBoard() {
       marketHoldPct: mi.marketHoldPct ?? null,
       holdRating: mi.holdRating ?? null,
       bookHolds: mi.bookHolds ?? [],
+      calibrationCount: mi.calibrationCount,
     }));
 
   const allRows = [...mergedRows, ...miOnlyRows];
@@ -711,6 +766,7 @@ export default function SlateBoard() {
           lineType: r.lineType,
           direction: "more",
           yourProjection: r.ourProjection?.value ?? null,
+          p99: r.ourProjection?.p99 ?? null,
           pOver: r.ourProjection?.pOver ?? null,
           edgeScore: r.edgeScore,
           actionTag: r.actionTag,
@@ -835,6 +891,17 @@ export default function SlateBoard() {
         )}
       </div>
 
+      {/* Stale odds banner (FS2) */}
+      {oddsStale && (
+        <div className="flex items-center justify-between gap-3 text-amber-300 bg-amber-950/20 border border-amber-500/30 rounded px-3 py-2 text-xs font-mono">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            Odds data is stale (last sync: {lastOddsSync ? new Date(lastOddsSync).toLocaleString() : "never"}). True Edge column hidden.
+          </div>
+          <SyncOddsButton />
+        </div>
+      )}
+
       {/* Not synced banner — only when there are also no seeded props to show */}
       {notSynced && !isLoading && playerRows.length === 0 && (
         <div className="flex items-center justify-between gap-3 text-amber-400 bg-amber-950/20 border border-amber-700/30 rounded px-3 py-2 text-sm font-mono">
@@ -863,14 +930,16 @@ export default function SlateBoard() {
                   <SortTh col="ppLine" label="PP Line" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="w-16 text-right" />
                   <TableHead className="w-20 font-mono text-xs text-center">Type</TableHead>
                   <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-right">Mkt Avg</TableHead>
-                  <SortTh col="trueEdge" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-22 text-right">
-                    <Tooltip>
-                      <TooltipTrigger className="cursor-pointer">True Edge{sortCol === "trueEdge" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</TooltipTrigger>
-                      <TooltipContent className="text-xs max-w-xs">
-                        Our model P(over) vs consensus no-vig market probability. Vig stripped from external book lines.
-                      </TooltipContent>
-                    </Tooltip>
-                  </SortTh>
+                  {!oddsStale && (
+                    <SortTh col="trueEdge" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-22 text-right">
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-pointer">True Edge{sortCol === "trueEdge" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</TooltipTrigger>
+                        <TooltipContent className="text-xs max-w-xs">
+                          Our model P(over) vs consensus no-vig market probability. Vig stripped from external book lines.
+                        </TooltipContent>
+                      </Tooltip>
+                    </SortTh>
+                  )}
                   <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-right">Hold%</TableHead>
                   <SortTh col="projGap" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-28 text-right" label="Our Proj ⇕" />
                   <SortTh col="pOver" label="P(Over)" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="w-20 text-center" />
@@ -888,14 +957,14 @@ export default function SlateBoard() {
                 {isLoading ? (
                   Array.from({ length: 10 }).map((_, i) => (
                     <TableRow key={i} className="border-slate-800">
-                      {Array.from({ length: varianceEnabled ? 19 : 17 }).map((_, j) => (
+                      {Array.from({ length: (varianceEnabled ? 19 : 17) - (oddsStale ? 1 : 0) }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full bg-slate-800" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : playerRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={varianceEnabled ? 19 : 17} className="h-48 text-center text-muted-foreground font-mono">
+                    <TableCell colSpan={(varianceEnabled ? 19 : 17) - (oddsStale ? 1 : 0)} className="h-48 text-center text-muted-foreground font-mono">
                       No props — click Force Sync to load live slate
                     </TableCell>
                   </TableRow>
@@ -962,19 +1031,33 @@ export default function SlateBoard() {
                           )}
                         </TableCell>
 
-                        {/* True edge */}
-                        <TableCell className="hidden lg:table-cell font-mono text-xs text-right">
-                          {row.marketDataStatus === "not_synced" ? (
-                            <span className="text-slate-600 text-[10px]">no data</span>
-                          ) : row.trueEdge != null ? (
-                            <span className={`font-bold flex items-center justify-end gap-0.5 ${row.trueEdge > 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                              <MarketStatusDot status={row.marketDataStatus} />
-                              {row.trueEdge > 0 ? "+" : ""}{row.trueEdge.toFixed(1)}%
-                            </span>
-                          ) : (
-                            <span className="text-slate-600 text-[10px]">no data</span>
-                          )}
-                        </TableCell>
+                        {/* True edge — hidden when odds are stale (FS2) */}
+                        {!oddsStale && (
+                          <TableCell className="hidden lg:table-cell font-mono text-xs text-right">
+                            {row.marketDataStatus === "not_synced" ? (
+                              <span className="text-slate-600 text-[10px]">no data</span>
+                            ) : row.trueEdge != null ? (
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span className={`font-bold flex items-center justify-end gap-0.5 ${row.trueEdge > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                                  <MarketStatusDot status={row.marketDataStatus} />
+                                  {row.trueEdge > 0 ? "+" : ""}{row.trueEdge.toFixed(1)}%
+                                </span>
+                                {row.calibrationCount != null && row.calibrationCount < 30 && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="text-[9px] font-mono text-amber-400 bg-amber-950/30 border border-amber-800/30 rounded px-1 cursor-help leading-tight">LOW SAMPLE</span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="font-mono text-xs max-w-xs">
+                                      Edge score based on limited calibration data ({row.calibrationCount} results). Treat with caution until 30+ logged.
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-600 text-[10px]">no data</span>
+                            )}
+                          </TableCell>
+                        )}
 
                         {/* Hold% */}
                         <TableCell className="hidden lg:table-cell font-mono text-xs text-right">
@@ -1284,6 +1367,7 @@ export default function SlateBoard() {
             sharpExplanation={sharpRow?.sharpExplanation ?? null}
             sharpSide={sharpRow?.sharpSide ?? null}
             sharpPublicPct={sharpRow?.sharpPublicPct ?? null}
+            calibrationCount={sharpRow?.calibrationCount ?? null}
           />
         );
       })()}

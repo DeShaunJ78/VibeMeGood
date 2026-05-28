@@ -24,6 +24,7 @@ interface PropDetailSheetProps {
   sharpExplanation?: string | null;
   sharpSide?:        string | null;
   sharpPublicPct?:   number | null;
+  calibrationCount?: number | null;
 }
 
 interface HitRateWindow {
@@ -66,6 +67,7 @@ interface LineShopping {
 interface OurProjection {
   value: number;
   stdDev: number | null;
+  p99: number | null;
   pOver: number | null;
   percentileAtLine: number | null;
   dataQualityScore: number | null;
@@ -223,7 +225,7 @@ function WhyThisEdgePanel({ variance, gamePace }: { variance: VarianceData; game
   );
 }
 
-export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sharpConfidence, sharpExplanation, sharpSide, sharpPublicPct }: PropDetailSheetProps) {
+export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sharpConfidence, sharpExplanation, sharpSide, sharpPublicPct, calibrationCount }: PropDetailSheetProps) {
   const [data, setData] = useState<PropDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [explainText, setExplainText] = useState<string>("");
@@ -361,6 +363,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
         lineType: data.ppLine.lineType,
         direction,
         yourProjection: data.ourProjection?.value ?? (data.projection ? Number(data.projection.projectedValue) : null),
+        p99: data.ourProjection?.p99 ?? null,
         pOver: data.ourProjection?.pOver ?? null,
         edgeScore: data.propScore ? Number(data.propScore.edgeScore) : null,
         actionTag: data.propScore?.actionTag ?? null,
@@ -851,7 +854,15 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
               {/* Score Breakdown */}
               {data.propScore && (
                 <div className="px-5 py-4 border-b border-slate-800/50">
-                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-3">Score Breakdown</div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Score Breakdown</div>
+                    {calibrationCount != null && calibrationCount < 30 && (
+                      <span title={`Edge score based on limited calibration data (${calibrationCount} results). Treat with caution until 30+ logged.`}
+                        className="text-[9px] font-mono text-amber-400 bg-amber-950/30 border border-amber-800/30 rounded px-1 leading-tight cursor-help">
+                        LOW SAMPLE
+                      </span>
+                    )}
+                  </div>
                   <div className="space-y-3">
                     <ScoreBar label="Edge Score" value={Number(data.propScore.edgeScore)} colorClass="bg-primary" />
                     <ScoreBar label="Stability" value={Number(data.propScore.stabilityScore)} colorClass="bg-emerald-500" />

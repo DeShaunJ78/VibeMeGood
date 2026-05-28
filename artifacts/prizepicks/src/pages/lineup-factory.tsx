@@ -619,6 +619,7 @@ export default function LineupFactory() {
         lineType:       pick.lineType,
         direction:      pick.direction as "more" | "less",
         yourProjection: null,
+        p99:            null,
         pOver:          null,
         edgeScore:      pick.edgeScore ?? null,
         actionTag:      null,

@@ -67,6 +67,7 @@ export default function Streaks() {
       lineType:       "standard",
       direction:      s.streakType === "over" ? "more" : "less",
       yourProjection: null,
+      p99:            null,
       pOver:          null,
       edgeScore:      null,
       actionTag:      null,

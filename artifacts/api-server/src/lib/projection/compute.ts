@@ -16,6 +16,7 @@ import { logger } from "../logger";
 export interface ProjectionOutput {
   mean: number;
   stdDev: number;
+  p99: number;              // mean + 2.33σ — 99th percentile ceiling
   pOver: number;            // 0–100
   percentileAtLine: number; // 0–100, where line sits in distribution
   dataQualityScore: number; // 0–100 gate score
@@ -193,6 +194,7 @@ export async function computeProjection(
   const pOver = pOverLine(mean, effectiveStd, ppLine);
   const pctAtLine = percentileAtLine(mean, effectiveStd, ppLine);
   const volPct = volatilityPct(effectiveStd, ppLine);
+  const p99 = Math.round((mean + 2.33 * effectiveStd) * 100) / 100;
 
   // --- 8. Confidence label ---
   const finalDQ = Math.max(0, Math.min(100, dataQualityScore));
@@ -221,6 +223,7 @@ export async function computeProjection(
   return {
     mean: Math.round(mean * 100) / 100,
     stdDev: Math.round(effectiveStd * 100) / 100,
+    p99,
     pOver: Math.round(pOver * 10) / 10,
     percentileAtLine: Math.round(pctAtLine * 10) / 10,
     dataQualityScore: finalDQ,
@@ -297,6 +300,7 @@ export async function computeAllProjections(): Promise<number> {
           : "low",
         modelVersion: "v2",
         stdDev: result.stdDev.toString(),
+        p99: result.p99.toString(),
         pOver: result.pOver.toString(),
         percentileAtLine: result.percentileAtLine.toString(),
         dataQualityScore: result.dataQualityScore,

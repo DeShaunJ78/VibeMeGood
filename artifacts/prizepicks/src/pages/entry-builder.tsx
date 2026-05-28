@@ -646,6 +646,9 @@ export default function EntryBuilder() {
                     <div className="flex-1 min-w-0">
                       <div className="font-bold text-sm truncate">{pick.playerName}</div>
                       <div className="text-xs font-mono text-muted-foreground">{pick.statType} · {pick.lineValue}</div>
+                      {pick.p99 != null && (
+                        <div className="text-[10px] font-mono text-violet-300/60">ceiling 99th: {pick.p99.toFixed(1)}</div>
+                      )}
                     </div>
                     <LineTypePill type={pick.lineType} />
                     <div className="flex bg-slate-800 border border-slate-700 rounded overflow-hidden shrink-0">

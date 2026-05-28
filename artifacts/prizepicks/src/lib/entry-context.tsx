@@ -11,6 +11,7 @@ export interface EntryPick {
   lineType: string;
   direction: "more" | "less";
   yourProjection: number | null;
+  p99: number | null;
   pOver: number | null;
   edgeScore: number | null;
   actionTag: string | null;

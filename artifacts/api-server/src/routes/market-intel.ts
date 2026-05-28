@@ -5,6 +5,7 @@ import {
   ppLinesTable, externalLinesTable, propScoresTable, playersTable,
   ourProjectionsTable, playerStreaksTable, lineMoveEventsTable, syncRunsTable,
   varianceScoresTable, platformLinesTable, playerGameLogsTable,
+  probabilityCalibrationTable,
 } from "@workspace/db/schema";
 import { eq, and, or, isNull, desc, gte, asc, inArray, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -118,7 +119,7 @@ router.get("/market-intel", async (req, res) => {
         ),
       );
 
-    const [countResult, rows, lastOddsRun] = await Promise.all([
+    const [countResult, rows, lastOddsRun, allCalibCounts] = await Promise.all([
       db
         .select({ total: sql<number>`count(*)` })
         .from(ppLinesTable)
@@ -146,9 +147,24 @@ router.get("/market-intel", async (req, res) => {
         .orderBy(desc(syncRunsTable.finishedAt))
         .limit(1)
         .then(r => r[0]),
+
+      db
+        .select({
+          sport:        probabilityCalibrationTable.sport,
+          statType:     probabilityCalibrationTable.statType,
+          totalSamples: sql<number>`COALESCE(SUM(${probabilityCalibrationTable.sampleSize}), 0)::int`,
+        })
+        .from(probabilityCalibrationTable)
+        .groupBy(probabilityCalibrationTable.sport, probabilityCalibrationTable.statType),
     ]);
 
     const total = Number(countResult[0]?.total ?? 0);
+
+    // Build calibration count lookup: "sport:statType" → total samples
+    const calibMap = new Map<string, number>();
+    for (const c of allCalibCounts) {
+      calibMap.set(`${c.sport.toLowerCase()}:${c.statType.toLowerCase()}`, c.totalSamples);
+    }
 
     const ppLineIds = rows.map(r => r.line.id);
     const uniquePlayerIds = [...new Set(rows.map(r => r.line.playerId))];
@@ -498,6 +514,7 @@ router.get("/market-intel", async (req, res) => {
           stdDev: effectiveProj?.stdDev
             ? parseFloat(effectiveProj.stdDev.toString())
             : (fallback?.stdDev ?? null),
+          p99: effectiveProj?.p99 ? parseFloat(effectiveProj.p99.toString()) : null,
           pOver,
           percentileAtLine: effectiveProj?.percentileAtLine ? parseFloat(effectiveProj.percentileAtLine.toString()) : null,
           noPlayReason: effectiveNoPlay,
@@ -526,6 +543,8 @@ router.get("/market-intel", async (req, res) => {
         sharpSide:        sharpResult?.sharpSide   ?? null,
         sharpPublicPct:   sharpResult?.estimatedPublicPct ?? null,
 
+        calibrationCount: calibMap.get(`${row.player.sport.toLowerCase()}:${row.line.statType.toLowerCase()}`) ?? 0,
+
         scoring: scoreReasoning,
 
         variance: varScore ? {
@@ -548,6 +567,7 @@ router.get("/market-intel", async (req, res) => {
       page: pageNum,
       limit: limitNum,
       hasMore: offset + limitNum < total,
+      lastOddsSync: lastOddsRun?.finishedAt?.toISOString() ?? null,
     });
   } catch (err) {
     logger.error(err);

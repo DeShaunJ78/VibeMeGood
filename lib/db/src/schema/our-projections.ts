@@ -33,6 +33,9 @@ export const ourProjectionsTable = pgTable("our_projections", {
   noPlayReason: varchar("no_play_reason", { length: 100 }), // null = eligible
   confidence: varchar("confidence", { length: 20 }),        // high/medium/low
 
+  // Ceiling
+  p99: numeric("p99"),                                                // mean + 2.33σ
+
   // Lifecycle
   modelVersion: varchar("model_version", { length: 20 }).default("v2"),
   expiresAt: timestamp("expires_at"),
