@@ -1,0 +1,84 @@
+Phase 7 — Full test protocol.
+Test every feature on the live slate.
+Report pass or fail for each item.
+Do not fix anything — report only.
+
+SECTION 1 — System Status
+1. Open /health
+2. Run Health Check
+3. Report: how many checks GREEN / AMBER / RED
+4. Confirm these specific items show:
+   - Prop Scoring (4-Gate): shows PLAY count
+   - Data Retention: shows status
+   - p99 Ceiling Coverage: shows percentage
+   - CLV Settlement Coverage: shows status
+   - Pre-lock: shows active or inactive
+
+SECTION 2 — Slate Board
+5. Open Slate Board
+6. Confirm total prop count showing
+7. Filter to NBA only — how many props?
+8. Confirm PLAY/WATCH/PASS/NO-PLAY tags visible
+9. Confirm LOW/MED confidence badges showing
+   on props with limited game logs
+10. Find one PLAY-tagged prop and report:
+    - Player name and stat type
+    - E/S/M/R scores from reason summary
+    - P(Over) showing or suppressed?
+11. Find one NO-PLAY prop and confirm:
+    - P(Over) shows grey dash not colored number
+    - No action tag shown or NO-PLAY shown
+12. Confirm stale odds banner NOT showing
+    (odds should be fresh)
+13. Toggle Sharp Only filter — any props?
+14. Confirm preset filter buttons visible
+    but disabled with X/30 progress showing
+
+SECTION 3 — Prop Detail Sheet
+15. Click a PLAY-tagged prop
+16. Confirm gate results showing
+    (E/S/M/R scores in detail)
+17. Confirm convergence signal hidden
+    when gamesUsed < 5
+18. Confirm hit rate windows show
+    "need 5+ games" when data thin
+19. Click expand chevron on any prop
+20. Confirm 3 charts render OR locked
+    message shows when data thin
+
+SECTION 4 — Entry Builder
+21. Add 2 picks from Slate Board
+22. Confirm picks appear in Entry Builder
+23. Confirm break-even panel shows
+24. Confirm p99 ceiling shows per pick
+25. Confirm bankroll check shows setup
+    prompt (dailyLossLimit not set yet)
+26. Confirm EV indicator shows color
+
+SECTION 5 — Journal
+27. Log a test paper entry
+28. Confirm it appears in Journal
+29. Mark one pick as HIT
+30. Confirm CLV populates (or shows
+    no closing line if PP line unchanged)
+
+SECTION 6 — Shark Chat
+31. Open Shark Chat
+32. Ask: "What is the 4-Gate system?"
+33. Ask: "Why are there only 51 PLAY props?"
+34. Ask: "What does NO-PLAY mean?"
+35. Confirm all 3 answers are accurate
+    and match what we built
+
+SECTION 7 — Health Check Integration
+36. Click Rescore Props quick fix button
+37. Confirm it triggers and completes
+38. Click Sync PP Lines button
+39. Confirm it triggers and completes
+40. Run Health Check again
+41. Confirm all counts updated
+
+Report PASS or FAIL for every numbered
+item. Note anything unexpected.
+Do not fix anything in this command.
+This is audit only.
