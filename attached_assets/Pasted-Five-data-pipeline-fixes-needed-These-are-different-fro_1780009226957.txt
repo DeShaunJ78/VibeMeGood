@@ -1,0 +1,280 @@
+Five data pipeline fixes needed.
+These are different from the NFL
+backfill that just ran.
+
+FIX 1 — Backfill gameId on historical
+PP lines. This unlocks calibration.
+
+Add to artifacts/api-server/src/routes/
+sync.ts:
+
+router.post("/sync/backfill-game-ids",
+  async (req, res) => {
+    res.json({ status: "started" });
+    try {
+      const { isNull, or, gte, lte } =
+        await import("drizzle-orm");
+      const {
+        ppLinesTable, playersTable,
+        teamsTable, gamesTable,
+      } = await import("@workspace/db/schema");
+
+      const lines = await db
+        .select({
+          id: ppLinesTable.id,
+          playerId: ppLinesTable.playerId,
+          openedAt: ppLinesTable.openedAt,
+        })
+        .from(ppLinesTable)
+        .where(and(
+          eq(ppLinesTable.isActive, false),
+          isNull(ppLinesTable.gameId),
+        ));
+
+      let updated = 0;
+      for (const line of lines) {
+        try {
+          const [player] = await db
+            .select({
+              teamId: playersTable.teamId,
+              sport: playersTable.sport,
+            })
+            .from(playersTable)
+            .where(eq(playersTable.id,
+              line.playerId))
+            .limit(1);
+
+          if (!player?.teamId) continue;
+
+          const dayStart = new Date(
+            line.openedAt);
+          dayStart.setHours(0, 0, 0, 0);
+          const dayEnd = new Date(
+            line.openedAt);
+          dayEnd.setHours(23, 59, 59, 999);
+
+          const [game] = await db
+            .select({ id: gamesTable.id })
+            .from(gamesTable)
+            .where(and(
+              eq(gamesTable.sport,
+                player.sport),
+              gte(gamesTable.startTime,
+                dayStart),
+              lte(gamesTable.startTime,
+                dayEnd),
+              or(
+                eq(gamesTable.homeTeamId,
+                  player.teamId),
+                eq(gamesTable.awayTeamId,
+                  player.teamId),
+              ),
+            ))
+            .limit(1);
+
+          if (!game) continue;
+
+          await db.update(ppLinesTable)
+            .set({ gameId: game.id })
+            .where(eq(ppLinesTable.id,
+              line.id));
+          updated++;
+        } catch (e) {
+          // skip
+        }
+      }
+
+      logger.info({ updated },
+        "Game ID backfill complete");
+      broadcastSyncStatus(
+        "backfill-game-ids",
+        "success",
+        `${updated} lines updated`);
+    } catch (e) {
+      logger.error({ err: e },
+        "Game ID backfill failed");
+    }
+  }
+);
+
+Add to system-health.tsx triggerSync map:
+"backfill-game-ids":
+  "/api/sync/backfill-game-ids"
+
+Add to Quick Fix buttons:
+{
+  label: "Backfill Game IDs",
+  action: "backfill-game-ids",
+  endpoint: "/api/sync/backfill-game-ids"
+}
+
+FIX 2 — Add opponentTeamId to game logs
+in lib/sync/historical-stats.ts
+
+Update upsertGameLog function signature:
+async function upsertGameLog(
+  playerId: number,
+  gameDate: string,
+  statType: string,
+  value: number,
+  source: string,
+  opponentTeamId?: number | null,
+): Promise<void>
+
+Add to the insert values:
+opponentTeamId: opponentTeamId ?? null,
+
+For NHL backfill update the game log
+calls to include opponent:
+In the NHL section the game log
+response has homeTeamAbbr or
+awayTeamAbbr. Look up the opponent
+team ID from teamsTable by abbreviation
+and sport. Pass it to upsertGameLog.
+
+FIX 3 — Build matchup history from
+real game logs.
+
+Create new file:
+artifacts/api-server/src/lib/sync/
+matchup-history.ts
+
+import { db } from "@workspace/db";
+import {
+  playerGameLogsTable,
+  matchupHistoryTable,
+} from "@workspace/db/schema";
+import { isNotNull } from "drizzle-orm";
+import { logger } from "../logger";
+
+export async function computeMatchupHistory():
+  Promise<number> {
+  const logs = await db
+    .select({
+      playerId:
+        playerGameLogsTable.playerId,
+      statType:
+        playerGameLogsTable.statType,
+      value: playerGameLogsTable.value,
+      opponentTeamId:
+        playerGameLogsTable.opponentTeamId,
+    })
+    .from(playerGameLogsTable)
+    .where(isNotNull(
+      playerGameLogsTable.opponentTeamId));
+
+  const groups = new Map<string, {
+    playerId: number;
+    opponentTeamId: number;
+    statType: string;
+    values: number[];
+  }>();
+
+  for (const log of logs) {
+    if (!log.opponentTeamId ||
+        !log.playerId) continue;
+    const key = `${log.playerId}:` +
+      `${log.opponentTeamId}:` +
+      `${log.statType}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        playerId: log.playerId,
+        opponentTeamId: log.opponentTeamId,
+        statType: log.statType,
+        values: [],
+      });
+    }
+    groups.get(key)!.values.push(
+      Number(log.value));
+  }
+
+  let upserted = 0;
+  for (const group of groups.values()) {
+    if (group.values.length < 3) continue;
+    const avg = group.values.reduce(
+      (a, b) => a + b, 0) /
+      group.values.length;
+
+    await db.insert(matchupHistoryTable)
+      .values({
+        playerId: group.playerId,
+        opponentTeamId: group.opponentTeamId,
+        statType: group.statType,
+        gamesPlayed: group.values.length,
+        avgValue: avg.toFixed(2),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [
+          matchupHistoryTable.playerId,
+          matchupHistoryTable.opponentTeamId,
+          matchupHistoryTable.statType,
+        ],
+        set: {
+          gamesPlayed: group.values.length,
+          avgValue: avg.toFixed(2),
+          updatedAt: new Date(),
+        },
+      });
+    upserted++;
+  }
+
+  logger.info({ upserted },
+    "Matchup history computed");
+  return upserted;
+}
+
+Add to sync.ts:
+import { computeMatchupHistory } from
+  "../lib/sync/matchup-history";
+
+router.post("/sync/matchup-history",
+  async (req, res) => {
+    await runSync("internal",
+      "matchup-history",
+      computeMatchupHistory, res);
+  }
+);
+
+Add to system-health.tsx triggerSync:
+"matchup-history":
+  "/api/sync/matchup-history"
+
+Add Quick Fix button:
+{
+  label: "Compute Matchups",
+  action: "matchup-history",
+  endpoint: "/api/sync/matchup-history"
+}
+
+Add nightly cron at 4am in cron.ts:
+import { computeMatchupHistory } from
+  "./sync/matchup-history";
+
+cron.schedule("0 4 * * *", () =>
+  logPull("internal", "matchup-history",
+    computeMatchupHistory)
+);
+
+FIX 4 — Nightly incremental game log sync
+
+Add to sync.ts:
+router.post("/sync/game-logs",
+  async (req, res) => {
+    res.json({ status: "started" });
+    try {
+      const { backfillHistoricalStats } =
+        await import(
+          "../lib/sync/historical-stats");
+      const result =
+        await backfillHistoricalStats({
+          nba: true,
+          mlb: true,
+          nhl: true,
+          nfl: false,
+        });
+      logger.info(result,
+        "Incremental game log sync done");
+      broadcastSyncStatus("game-logs",
+        "success",
+        `${result.total} records`

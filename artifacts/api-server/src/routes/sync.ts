@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { dataPullLogsTable, alertsTable, syncRunsTable, playersTable, injuriesTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { dataPullLogsTable, alertsTable, syncRunsTable, playersTable, injuriesTable, ppLinesTable, gamesTable } from "@workspace/db/schema";
+import { eq, and, isNull, or, gte, lte } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { broadcastSyncStatus, broadcast } from "../lib/sse";
 import { syncPpLines } from "../lib/sync/prizepicks";
@@ -14,6 +14,7 @@ import { syncInjuries } from "../lib/sync/injuries";
 import { syncProjections } from "../lib/projections/sync";
 import { syncNflAdvancedMetrics } from "../lib/sync/nfl-advanced";
 import { syncGameSchedule } from "../lib/sync/games";
+import { computeMatchupHistory } from "../lib/sync/matchup-history";
 
 const router = Router();
 
@@ -93,6 +94,90 @@ router.post("/sync/historical-stats", async (req, res) => {
     logger.info(result, "Historical backfill complete");
   } catch (e) {
     logger.error({ err: e }, "Historical backfill failed");
+  }
+});
+
+// Fix 1 — Backfill gameId on historical PP lines
+router.post("/sync/backfill-game-ids", async (req, res) => {
+  res.json({ status: "started" });
+  try {
+    const lines = await db
+      .select({
+        id: ppLinesTable.id,
+        playerId: ppLinesTable.playerId,
+        openedAt: ppLinesTable.openedAt,
+      })
+      .from(ppLinesTable)
+      .where(and(
+        eq(ppLinesTable.isActive, false),
+        isNull(ppLinesTable.gameId),
+      ));
+
+    let updated = 0;
+    for (const line of lines) {
+      try {
+        const [player] = await db
+          .select({ teamId: playersTable.teamId, sport: playersTable.sport })
+          .from(playersTable)
+          .where(eq(playersTable.id, line.playerId))
+          .limit(1);
+
+        if (!player?.teamId) continue;
+
+        const dayStart = new Date(line.openedAt!);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(line.openedAt!);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        const [game] = await db
+          .select({ id: gamesTable.id })
+          .from(gamesTable)
+          .where(and(
+            eq(gamesTable.sport, player.sport!),
+            gte(gamesTable.startTime, dayStart),
+            lte(gamesTable.startTime, dayEnd),
+            or(
+              eq(gamesTable.homeTeamId, player.teamId),
+              eq(gamesTable.awayTeamId, player.teamId),
+            ),
+          ))
+          .limit(1);
+
+        if (!game) continue;
+
+        await db.update(ppLinesTable)
+          .set({ gameId: game.id })
+          .where(eq(ppLinesTable.id, line.id));
+        updated++;
+      } catch {
+        // skip individual line errors
+      }
+    }
+
+    logger.info({ updated }, "Game ID backfill complete");
+    broadcastSyncStatus("backfill-game-ids", "success", `${updated} lines updated`);
+  } catch (e) {
+    logger.error({ err: e }, "Game ID backfill failed");
+    broadcastSyncStatus("backfill-game-ids", "error", e instanceof Error ? e.message : "Unknown error");
+  }
+});
+
+// Fix 3 — Rebuild matchup history from game logs
+router.post("/sync/matchup-history", async (req, res) => {
+  await runSync("internal", "matchup-history", computeMatchupHistory, res);
+});
+
+// Fix 4 — Incremental nightly game log sync (NBA/MLB/NHL, skip NFL until season)
+router.post("/sync/game-logs", async (req, res) => {
+  res.json({ status: "started" });
+  try {
+    const { backfillHistoricalStats } = await import("../lib/sync/historical-stats");
+    const result = await backfillHistoricalStats({ nba: true, mlb: true, nhl: true, nfl: false });
+    logger.info(result, "Incremental game log sync done");
+    broadcastSyncStatus("game-logs", "success", `${result.total} records`);
+  } catch (e) {
+    logger.error({ err: e }, "Game log sync failed");
+    broadcastSyncStatus("game-logs", "error", e instanceof Error ? e.message : "Unknown error");
   }
 });
 

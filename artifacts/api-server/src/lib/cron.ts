@@ -16,6 +16,7 @@ import { syncInjuries } from "./sync/injuries";
 import { syncProjections } from "./projections/sync";
 import { syncNflAdvancedMetrics } from "./sync/nfl-advanced";
 import { syncGameSchedule } from "./sync/games";
+import { computeMatchupHistory } from "./sync/matchup-history";
 
 export let preLockActive = false;
 export function isPreLockActive(): boolean { return preLockActive; }
@@ -161,6 +162,11 @@ export function startCronJobs() {
   // NFL advanced metrics every Tuesday at 6 AM (after MNF finalizes)
   cron.schedule("0 6 * * 2", () =>
     logPull("nflverse", "nfl-advanced-metrics", syncNflAdvancedMetrics)
+  );
+
+  // Nightly matchup history rebuild at 4 AM (after game logs are updated)
+  cron.schedule("0 4 * * *", () =>
+    logPull("internal", "matchup-history", computeMatchupHistory)
   );
 
   // Nightly cleanup at 3 AM — prune transient tables, keep permanent data

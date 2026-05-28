@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { playerGameLogsTable, playersTable } from "@workspace/db/schema";
+import { playerGameLogsTable, playersTable, teamsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "../logger";
 import { normalizeName } from "../projections/name-match";
@@ -71,18 +71,34 @@ async function getJson(url: string, timeoutMs = 15000): Promise<any> {
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-// Faster upsert — skip if conflict on (playerId, gameDate, statType)
+// Upsert game log. When opponentTeamId is provided, update it on conflict so
+// re-runs of sport-specific backfills can fill in the field for existing rows.
 async function upsertLog(
   playerId: number,
   gameDate: string,
   statType: string,
   value: number,
   source: string,
+  opponentTeamId?: number | null,
 ): Promise<void> {
-  await db
-    .insert(playerGameLogsTable)
-    .values({ playerId, gameDate, statType, value: value.toString(), source })
-    .onConflictDoNothing();
+  if (opponentTeamId != null) {
+    await db
+      .insert(playerGameLogsTable)
+      .values({ playerId, gameDate, statType, value: value.toString(), source, opponentTeamId })
+      .onConflictDoUpdate({
+        target: [
+          playerGameLogsTable.playerId,
+          playerGameLogsTable.gameDate,
+          playerGameLogsTable.statType,
+        ],
+        set: { opponentTeamId },
+      });
+  } else {
+    await db
+      .insert(playerGameLogsTable)
+      .values({ playerId, gameDate, statType, value: value.toString(), source })
+      .onConflictDoNothing();
+  }
 }
 
 // Run `fn` over `items` in parallel batches of `size`, with optional inter-batch delay
@@ -413,6 +429,13 @@ async function backfillNHL(
   const dbNormMap = new Map<string, number>();
   for (const p of nhlDbPlayers) dbNormMap.set(normalizeName(p.fullName), p.id);
 
+  // Build abbreviation → DB team ID map once for opponent lookups
+  const nhlTeamRows = await db
+    .select({ id: teamsTable.id, abbreviation: teamsTable.abbreviation })
+    .from(teamsTable)
+    .where(eq(teamsTable.sport, "NHL"));
+  const nhlTeamMap = new Map<string, number>(nhlTeamRows.map(t => [t.abbreviation, t.id]));
+
   let grandTotal = 0;
 
   for (const season of seasons) {
@@ -462,6 +485,10 @@ async function backfillNHL(
           const shots   = game.shots ?? 0;
           const ppp     = game.powerPlayPoints ?? 0;
 
+          const opponentTeamId = game.opponentAbbrev
+            ? (nhlTeamMap.get(game.opponentAbbrev as string) ?? null)
+            : null;
+
           const logs: [string, number][] = [
             ["Goals",              goals],
             ["Assists",            assists],
@@ -471,7 +498,7 @@ async function backfillNHL(
           ];
 
           for (const [statType, value] of logs) {
-            await upsertLog(dbId, gameDate, statType, value, source);
+            await upsertLog(dbId, gameDate, statType, value, source, opponentTeamId);
             count++;
           }
         }
