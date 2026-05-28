@@ -1,7 +1,10 @@
 import cron from "node-cron";
 import { db } from "@workspace/db";
-import { dataPullLogsTable, alertsTable, ppLinesTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import {
+  dataPullLogsTable, alertsTable, ppLinesTable,
+  lineMoveEventsTable, externalLinesTable, propScoresTable, syncRunsTable,
+} from "@workspace/db/schema";
+import { eq, and, lt } from "drizzle-orm";
 import { logger } from "./logger";
 import { syncPpLines } from "./sync/prizepicks";
 import { syncExternalOdds, recalcPropScores } from "./sync/external-odds";
@@ -53,10 +56,10 @@ export function startCronJobs() {
     logPull("injury-news", "injuries", syncInjuries)
   );
 
-  // External odds every 20 minutes
-  cron.schedule("*/20 * * * *", () =>
-    logPull("the-odds-api", "external-odds", syncExternalOdds)
-  );
+  // External odds: disabled — external_lines is populated by DraftData, not direct API calls
+  // cron.schedule("*/20 * * * *", () =>
+  //   logPull("the-odds-api", "external-odds", syncExternalOdds)
+  // );
 
   // Projections at 6 AM, 11 AM, and 2 PM daily
   const projectionsJob = () =>
@@ -121,6 +124,23 @@ export function startCronJobs() {
   cron.schedule("0 6 * * 2", () =>
     logPull("nflverse", "nfl-advanced-metrics", syncNflAdvancedMetrics)
   );
+
+  // Nightly cleanup at 3 AM — prune transient tables, keep permanent data
+  cron.schedule("0 3 * * *", async () => {
+    try {
+      const day7  = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000);
+      const day30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+      await db.delete(lineMoveEventsTable).where(lt(lineMoveEventsTable.capturedAt, day7));
+      await db.delete(externalLinesTable).where(lt(externalLinesTable.pulledAt, day30));
+      await db.delete(propScoresTable).where(lt(propScoresTable.scoredAt, day30));
+      await db.delete(syncRunsTable).where(lt(syncRunsTable.startedAt, day30));
+
+      logger.info("Nightly cleanup complete");
+    } catch (err) {
+      logger.error({ err }, "Nightly cleanup failed");
+    }
+  });
 
   logger.info("Cron jobs started");
 }
