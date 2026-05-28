@@ -83,6 +83,18 @@ async function syncScoresImpl(): Promise<number> {
   return 0;
 }
 
+router.post("/sync/calibration", async (req, res) => {
+  const limit = Number((req.body as { limit?: number } | undefined)?.limit ?? 5000);
+  res.json({ status: "started", limit });
+  try {
+    const { calibrationJob } = await import("../scripts/calibration-job");
+    const result = await calibrationJob.runHistoricalCalibration(limit);
+    logger.info(result, "Calibration complete");
+  } catch (e) {
+    logger.error({ err: e }, "Calibration failed");
+  }
+});
+
 router.post("/sync/game-schedule", async (req, res) => {
   await runSync("espn", "game-schedule", syncGameSchedule, res);
 });

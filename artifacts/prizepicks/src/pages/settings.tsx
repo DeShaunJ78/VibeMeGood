@@ -168,6 +168,7 @@ const SYNC_JOBS = [
   { label: "Variance Compute",   endpoint: "/api/sync/variance" },
   { label: "Team Pace Ratings",  endpoint: "/api/admin/sync/pace" },
   { label: "Sync Games",         endpoint: "/api/sync/game-schedule" },
+  { label: "Run Calibration",   endpoint: "/api/sync/calibration" },
 ];
 
 function StatusDot({ status }: { status: string }) {

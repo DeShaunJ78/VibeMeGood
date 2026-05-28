@@ -49,6 +49,7 @@ async function triggerSync(action: string): Promise<void> {
     "pace":           "/api/admin/sync/pace",
     "sharp":          "/api/sharp/compute",
     "nfl-advanced":   "/api/admin/sync/nfl-advanced",
+    "calibration":    "/api/sync/calibration",
   };
   const path = map[action];
   if (!path) return;
@@ -165,6 +166,7 @@ const QUICK_FIXES = [
   { label: "Compute Variance", action: "variance",      endpoint: "/api/sync/variance" },
   { label: "Sync Pace",        action: "pace",          endpoint: "/api/admin/sync/pace" },
   { label: "Sync Sharp",       action: "sharp",         endpoint: "/api/sharp/compute" },
+  { label: "Run Calibration", action: "calibration",   endpoint: "/api/sync/calibration" },
 ];
 
 export default function SystemHealth() {
