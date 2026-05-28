@@ -1,5 +1,6 @@
 import { db } from "@workspace/db";
 import { playerGameLogsTable, playersTable } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
 import { logger } from "../logger";
 import { normalizeName } from "../projections/name-match";
 // CSV helpers (mirrors nfl-advanced.ts — kept local to avoid cross-module coupling)
@@ -496,6 +497,7 @@ async function backfillNHL(
 
 // NFL season week-1 Thursday dates (first game of each season)
 const NFL_SEASON_STARTS: Record<number, string> = {
+  2023: "2023-09-07",
   2024: "2024-09-05",
   2025: "2025-09-04",
 };
@@ -510,26 +512,26 @@ function nflWeekToDate(season: number, week: number): string {
 const NFL_STATS_URL = (season: number) =>
   `https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_${season}.csv`;
 
+// Skill positions worth tracking for PrizePicks props
+const NFL_SKILL_POSITIONS = new Set(["QB", "RB", "WR", "TE", "K"]);
+
 async function backfillNFL(
   allDbPlayers: typeof playersTable.$inferSelect[],
   seasons: number[],
 ): Promise<number> {
-  const nflDbPlayers = allDbPlayers.filter(p => p.sport === "NFL");
-  if (nflDbPlayers.length === 0) return 0;
-
-  // Normalised name → DB player id
+  // Normalised name → DB player id — built from current DB state, refreshed after inserts
   const nameToId = new Map<string, number>();
-  for (const p of nflDbPlayers) nameToId.set(normalizeName(p.fullName), p.id);
+  for (const p of allDbPlayers.filter(p => p.sport === "NFL"))
+    nameToId.set(normalizeName(p.fullName), p.id);
 
-  // Helper: resolve CSV display name → DB player id
+  // Helper: resolve CSV display name → DB player id (exact then last+initial)
   function resolveNfl(displayName: string): number | null {
     const norm = normalizeName(displayName);
     const exact = nameToId.get(norm);
     if (exact) return exact;
-    // Last-name + first-initial fallback
     const parts = norm.split(" ");
-    const last = parts[parts.length - 1];
-    const init = parts[0]?.[0];
+    const last  = parts[parts.length - 1];
+    const init  = parts[0]?.[0];
     for (const [n, id] of nameToId) {
       const np = n.split(" ");
       if (np[np.length - 1] === last && np[0]?.[0] === init) return id;
@@ -538,9 +540,11 @@ async function backfillNFL(
   }
 
   let grandTotal = 0;
+  let totalCreated = 0;
 
   for (const season of seasons) {
     try {
+      // ── 1. Download CSV ────────────────────────────────────────────────────
       let rows: Array<Record<string, string>>;
       try {
         const text = await downloadCSVRaw(NFL_STATS_URL(season));
@@ -550,10 +554,59 @@ async function backfillNFL(
         continue;
       }
 
-      // Filter to regular season only
       const regRows = rows.filter(r => r.season_type === "REG");
       logger.info({ season, rows: regRows.length }, "NFL: CSV rows loaded");
 
+      // ── 2. Discover skill-position players not yet in playersTable ─────────
+      // Collect unique (name, player_id, position) from CSV, skip already known
+      const toInsert: typeof playersTable.$inferInsert[] = [];
+      const seen = new Set<string>(); // dedup within this CSV
+
+      for (const row of regRows) {
+        const name = row.player_display_name ?? "";
+        const pos  = row.position ?? "";
+        if (!name || seen.has(name)) continue;
+        seen.add(name);
+        if (!NFL_SKILL_POSITIONS.has(pos)) continue;
+        if (resolveNfl(name)) continue;  // already in DB
+
+        const parts = name.split(" ");
+        toInsert.push({
+          sport:      "NFL",
+          fullName:   name,
+          firstName:  parts[0] ?? "",
+          lastName:   parts.slice(1).join(" "),
+          position:   pos,
+          status:     "active",
+          externalIds: { nflverse_id: row.player_id ?? "" },
+        });
+      }
+
+      // Batch-insert in chunks of 50 to stay within pg parameter limits
+      if (toInsert.length > 0) {
+        for (let i = 0; i < toInsert.length; i += 50) {
+          await db
+            .insert(playersTable)
+            .values(toInsert.slice(i, i + 50))
+            .onConflictDoNothing();
+        }
+        totalCreated += toInsert.length;
+
+        // Rebuild nameToId from DB now that new players exist
+        const fresh = await db
+          .select()
+          .from(playersTable)
+          .where(eq(playersTable.sport, "NFL"));
+        nameToId.clear();
+        for (const p of fresh) nameToId.set(normalizeName(p.fullName), p.id);
+      }
+
+      logger.info(
+        { season, newPlayers: toInsert.length, totalNflInDb: nameToId.size },
+        "NFL: player discovery complete",
+      );
+
+      // ── 3. Write per-game stat logs ───────────────────────────────────────
       const source = `nfl_csv_${season}`;
       let count = 0;
 
@@ -565,13 +618,15 @@ async function backfillNFL(
         if (!week) continue;
         const gameDate = nflWeekToDate(season, week);
 
-        const rushYds  = csvNum(row.rushing_yards);
-        const recYds   = csvNum(row.receiving_yards);
-        const passYds  = csvNum(row.passing_yards);
-        const recs     = csvNum(row.receptions);
-        const rushTds  = csvNum(row.rushing_tds);
-        const recTds   = csvNum(row.receiving_tds);
-        const passTds  = csvNum(row.passing_tds);
+        const rushYds = csvNum(row.rushing_yards);
+        const recYds  = csvNum(row.receiving_yards);
+        const passYds = csvNum(row.passing_yards);
+        const recs    = csvNum(row.receptions);
+        const rushTds = csvNum(row.rushing_tds);
+        const recTds  = csvNum(row.receiving_tds);
+        const passTds = csvNum(row.passing_tds);
+        const ints    = csvNum(row.interceptions);
+        const sacks   = csvNum(row.sacks);
 
         const logs: [string, number][] = [
           ["Rush Yards",      rushYds],
@@ -582,6 +637,10 @@ async function backfillNFL(
           ["Rec TDs",         recTds],
           ["Pass TDs",        passTds],
         ];
+
+        // Interceptions and sacks: write only when > 0 (not meaningful at 0 for most positions)
+        if (ints > 0)   logs.push(["Interceptions", ints]);
+        if (sacks > 0)  logs.push(["Sacks",         sacks]);
 
         for (const [statType, value] of logs) {
           await upsertLog(dbId, gameDate, statType, value, source);
@@ -596,7 +655,7 @@ async function backfillNFL(
     }
   }
 
-  logger.info({ grandTotal }, "NFL historical backfill complete");
+  logger.info({ grandTotal, totalCreated }, "NFL historical backfill complete");
   return grandTotal;
 }
 
@@ -636,7 +695,7 @@ export async function backfillHistoricalStats(
   }
 
   if (options.nfl !== false) {
-    results.nfl = await backfillNFL(allPlayers, [2024, 2025]);
+    results.nfl = await backfillNFL(allPlayers, [2023, 2024]);
   }
 
   results.total = results.nba + results.mlb + results.nhl + results.nfl;
