@@ -1,0 +1,152 @@
+Phase 6 — All 5 items plus convergence
+signal gate. Everything in one command.
+
+ITEM 1 — Aggressive Pre-Lock Scraper
+In artifacts/api-server/src/lib/cron.ts
+
+Declare at module level:
+export let preLockActive = false;
+
+Add a job that runs every minute:
+cron.schedule("* * * * *", async () => {
+  const now = new Date();
+  const twoHoursOut = new Date(
+    now.getTime() + 2 * 60 * 60 * 1000);
+  const upcomingLocks = await db
+    .select({ id: ppLinesTable.id })
+    .from(ppLinesTable)
+    .where(and(
+      eq(ppLinesTable.isActive, true),
+      gte(ppLinesTable.lockTime, now),
+      lte(ppLinesTable.lockTime, twoHoursOut)
+    ))
+    .limit(1);
+  if (upcomingLocks.length > 0) {
+    preLockActive = true;
+    await syncPpLines();
+    broadcastSyncStatus("pp-lines-prelock", "success");
+  } else {
+    preLockActive = false;
+  }
+});
+
+Add preLockActive to system-health response.
+
+In slate-board.tsx when preLockActive
+is true show amber banner:
+"⚡ Pre-lock refresh active — syncing
+every minute"
+
+ITEM 2 — Preset Filter Saves
+In slate-board.tsx add preset toolbar
+above filter row.
+localStorage key: vmg_filter_presets
+
+Four presets:
+Safe:      { minPOver: 58, actionTag: "PLAY" }
+Upside:    { minPOver: 62 }
+Late-News: { injuryUpdatedWithin: 120 }
+My Style:  {} (user defined)
+
+Gate: disable all presets when
+entries count < 30.
+Show tooltip: "Available after 30 paper
+trades logged"
+Show progress: "X/30 entries to unlock"
+Query: SELECT COUNT(*) FROM entries
+
+ITEM 3 — Expandable Row Charts
+In slate-board.tsx expandable rows
+add three Recharts charts.
+Recharts already installed.
+
+Data from gameLogsByKey already in
+market-intel response.
+
+Chart 1 — Recent Form BarChart
+x: game index 1-10 recent right
+y: stat value
+Red reference line at PP line value
+Green bars exceeded line, red missed
+
+Chart 2 — Hit Rate
+Single bar showing historical hit rate
+vs tonight line as percentage
+Green above 60%, amber 50-60%, red below
+
+Chart 3 — Distribution
+Normal curve from proj mean and stdDev
+Vertical line at PP line position
+Shade P(Over) region green
+
+Gate per prop: when gamesUsed < 5
+show: "Charts unlock after 5+ games logged"
+
+ITEM 4 — Bankroll Exposure Check
+In entry-builder.tsx before LOG ENTRY
+button add exposure panel.
+
+When dailyLossLimit is null in
+user_settings show:
+"Set a daily limit in Settings to
+enable bankroll tracking"
+Link to /settings
+
+When limit is set show:
+Today's entries: $X staked
+This entry: $Y
+Daily limit: $Z
+Color: green below 50%, amber 50-80%,
+red above 80% with warning:
+"Consider waiting — near daily limit"
+Do not block LOG ENTRY — warn only.
+
+ITEM 5 — MLB Park Factors
+In lib/projection/compute.ts after
+computing mean add park factor for
+MLB batting stats:
+
+const PARK_FACTORS: Record<string, number> = {
+  COL: 1.18, CIN: 1.12, BOS: 1.08,
+  PHI: 1.06, TEX: 1.05, NYY: 1.03,
+  TOR: 0.97, MIA: 0.95, OAK: 0.94,
+  PIT: 0.93, NYM: 0.92, TB: 0.92,
+  SF: 0.90, SD: 0.88, SEA: 0.88,
+};
+
+const battingStats = [
+  "hits", "home runs", "total bases",
+  "hits+runs+rbis", "rbis", "runs",
+  "doubles", "triples", "stolen bases"
+];
+
+const isBatter = battingStats.some(s =>
+  statType.toLowerCase().includes(s));
+
+if (sport === "MLB" && isBatter
+    && homeTeamAbbr) {
+  mean = mean * (PARK_FACTORS[homeTeamAbbr]
+    ?? 1.0);
+}
+
+Query homeTeamAbbr from gamesTable
+and teamsTable using the gameId from
+the pp_line.
+
+CONVERGENCE SIGNAL GATE
+In prop-detail-sheet.tsx find where
+convergence signal renders.
+
+Add gate: only show when gamesUsed >= 5
+{proj.gamesUsed >= 5 && convergenceSignal
+  && ( // render signal )}
+
+When gamesUsed < 5 hide entirely.
+
+After all items:
+Run pnpm run typecheck — must pass
+Run pnpm run build — must pass
+Publish to production
+
+Report PASS or FAIL for each of the
+6 items with specific confirmation.
