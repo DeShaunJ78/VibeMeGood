@@ -54,3 +54,37 @@ As your game log database grows over the
 season, PLAY count will grow organically.
 Never lower the thresholds to get more PLAYs.
 The selectivity is the edge.
+
+## Data Integrity Gates
+These gates protect you from acting on
+signals that have no real data behind them.
+
+Prior-only props (0 game logs):
+- Always tagged NO-PLAY
+- P(Over) never shown as colored number
+- Never recommended by optimizer
+- p99 ceiling not computed
+
+Props with fewer than 5 game logs:
+- POverBadge replaced with grey dash
+- Hit rate windows hidden
+- Optimizer excludes them
+- Variance panel shows amber warning
+
+Props with fewer than 30 calibration records:
+- Maximum tag is WATCH not PLAY
+- LOW SAMPLE badge on True Edge
+- PLAY requires calibration validation
+
+Market support with single book:
+- marketSupportScore stays neutral (50)
+- One book cannot drive action tag
+- Minimum 2 books for market signal
+
+Streak badges:
+- Minimum 3 consecutive games required
+- 2-game streak is noise not signal
+
+These gates open automatically as data
+accumulates. Do not try to shortcut them.
+They are protecting you from false signals.
