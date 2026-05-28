@@ -1,0 +1,245 @@
+Build the game linking infrastructure.
+Three steps in order.
+
+STEP 1 — Game Schedule Sync
+Create new file:
+artifacts/api-server/src/lib/sync/games.ts
+
+This syncs today's game schedule from
+ESPN API and creates gamesTable records.
+
+import { db } from "@workspace/db";
+import {
+  gamesTable, teamsTable,
+} from "@workspace/db/schema";
+import { eq, and } from "drizzle-orm";
+import { logger } from "../logger";
+
+const SPORT_ENDPOINTS: Record<string, string> = {
+  NBA: "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard",
+  MLB: "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard",
+  NHL: "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard",
+  WNBA: "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard",
+  NFL: "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
+};
+
+export async function syncGameSchedule(): Promise<number> {
+  let total = 0;
+
+  for (const [sport, url] of Object.entries(SPORT_ENDPOINTS)) {
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": "VibeMeGood/1.0" }
+      });
+      if (!res.ok) continue;
+      const data = await res.json() as any;
+
+      const events = data?.events ?? [];
+
+      for (const event of events) {
+        try {
+          const competition = event.competitions?.[0];
+          if (!competition) continue;
+
+          const startTime = new Date(event.date);
+          const status = competition.status?.type?.name ?? "scheduled";
+
+          const homeComp = competition.competitors?.find(
+            (c: any) => c.homeAway === "home"
+          );
+          const awayComp = competition.competitors?.find(
+            (c: any) => c.homeAway === "away"
+          );
+
+          if (!homeComp || !awayComp) continue;
+
+          const homeAbbr = homeComp.team?.abbreviation?.toUpperCase();
+          const awayAbbr = awayComp.team?.abbreviation?.toUpperCase();
+
+          if (!homeAbbr || !awayAbbr) continue;
+
+          // Find or create teams
+          const findOrCreateTeam = async (abbr: string) => {
+            let [team] = await db.select()
+              .from(teamsTable)
+              .where(and(
+                eq(teamsTable.abbreviation, abbr),
+                eq(teamsTable.sport, sport)
+              ))
+              .limit(1);
+
+            if (!team) {
+              [team] = await db.insert(teamsTable).values({
+                sport,
+                name: abbr,
+                abbreviation: abbr,
+              }).returning();
+            }
+            return team;
+          };
+
+          const homeTeam = await findOrCreateTeam(homeAbbr);
+          const awayTeam = await findOrCreateTeam(awayAbbr);
+
+          // Upsert game by sport + startTime + teams
+          const [existing] = await db.select()
+            .from(gamesTable)
+            .where(and(
+              eq(gamesTable.sport, sport),
+              eq(gamesTable.homeTeamId, homeTeam.id),
+              eq(gamesTable.awayTeamId, awayTeam.id),
+            ))
+            .limit(1);
+
+          const gameStatus = status.toLowerCase().includes("final")
+            ? "final"
+            : status.toLowerCase().includes("in")
+              ? "live"
+              : "scheduled";
+
+          if (existing) {
+            await db.update(gamesTable)
+              .set({ status: gameStatus, updatedAt: new Date() })
+              .where(eq(gamesTable.id, existing.id));
+          } else {
+            await db.insert(gamesTable).values({
+              sport,
+              homeTeamId: homeTeam.id,
+              awayTeamId: awayTeam.id,
+              startTime,
+              status: gameStatus,
+            });
+          }
+
+          total++;
+        } catch (e) {
+          logger.warn({ err: e }, "Game upsert failed");
+        }
+      }
+    } catch (e) {
+      logger.warn({ err: e, sport }, "Game schedule sync failed");
+    }
+  }
+
+  logger.info({ total }, "Game schedule sync complete");
+  return total;
+}
+
+STEP 2 — Wire gameId into PP Lines sync
+In artifacts/api-server/src/lib/sync/prizepicks.ts
+
+Add import at top:
+import { gamesTable, teamsTable } from
+  "@workspace/db/schema";
+
+After upserting the player (around line 80)
+add this logic to find and set gameId:
+
+// Try to find matching game for this
+// player's team on today's date
+let gameId: number | null = null;
+
+if (teamId) {
+  const now = new Date();
+  const dayStart = new Date(now);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(now);
+  dayEnd.setHours(23, 59, 59, 999);
+
+  const [matchingGame] = await db
+    .select({ id: gamesTable.id })
+    .from(gamesTable)
+    .where(and(
+      eq(gamesTable.sport, sport),
+      gte(gamesTable.startTime, dayStart),
+      lte(gamesTable.startTime, dayEnd),
+      or(
+        eq(gamesTable.homeTeamId, teamId),
+        eq(gamesTable.awayTeamId, teamId)
+      )
+    ))
+    .limit(1);
+
+  gameId = matchingGame?.id ?? null;
+}
+
+Then pass gameId when inserting/updating
+pp_lines:
+
+In the existing upsert add gameId:
+gameId: gameId,
+
+This wires the PP line to the game.
+
+Add gte, lte, or to drizzle imports.
+
+STEP 3 — Wire to cron and System Status
+In artifacts/api-server/src/lib/cron.ts:
+
+Add import:
+import { syncGameSchedule } from
+  "./sync/games";
+
+Add cron job running every 30 minutes:
+cron.schedule("*/30 * * * *", () =>
+  logPull("espn", "game-schedule",
+    syncGameSchedule)
+);
+
+In artifacts/api-server/src/routes/
+sync.ts add manual trigger:
+
+router.post("/sync/game-schedule",
+  async (req, res) => {
+    res.json({ status: "started" });
+    const { syncGameSchedule } = await
+      import("../lib/sync/games");
+    const n = await syncGameSchedule();
+    logger.info({ n },
+      "Game schedule sync complete");
+  }
+);
+
+In system-health.tsx triggerSync map add:
+"game-schedule":
+  "/api/sync/game-schedule"
+
+In Quick Fix buttons array add:
+{
+  label: "Sync Games",
+  action: "game-schedule",
+  endpoint: "/api/sync/game-schedule"
+}
+
+Add to system-health.ts database health:
+Check gamesTable count:
+const gameCount = await db
+  .select({ n: count() })
+  .from(gamesTable);
+
+const gamesN = Number(gameCount[0]?.n ?? 0);
+
+{
+  name: "Game Schedule",
+  status: gamesN > 0 ? "green" : "amber",
+  detail: gamesN === 0
+    ? "No games synced — run Sync Games"
+    : `${gamesN} games in schedule`,
+  lastUpdated: null,
+  fixAction: gamesN === 0
+    ? "game-schedule" : null,
+}
+
+After all 3 steps:
+Run pnpm run typecheck — must pass
+
+Then test:
+1. POST /api/sync/game-schedule
+2. Report how many games created
+3. POST /api/sync/pp-lines
+4. Query: SELECT COUNT(*) FROM pp_lines
+   WHERE game_id IS NOT NULL
+5. Report how many PP lines now
+   have a gameId set
+
+Report PASS or FAIL for each step.

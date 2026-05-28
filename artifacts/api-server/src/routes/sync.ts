@@ -13,6 +13,7 @@ import { syncFatigueData } from "../lib/sync/fatigue";
 import { syncInjuries } from "../lib/sync/injuries";
 import { syncProjections } from "../lib/projections/sync";
 import { syncNflAdvancedMetrics } from "../lib/sync/nfl-advanced";
+import { syncGameSchedule } from "../lib/sync/games";
 
 const router = Router();
 
@@ -81,6 +82,10 @@ async function syncInjuriesImpl(): Promise<number> {
 async function syncScoresImpl(): Promise<number> {
   return 0;
 }
+
+router.post("/sync/game-schedule", async (req, res) => {
+  await runSync("espn", "game-schedule", syncGameSchedule, res);
+});
 
 router.post("/sync/pp-lines", async (req, res) => {
   await runSync("prizepicks", "pp-lines", syncPpLines, res);

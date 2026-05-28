@@ -15,6 +15,7 @@ import { syncFatigueData } from "./sync/fatigue";
 import { syncInjuries } from "./sync/injuries";
 import { syncProjections } from "./projections/sync";
 import { syncNflAdvancedMetrics } from "./sync/nfl-advanced";
+import { syncGameSchedule } from "./sync/games";
 
 export let preLockActive = false;
 export function isPreLockActive(): boolean { return preLockActive; }
@@ -151,6 +152,11 @@ export function startCronJobs() {
       logger.error({ err }, "Pre-lock scraper error");
     }
   });
+
+  // Game schedule every 30 minutes
+  cron.schedule("*/30 * * * *", () =>
+    logPull("espn", "game-schedule", syncGameSchedule)
+  );
 
   // NFL advanced metrics every Tuesday at 6 AM (after MNF finalizes)
   cron.schedule("0 6 * * 2", () =>

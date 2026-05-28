@@ -167,6 +167,7 @@ const SYNC_JOBS = [
   { label: "Game Scores",        endpoint: "/api/sync/scores" },
   { label: "Variance Compute",   endpoint: "/api/sync/variance" },
   { label: "Team Pace Ratings",  endpoint: "/api/admin/sync/pace" },
+  { label: "Sync Games",         endpoint: "/api/sync/game-schedule" },
 ];
 
 function StatusDot({ status }: { status: string }) {

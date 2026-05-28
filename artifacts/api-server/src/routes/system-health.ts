@@ -4,7 +4,7 @@ import {
   dataPullLogsTable, ppLinesTable, externalLinesTable,
   ourProjectionsTable, entriesTable, entryPicksTable, varianceScoresTable,
   probabilityCalibrationTable, playerGameLogsTable, teamPaceRatingsTable,
-  lineMoveEventsTable, nflAdvancedMetricsTable, propScoresTable,
+  lineMoveEventsTable, nflAdvancedMetricsTable, propScoresTable, gamesTable,
 } from "@workspace/db/schema";
 import { desc, count, isNotNull, eq, sql, and, max, min, gte } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -120,7 +120,7 @@ async function checkDataFreshness(): Promise<CheckResult[]> {
 
 async function checkDatabaseHealth(): Promise<CheckResult[]> {
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [ppCount, projCount, extCount, entryCount, calCount, gameLogCount, paceCount, paceLatest, sharpCount, nflAdvCount, nflAdvLatest, clvCoverage] = await Promise.all([
+  const [ppCount, projCount, extCount, entryCount, calCount, gameLogCount, paceCount, paceLatest, sharpCount, nflAdvCount, nflAdvLatest, clvCoverage, gamesCount] = await Promise.all([
     db.select({ n: count() }).from(ppLinesTable).where(eq(ppLinesTable.isActive, true)),
     db.select({ n: sql<number>`count(distinct player_id)` }).from(ourProjectionsTable),
     db.select({ n: sql<number>`count(distinct pp_line_id)` }).from(externalLinesTable).where(isNotNull(externalLinesTable.noVigOverProb)),
@@ -138,9 +138,11 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
       withClv:      sql<number>`count(*) filter (where result != 'pending' and clv is not null)`,
       totalSettled: sql<number>`count(*) filter (where result != 'pending')`,
     }).from(entryPicksTable),
+    db.select({ n: count() }).from(gamesTable),
   ]);
 
   const pp = Number(ppCount[0]?.n ?? 0);
+  const gamesN = Number(gamesCount[0]?.n ?? 0);
   const proj = Number(projCount[0]?.n ?? 0);
   const ext = Number(extCount[0]?.n ?? 0);
   const entries = Number(entryCount[0]?.n ?? 0);
@@ -201,6 +203,15 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
       detail: `${pp.toLocaleString()} active lines`,
       lastUpdated: null,
       fixAction: pp < 100 ? "pp-lines" : null,
+    },
+    {
+      name: "Game Schedule",
+      status: (gamesN > 0 ? "green" : "amber") as CheckStatus,
+      detail: gamesN === 0
+        ? "No games synced — run Sync Games"
+        : `${gamesN} games in schedule`,
+      lastUpdated: null,
+      fixAction: gamesN === 0 ? "game-schedule" : null,
     },
     {
       name: "Players with Projections",

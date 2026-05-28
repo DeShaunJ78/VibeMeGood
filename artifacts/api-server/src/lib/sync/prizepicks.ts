@@ -1,8 +1,8 @@
 import { db } from "@workspace/db";
 import {
-  ppLinesTable, ppLineHistoryTable, playersTable, teamsTable,
+  ppLinesTable, ppLineHistoryTable, playersTable, teamsTable, gamesTable,
 } from "@workspace/db/schema";
-import { eq, and, or, isNull, lt } from "drizzle-orm";
+import { eq, and, or, isNull, lt, gte, lte } from "drizzle-orm";
 import { broadcastNewGoblin } from "../sse";
 import { logger } from "../logger";
 
@@ -83,6 +83,32 @@ export async function syncPpLines(): Promise<number> {
         }
       }
 
+      // Resolve today's game for this player's team
+      let gameId: number | null = null;
+      if (teamId) {
+        const now = new Date();
+        const dayStart = new Date(now);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(now);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        const [matchingGame] = await db
+          .select({ id: gamesTable.id })
+          .from(gamesTable)
+          .where(and(
+            eq(gamesTable.sport, sport),
+            gte(gamesTable.startTime, dayStart),
+            lte(gamesTable.startTime, dayEnd),
+            or(
+              eq(gamesTable.homeTeamId, teamId),
+              eq(gamesTable.awayTeamId, teamId),
+            ),
+          ))
+          .limit(1);
+
+        gameId = matchingGame?.id ?? null;
+      }
+
       // Check for existing active line
       const [existing] = await db.select().from(ppLinesTable)
         .where(and(
@@ -100,12 +126,12 @@ export async function syncPpLines(): Promise<number> {
             capturedAt: new Date(),
           });
           await db.update(ppLinesTable)
-            .set({ lineValue: lineValue.toString(), lineType, lastSyncedAt: new Date(), updatedAt: new Date() })
+            .set({ lineValue: lineValue.toString(), lineType, gameId, lastSyncedAt: new Date(), updatedAt: new Date() })
             .where(eq(ppLinesTable.id, existing.id));
         } else {
-          // Line unchanged — still stamp lastSyncedAt so deactivation knows it was seen
+          // Line unchanged — stamp lastSyncedAt and update gameId if newly resolved
           await db.update(ppLinesTable)
-            .set({ lastSyncedAt: new Date() })
+            .set({ lastSyncedAt: new Date(), ...(gameId ? { gameId } : {}) })
             .where(eq(ppLinesTable.id, existing.id));
         }
       } else {
@@ -114,6 +140,7 @@ export async function syncPpLines(): Promise<number> {
           statType,
           lineValue: lineValue.toString(),
           lineType,
+          gameId,
           directionalityType: "over_under",
           isActive: true,
           openedAt: new Date(),
