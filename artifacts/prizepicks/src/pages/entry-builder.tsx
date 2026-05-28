@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCreateEntry } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -122,6 +123,36 @@ interface SimResult {
   };
 }
 
+interface PortfolioLeg {
+  playerId: number;
+  playerName: string;
+  statType: string;
+  lineValue: number;
+  lineType: string;
+  direction: "more" | "less";
+  vor: number | null;
+  team: string;
+  sport: string;
+  mean: number;
+  stdDev: number;
+  modelProb: number;
+}
+
+interface PortfolioEntryResult {
+  legs: PortfolioLeg[];
+  entryType: "power";
+  multiplier: number;
+  trueJointProbability: number;
+  adjustedEV: number;
+  portfolioScore: number;
+}
+
+interface PortfolioResult {
+  entries: PortfolioEntryResult[];
+  totalPortfolioEV: number;
+  generated: number;
+}
+
 type SortDir = "asc" | "desc";
 
 export default function EntryBuilder() {
@@ -135,6 +166,12 @@ export default function EntryBuilder() {
   const [simRuns, setSimRuns] = useState(10000);
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   const [simLoading, setSimLoading] = useState(false);
+  const [portfolioOpen, setPortfolioOpen] = useState(false);
+  const [portfolioEntrySize, setPortfolioEntrySize] = useState<2 | 3>(3);
+  const [portfolioMaxEntries, setPortfolioMaxEntries] = useState(5);
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
+  const [portfolioResult, setPortfolioResult] = useState<PortfolioResult | null>(null);
+  const [portfolioLoggedSet, setPortfolioLoggedSet] = useState<Set<number>>(new Set());
   const { picks, removePick, updateDirection, clearPicks } = useEntry();
   // DEBUG — confirm picks arrive from context
   console.log("[EntryBuilder] picks from context:", picks.length, picks.map(p => p.playerName));
@@ -171,6 +208,18 @@ export default function EntryBuilder() {
     },
     refetchInterval: 30_000,
   });
+
+  const { data: totalEntriesCount } = useQuery<number>({
+    queryKey: ["entries-total-count"],
+    queryFn: async () => {
+      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+      const r = await fetch(`${base}/api/entries`);
+      const arr = await r.json() as unknown[];
+      return Array.isArray(arr) ? arr.length : 0;
+    },
+    staleTime: 60_000,
+  });
+  const totalEntries = totalEntriesCount ?? 0;
 
   const runSimulation = useCallback(async (currentPicks: typeof picks, runs: number, mult: number, style: string) => {
     if (currentPicks.length < 2) { setSimResult(null); return; }
@@ -244,6 +293,16 @@ export default function EntryBuilder() {
     return acc;
   }, {});
   const correlatedTeams = Object.entries(teamGroups).filter(([, ps]) => ps.length >= 2);
+
+  const portfolioGatePass = picks.length >= 3 && totalEntries >= 30 && picks.every(p => (p.gamesUsed ?? 0) >= 5);
+  const portfolioGateReason = picks.length < 3
+    ? null // button hidden entirely below
+    : totalEntries < 30
+      ? `${30 - totalEntries} more journal entries needed (${totalEntries}/30 logged)`
+      : picks.some(p => (p.gamesUsed ?? 0) < 5)
+        ? "Some picks have fewer than 5 games of data"
+        : null;
+
   const multiplier = playstyle === "power" ? (POWER_MULTIPLIERS[n] ?? 0) : 0;
   const powerPayout = playstyle === "power" ? stakeNum * multiplier : 0;
   const flexPayouts = playstyle === "flex" && n >= 2 ? FLEX_PAYOUTS[n] ?? {} : {};
@@ -288,6 +347,64 @@ export default function EntryBuilder() {
   const evTextColor = evPct == null ? "text-slate-500" :
     evPct > 5    ? "text-emerald-400" :
     evPct >= -0.5 ? "text-amber-400"  : "text-rose-400";
+
+  const handleOptimize = useCallback(async () => {
+    setPortfolioLoading(true);
+    setPortfolioResult(null);
+    setPortfolioLoggedSet(new Set());
+    try {
+      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+      const props = picks.map(p => ({
+        playerId: p.playerId,
+        statType: p.statType,
+        lineValue: p.lineValue,
+        lineType: p.lineType,
+        direction: p.direction,
+        playerName: p.playerName,
+        sport: p.sport ?? "",
+        team: p.teamAbbr ?? "",
+        gameId: "",
+        mean: p.mean ?? p.yourProjection ?? p.lineValue,
+        stdDev: p.stdDev ?? 2,
+        modelProb: p.pOver != null
+          ? (p.direction === "more" ? p.pOver / 100 : 1 - p.pOver / 100)
+          : 0.5,
+        vor: p.vor ?? null,
+      }));
+      const r = await fetch(`${base}/api/portfolio/optimize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ props, entrySize: portfolioEntrySize, maxEntries: portfolioMaxEntries }),
+      });
+      if (!r.ok) throw new Error("Optimize failed");
+      const data = await r.json() as PortfolioResult;
+      setPortfolioResult(data);
+    } catch {
+      toast({ title: "Portfolio optimize failed", variant: "destructive" });
+    } finally {
+      setPortfolioLoading(false);
+    }
+  }, [picks, portfolioEntrySize, portfolioMaxEntries, toast]);
+
+  const logPortfolioEntry = useCallback(async (entry: PortfolioEntryResult, idx: number) => {
+    try {
+      await createEntry.mutateAsync({
+        data: {
+          entryDate: new Date().toISOString().split("T")[0],
+          entryType: entry.entryType,
+          pickCount: entry.legs.length,
+          stake: stakeNum || 25,
+          displayedPayoutMultiplier: entry.multiplier,
+          potentialPayout: (stakeNum || 25) * entry.multiplier,
+          notes: `Portfolio optimizer — score ${entry.portfolioScore.toFixed(1)}`,
+        },
+      });
+      setPortfolioLoggedSet(prev => new Set([...prev, idx]));
+      toast({ title: "Entry logged", description: `${entry.legs.length}-pick Power logged to journal.` });
+    } catch {
+      toast({ title: "Failed to log entry", variant: "destructive" });
+    }
+  }, [createEntry, stakeNum, toast]);
 
   const doSave = useCallback(async () => {
     try {
@@ -691,6 +808,28 @@ export default function EntryBuilder() {
               </div>
             )}
           </div>
+          {picks.length >= 3 && (
+            <div className="border-t border-slate-800 px-3 py-2 shrink-0 flex items-center justify-between gap-3 bg-slate-950">
+              <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500 min-w-0">
+                <Shuffle className="w-3 h-3 shrink-0 text-indigo-400" />
+                {portfolioGateReason ? (
+                  <span className="truncate text-amber-500/70">{portfolioGateReason}</span>
+                ) : (
+                  <span>Portfolio optimizer ready</span>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!portfolioGatePass}
+                onClick={() => { setPortfolioResult(null); setPortfolioOpen(true); }}
+                className="border-indigo-700/50 text-indigo-300 hover:bg-indigo-950/40 font-mono text-xs shrink-0 disabled:opacity-40"
+              >
+                <Shuffle className="w-3 h-3 mr-1" />
+                Build Portfolio
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Right: Config + Math */}
@@ -957,6 +1096,160 @@ export default function EntryBuilder() {
         </div>
       )}
     </div>
+
+    {/* Portfolio Optimizer Dialog */}
+    <Dialog open={portfolioOpen} onOpenChange={setPortfolioOpen}>
+      <DialogContent className="bg-slate-900 border-slate-700 max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 font-mono text-indigo-300">
+            <Shuffle className="w-4 h-4" />
+            Portfolio Optimizer
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          {/* Config row */}
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-mono text-slate-400 uppercase">Entry Size</label>
+              <div className="flex gap-1">
+                {([2, 3] as const).map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setPortfolioEntrySize(s)}
+                    className={`px-3 py-1.5 rounded border text-xs font-mono transition-colors ${
+                      portfolioEntrySize === s
+                        ? "border-indigo-500 bg-indigo-950/40 text-indigo-300"
+                        : "border-slate-700 text-slate-400 hover:border-slate-600"
+                    }`}
+                  >
+                    {s}-pick ({s === 2 ? "3×" : "6×"})
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-mono text-slate-400 uppercase">Max Entries</label>
+              <div className="flex gap-1">
+                {[3, 5, 10].map(m => (
+                  <button
+                    key={m}
+                    onClick={() => setPortfolioMaxEntries(m)}
+                    className={`px-3 py-1.5 rounded border text-xs font-mono transition-colors ${
+                      portfolioMaxEntries === m
+                        ? "border-indigo-500 bg-indigo-950/40 text-indigo-300"
+                        : "border-slate-700 text-slate-400 hover:border-slate-600"
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Button
+              onClick={handleOptimize}
+              disabled={portfolioLoading}
+              className="bg-indigo-700 hover:bg-indigo-600 text-white font-mono text-xs"
+            >
+              {portfolioLoading ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Optimizing…</> : <><Shuffle className="w-3 h-3 mr-1" />Run Optimizer</>}
+            </Button>
+          </div>
+
+          {/* Results */}
+          {portfolioResult && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs font-mono text-slate-400">
+                <span>
+                  {portfolioResult.entries.length} entries selected from {portfolioResult.generated} combos
+                  {portfolioResult.totalPortfolioEV != null && (
+                    <span className={`ml-2 font-bold ${portfolioResult.totalPortfolioEV >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      Total EV: {portfolioResult.totalPortfolioEV >= 0 ? "+" : ""}{(portfolioResult.totalPortfolioEV * 100).toFixed(1)}%
+                    </span>
+                  )}
+                </span>
+                {portfolioResult.entries.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => portfolioResult.entries.forEach((e, i) => void logPortfolioEntry(e, i))}
+                    className="border-emerald-700/50 text-emerald-300 hover:bg-emerald-950/40 font-mono text-[10px]"
+                  >
+                    Log All ({portfolioResult.entries.length})
+                  </Button>
+                )}
+              </div>
+
+              {portfolioResult.entries.length === 0 ? (
+                <div className="text-center py-8 text-xs font-mono text-slate-500">
+                  No valid entries found — try increasing entry count or loosening gate requirements.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {portfolioResult.entries.map((entry, idx) => {
+                    const logged = portfolioLoggedSet.has(idx);
+                    return (
+                      <div
+                        key={idx}
+                        className={`rounded-lg border p-3 space-y-2 transition-colors ${
+                          logged ? "border-emerald-800/50 bg-emerald-950/20" : "border-slate-700 bg-slate-950"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 text-[10px] font-mono text-slate-400 flex-wrap">
+                            <span className="text-indigo-300 font-bold">#{idx + 1}</span>
+                            <span>{entry.legs.length}-pick Power {entry.multiplier}×</span>
+                            <span className={`font-bold ${entry.adjustedEV >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                              EV {entry.adjustedEV >= 0 ? "+" : ""}{(entry.adjustedEV * 100).toFixed(1)}%
+                            </span>
+                            <span className="text-slate-500">
+                              P(win) {(entry.trueJointProbability * 100).toFixed(1)}%
+                            </span>
+                            <span className="text-indigo-400/70">score {entry.portfolioScore.toFixed(1)}</span>
+                          </div>
+                          {logged ? (
+                            <span className="text-[10px] font-mono text-emerald-400 shrink-0">✓ Logged</span>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void logPortfolioEntry(entry, idx)}
+                              className="border-slate-700 text-slate-300 hover:border-indigo-600 font-mono text-[10px] shrink-0 h-6 px-2"
+                            >
+                              Log
+                            </Button>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {entry.legs.map((leg, li) => (
+                            <div key={li} className="flex items-center gap-1 bg-slate-800/60 rounded px-2 py-1 text-[10px] font-mono">
+                              <span className="text-foreground">{leg.playerName}</span>
+                              <span className="text-slate-500">{leg.statType}</span>
+                              <span className={leg.direction === "more" ? "text-emerald-400" : "text-rose-400"}>
+                                {leg.direction === "more" ? "↑" : "↓"} {leg.lineValue}
+                              </span>
+                              {leg.vor != null && (
+                                <span className={`${leg.vor > 0.3 ? "text-emerald-300" : leg.vor < -0.1 ? "text-rose-400" : "text-slate-500"}`}>
+                                  VOR {leg.vor > 0 ? "+" : ""}{leg.vor.toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {!portfolioResult && !portfolioLoading && (
+            <div className="text-center py-8 text-xs font-mono text-slate-500">
+              Configure settings above and click Run Optimizer to generate entry combinations.
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
 
     {/* Loss Limit Confirmation Dialog */}
     <AlertDialog open={!!lossLimitDialog} onOpenChange={(open) => { if (!open) { setLossLimitDialog(null); } }}>

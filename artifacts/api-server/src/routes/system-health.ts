@@ -160,7 +160,7 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
   const fmtNflAdvAge = nflAdvAgeMins === Infinity ? "never synced" : nflAdvAgeMins < 1 ? "today" : `${Math.round(nflAdvAgeMins)}d ago`;
   const fmtAge = (m: number) => m === Infinity ? "never" : m < 60 ? `${Math.round(m)}m ago` : `${(m / 60).toFixed(1)}h ago`;
 
-  const [scoringRows, playCountRows, oldestEventRows, p99CountRows, p99TotalRows] = await Promise.all([
+  const [scoringRows, playCountRows, oldestEventRows, p99CountRows, p99TotalRows, vorCountRows] = await Promise.all([
     db.select({ total: count(), lastScored: max(propScoresTable.scoredAt) })
       .from(propScoresTable)
       .where(isNotNull(propScoresTable.actionTag)),
@@ -172,6 +172,10 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
     // from the denominator so 4% doesn't falsely flag 96% prior-only coverage as RED.
     db.select({ n: count() }).from(ourProjectionsTable)
       .where(sql`${ourProjectionsTable.sourceLabel} != 'prior_only'`),
+    db.select({
+      withVor: sql<number>`count(*) filter (where vor is not null and source_label != 'prior_only')`,
+      total:   sql<number>`count(*) filter (where source_label != 'prior_only')`,
+    }).from(ourProjectionsTable),
   ]);
 
   const scoringTotal    = Number(scoringRows[0]?.total ?? 0);
@@ -185,6 +189,10 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
   const p99WithValue    = Number(p99CountRows[0]?.n ?? 0);
   const p99TotalCount   = Number(p99TotalRows[0]?.n ?? 0);
   const p99Coverage     = p99TotalCount > 0 ? Math.round(p99WithValue / p99TotalCount * 100) : 0;
+
+  const vorWithValue  = Number(vorCountRows[0]?.withVor ?? 0);
+  const vorTotal      = Number(vorCountRows[0]?.total ?? 0);
+  const vorCoverage   = vorTotal > 0 ? Math.round(vorWithValue / vorTotal * 100) : 0;
 
   return [
     {
@@ -301,6 +309,15 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
         : `${p99Coverage}% of non-prior-only projections have p99 ceiling`,
       lastUpdated: null,
       fixAction: p99Coverage < 40 ? "projections" : null,
+    },
+    {
+      name: "VOR Coverage",
+      status: (vorCoverage >= 80 ? "green" : vorCoverage >= 40 ? "amber" : "red") as "green" | "amber" | "red",
+      detail: vorCoverage === 0
+        ? "No VOR values — run projections"
+        : `${vorCoverage}% of non-prior-only projections have VOR`,
+      lastUpdated: null,
+      fixAction: vorCoverage < 40 ? "projections" : null,
     },
   ];
 }

@@ -115,3 +115,20 @@ Edge = (Our P(Over) − Implied P from line) × 100
 - Records processed count
 - Error status with message if sync failed
 - Mode indicator: LIVE (real API data) vs SEED (demo data)
+
+## VOR — Value Over Replacement
+VOR (Value Over Replacement) measures how far a player's projection sits above or below the PrizePicks line in standard deviation units.
+
+Formula: VOR = (model projection − PP line) / σ
+
+Interpretation:
+- VOR > +0.5: Strong edge — model projects meaningfully above the line
+- VOR +0.1 to +0.5: Moderate positive edge
+- VOR -0.1 to +0.1: Coin-flip territory, avoid
+- VOR < -0.1: Model leans under the line
+
+Why it matters: P(Over) tells you the win probability, but VOR tells you the size of the edge relative to natural outcome variance. A prop with VOR +0.8 has a bigger structural advantage than one at VOR +0.2, even if P(Over) is the same.
+
+Best use: Sort the Slate Board by VOR to find structurally mispriced props. Combine high VOR with high P(Over) for top-quality picks.
+
+VOR is null for prior-only projections (insufficient game data) since there is no reliable σ estimate.

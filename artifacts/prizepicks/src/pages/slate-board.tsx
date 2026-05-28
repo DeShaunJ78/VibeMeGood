@@ -37,6 +37,9 @@ type OurProjection = {
   gamesUsed: number | null;
   shrinkageFactor: number | null;
   isStale: boolean;
+  vor: number | null;
+  ensembleBlendPct: 0 | 30 | 70;
+  calSampleSize: number;
 };
 
 type MarketIntelRow = {
@@ -695,6 +698,7 @@ export default function SlateBoard() {
           const gb = b.ourProjection ? b.ourProjection.value - b.lineValue : -999;
           cmp = ga - gb; break;
         }
+        case "vor":      cmp = (a.ourProjection?.vor ?? -999) - (b.ourProjection?.vor ?? -999); break;
         case "pOver":    cmp = (a.ourProjection?.pOver ?? -1) - (b.ourProjection?.pOver ?? -1); break;
         case "trueEdge": cmp = (a.trueEdge ?? -999) - (b.trueEdge ?? -999); break;
         case "position": {
@@ -1139,6 +1143,14 @@ export default function SlateBoard() {
                   )}
                   <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-right">Hold%</TableHead>
                   <SortTh col="projGap" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-28 text-right" label="Our Proj ⇕" />
+                  <SortTh col="vor" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-16 text-right">
+                    <Tooltip>
+                      <TooltipTrigger className="cursor-pointer">VOR{sortCol === "vor" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</TooltipTrigger>
+                      <TooltipContent className="text-xs max-w-xs">
+                        Value Over Replacement — (model projection − line) / σ. Measures edge size relative to natural variance.
+                      </TooltipContent>
+                    </Tooltip>
+                  </SortTh>
                   <SortTh col="pOver" label="P(Over)" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="w-20 text-center" />
                   <TableHead className="hidden md:table-cell w-14 font-mono text-xs text-center">Streak</TableHead>
                   <TableHead className="hidden lg:table-cell w-20 font-mono text-xs text-center">Pace</TableHead>
@@ -1154,14 +1166,14 @@ export default function SlateBoard() {
                 {isLoading ? (
                   Array.from({ length: 10 }).map((_, i) => (
                     <TableRow key={i} className="border-slate-800">
-                      {Array.from({ length: (varianceEnabled ? 19 : 17) - (oddsStale ? 1 : 0) }).map((_, j) => (
+                      {Array.from({ length: (varianceEnabled ? 20 : 18) - (oddsStale ? 1 : 0) }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full bg-slate-800" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : playerRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={(varianceEnabled ? 19 : 17) - (oddsStale ? 1 : 0)} className="h-48 text-center text-muted-foreground font-mono">
+                    <TableCell colSpan={(varianceEnabled ? 20 : 18) - (oddsStale ? 1 : 0)} className="h-48 text-center text-muted-foreground font-mono">
                       No props — click Force Sync to load live slate
                     </TableCell>
                   </TableRow>
@@ -1285,6 +1297,22 @@ export default function SlateBoard() {
                         {/* Our projection */}
                         <TableCell className="hidden lg:table-cell text-right">
                           <ProjectionCell proj={proj} ppLine={row.lineValue} />
+                        </TableCell>
+
+                        {/* VOR — Value Over Replacement */}
+                        <TableCell className="hidden lg:table-cell font-mono text-xs text-right">
+                          {proj?.vor != null ? (
+                            <span className={
+                              proj.vor > 0.5  ? "text-emerald-400 font-bold" :
+                              proj.vor > 0.1  ? "text-emerald-300" :
+                              proj.vor > -0.1 ? "text-slate-500" :
+                              "text-rose-400"
+                            }>
+                              {proj.vor > 0 ? "+" : ""}{proj.vor.toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-600">—</span>
+                          )}
                         </TableCell>
 
                         {/* P(over) — Fix 5: suppress badge for prior-only / insufficient data props */}

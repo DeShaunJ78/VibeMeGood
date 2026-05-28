@@ -91,3 +91,27 @@ Late-News: Props with recent injury updates.
 My Style: Your custom saved filters.
 Unlocks after 30 paper trades logged.
 Until then: build your own filter intuition.
+
+## Portfolio Optimizer
+Available when 3+ picks are in your entry cart
+and you have 30+ total entries logged.
+
+Gate requirements:
+- Minimum 3 picks in cart
+- 30+ total entries in your journal
+- All picks must have 5+ games of data (gamesUsed ≥ 5)
+
+How it works:
+1. Click "Build Portfolio" below your picks list
+2. Choose entry size (2 or 3 picks per entry)
+3. Choose max entries to generate (1–10)
+4. The optimizer generates all combinations, runs 1000 Monte Carlo simulations per combo, and scores each by: adjustedEV × 100 + (avg VOR × 10) − correlation penalty
+5. Correlation penalty: −20 pts if two legs share same team and same direction (stacking risk)
+6. Results are sorted by portfolio score and filtered so no two entries share more than 1 player
+7. Click "Log All" to record all entries, or select individual entries to log
+
+Entry sizing (Power only):
+- 2-pick Power: 3× multiplier
+- 3-pick Power: 6× multiplier
+
+Best practice: Run portfolio optimizer after identifying 5–8 strong picks on the Slate Board. Let the optimizer find the highest-EV non-correlated combinations rather than picking manually.

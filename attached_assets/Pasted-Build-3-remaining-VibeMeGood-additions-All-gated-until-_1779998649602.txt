@@ -1,0 +1,303 @@
+Build 3 remaining VibeMeGood additions.
+All gated until sufficient data exists.
+One command. Do all 3 in order.
+
+ADDITION 9 — Ensemble Projection Blending
+In artifacts/api-server/src/lib/projection/compute.ts
+
+The calibration table is probability_calibration
+with columns: sport, stat_type, hit_count,
+sample_size, hit_rate.
+
+After computing the weighted mean add
+this blending logic:
+
+Query calibration for this sport + statType:
+const [calRow] = await db
+  .select()
+  .from(probabilityCalibrationTable)
+  .where(and(
+    eq(probabilityCalibrationTable.sport, sport),
+    eq(probabilityCalibrationTable.statType, statType),
+  ))
+  .orderBy(desc(probabilityCalibrationTable.sampleSize))
+  .limit(1);
+
+const calCount = Number(calRow?.sampleSize ?? 0);
+const calHitRate = calRow?.hitRate
+  ? Number(calRow.hitRate) : null;
+
+Blending rules using calCount:
+- calCount < 100:
+  blendedMean = mean (no change)
+  ensembleBlendPct = 0
+  sourceLabel unchanged
+
+- calCount 100-299:
+  Only blend if calHitRate is meaningful
+  calMeanEstimate = ppLine * (calHitRate / 0.55)
+  blendedMean = (mean * 0.70) +
+                (calMeanEstimate * 0.30)
+  ensembleBlendPct = 30
+  sourceLabel = "ensemble_30"
+
+- calCount >= 300:
+  calMeanEstimate = ppLine * (calHitRate / 0.55)
+  blendedMean = (mean * 0.30) +
+                (calMeanEstimate * 0.70)
+  ensembleBlendPct = 70
+  sourceLabel = "ensemble_70"
+
+Use blendedMean instead of mean going forward.
+
+Add to ProjectionOutput interface:
+ensembleBlendPct: 0 | 30 | 70;
+calSampleSize: number;
+
+Add to our_projections table:
+ALTER TABLE our_projections
+ADD COLUMN IF NOT EXISTS ensemble_blend_pct
+integer DEFAULT 0;
+
+Save ensemble_blend_pct in payload.
+
+In artifacts/prizepicks/src/components or
+prop-detail-sheet.tsx find the projection
+panel. When ensembleBlendPct > 0 add:
+"Model blending: CAL {pct}% / FP {100-pct}%
+({calSampleSize} settled results)"
+
+When ensembleBlendPct === 0: show nothing.
+Feature is invisible until 100+ results.
+
+ADDITION 13 — Value Over Replacement (VOR)
+Build this before portfolio optimizer
+since portfolio uses VOR for ranking.
+
+In artifacts/api-server/src/lib/projection/compute.ts
+after computing pOver add:
+
+const vor = effectiveStd > 0
+  ? (mean - ppLine) / effectiveStd
+  : null;
+
+Add vor to ProjectionOutput interface:
+vor: number | null;
+
+Add column to our_projections table:
+ALTER TABLE our_projections
+ADD COLUMN IF NOT EXISTS vor numeric;
+
+Save vor in payload.
+
+Add vor to market-intel API response
+per prop row.
+
+In slate-board.tsx add VOR column
+between Proj and True Edge columns.
+
+Color coding:
+vor >= 1.0: green text
+vor 0.5 to 1.0: amber text
+vor 0.0 to 0.5: grey text
+vor < 0.0: rose text
+null or gamesUsed < 5: grey dash
+
+Column header: "VOR"
+Tooltip on header:
+"Value Over Replacement — projection
+minus line in standard deviation units.
+Above 1.0 = strong edge.
+Only shows with 5+ game logs."
+
+Add VOR to health check in
+system-health.ts:
+Count active props with non-null vor
+vs total active props.
+Name: "VOR Coverage"
+Green >= 80%, amber >= 40%, red below.
+fixAction: "projections"
+
+Add VOR to Shark Chat knowledge.
+In knowledge/vibemegood/metrics.md add:
+
+## Value Over Replacement (VOR)
+VOR = (Our Projection - PP Line) /
+Standard Deviation
+
+Z-score measuring edge in standardized
+units. Lets you compare props across
+different sports and stat types directly.
+
+VOR >= 1.0: Strong edge (green)
+VOR 0.5-1.0: Meaningful edge (amber)
+VOR 0.0-0.5: Marginal (grey)
+VOR < 0.0: Line above projection (rose)
+
+Only shows when gamesUsed >= 5.
+Gate: grey dash when insufficient data.
+
+ADDITION 11 — Entry Portfolio Optimizer
+The simulation engine already exists in
+lib/simulation/entry-simulator.ts with
+simulateEntry() function.
+Use it directly — do not rebuild it.
+
+STEP 1 — Backend route
+Add POST /api/portfolio/optimize to
+a new file:
+artifacts/api-server/src/routes/portfolio.ts
+
+Request body:
+{
+  props: Array<{
+    playerId: number;
+    statType: string;
+    lineValue: number;
+    lineType: string;
+    direction: "more" | "less";
+    playerName: string;
+    sport: string;
+    team: string;
+    gameId: string;
+    position?: string;
+    mean: number;
+    stdDev: number;
+    modelProb: number;
+    vor: number | null;
+  }>;
+  entrySize: 2 | 3;
+  maxEntries: number; // 3-5
+}
+
+Portfolio construction logic:
+1. Generate all combinations of
+   entrySize props from the input props
+2. For each combination run simulateEntry()
+   with 1000 runs
+3. Score each combination:
+   portfolioScore = adjustedEV * 100 +
+     (vor average of legs * 10) -
+     correlationPenalty
+   correlationPenalty = 20 if any two legs
+     have same team and same direction
+4. Sort by portfolioScore descending
+5. Select top maxEntries combinations
+   ensuring no two selected entries
+   share more than 1 player
+6. Return selected entries with:
+   - legs array
+   - entryType (power/flex)
+   - multiplier
+   - trueJointProbability
+   - adjustedEV
+   - portfolioScore
+
+Response:
+{
+  entries: PortfolioEntry[];
+  totalPortfolioEV: number;
+  generated: number; // how many combos evaluated
+}
+
+Register route in index.ts:
+import portfolioRouter from "./routes/portfolio";
+app.use("/api", portfolioRouter);
+
+STEP 2 — Frontend
+In artifacts/prizepicks/src/pages/entry-builder.tsx
+
+Add "Build Portfolio" button below
+the picks list. Only show when
+picks.length >= 3.
+
+Gate check before allowing click:
+Query GET /api/entries?summary=true
+for total entry count.
+
+If entryCount < 30:
+  Button disabled
+  Show: "Available after 30 paper
+  trades (X/30)"
+If any pick has gamesUsed < 5:
+  Button disabled
+  Show: "Remove low-data props first"
+If gates pass: button enabled
+
+When clicked show modal:
+Title: "Portfolio Builder"
+Entry size selector: 2-pick / 3-pick
+Max entries: 3 / 4 / 5
+
+Run POST /api/portfolio/optimize
+Show loading state while running.
+
+Display results:
+For each generated entry show:
+- Pick 1: Player + stat + direction
+- Pick 2: Player + stat + direction
+- (Pick 3 if 3-pick)
+- Entry type: Power / Flex
+- EV: X.X%
+- Joint probability: XX.X%
+
+Footer: "Total portfolio EV: X.X%"
+"Log All" button: logs each entry
+  to Journal separately
+"Log Selected" button: logs only
+  checked entries
+
+Show "X combinations evaluated"
+at bottom of modal.
+
+STEP 3 — Wire to health check
+No health check item needed for portfolio.
+It is a user-triggered feature not a data
+pipeline.
+
+STEP 4 — Wire to Shark Chat
+Add to knowledge/vibemegood/entry-construction.md:
+
+## Portfolio Optimizer
+The Build Portfolio button in Entry Builder
+generates multiple optimized entries from
+your selected props simultaneously.
+
+How it works:
+1. Add 3-8 props to Entry Builder
+2. Click Build Portfolio
+3. Select entry size (2 or 3 picks)
+4. Select max entries (3-5)
+5. System evaluates all combinations
+   using the Monte Carlo simulation engine
+6. Returns highest EV combinations
+   that do not overlap heavily
+
+Portfolio rules:
+No two entries share more than 1 player.
+Positive correlations within entries boosted.
+Payout shift triggers penalized.
+All entries must have positive EV.
+
+Unlocks after 30 paper trades logged.
+Also requires 5+ game logs per prop.
+
+After all 3 additions:
+Run pnpm run typecheck — must pass
+Run pnpm run build — must pass
+
+Verify:
+1. Ensemble: compute.ts has blending
+   logic, shows nothing in UI until
+   100+ calibration records exist
+2. VOR: shows in Slate Board column,
+   gated at gamesUsed >= 5, in health
+   check, in Shark Chat knowledge
+3. Portfolio: Build Portfolio button
+   in Entry Builder gated at 30 entries,
+   modal opens and generates entries,
+   Log All button works
+
+Report PASS or FAIL for each addition
+with specific confirmation.
+Publish after all pass.

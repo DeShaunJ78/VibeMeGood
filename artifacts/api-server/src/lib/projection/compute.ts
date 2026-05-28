@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import {
   playerGameLogsTable, ourProjectionsTable, ppLinesTable, playersTable,
   injuriesTable, matchupHistoryTable, gamesTable, teamsTable,
+  probabilityCalibrationTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { getSnapPctAdjustment } from "../sync/nfl-advanced";
@@ -26,6 +27,9 @@ export interface ProjectionOutput {
   noPlayReason: string | null;
   opponentAdj: number;
   volatilityPct: number;    // σ/line * 100 — how wide the band is
+  ensembleBlendPct: 0 | 30 | 70; // calibration blend ratio (Addition 9)
+  calSampleSize: number;         // calibration row count used for blending
+  vor: number | null;            // Value Over Replacement = (mean − line) / σ (Addition 13)
   expiresAt: Date;
   // Explanation breakdowns for the UI
   reasoning: {
@@ -113,6 +117,37 @@ export async function computeProjection(
     }
   }
 
+  // --- 2b. Ensemble blending with calibration data (Addition 9) ---
+  let ensembleBlendPct: 0 | 30 | 70 = 0;
+  let calSampleSize = 0;
+  try {
+    const [calRow] = await db
+      .select()
+      .from(probabilityCalibrationTable)
+      .where(and(
+        eq(probabilityCalibrationTable.sport, sport),
+        eq(probabilityCalibrationTable.statType, statType),
+      ))
+      .orderBy(desc(probabilityCalibrationTable.sampleSize))
+      .limit(1);
+
+    const calCount = Number(calRow?.sampleSize ?? 0);
+    const calHitRate = calRow?.hitRate != null ? Number(calRow.hitRate) : null;
+    calSampleSize = calCount;
+
+    if (calCount >= 300 && calHitRate !== null) {
+      const calMeanEstimate = ppLine * (calHitRate / 0.55);
+      mean = (mean * 0.30) + (calMeanEstimate * 0.70);
+      ensembleBlendPct = 70;
+      sourceLabel = "ensemble_70";
+    } else if (calCount >= 100 && calHitRate !== null) {
+      const calMeanEstimate = ppLine * (calHitRate / 0.55);
+      mean = (mean * 0.70) + (calMeanEstimate * 0.30);
+      ensembleBlendPct = 30;
+      sourceLabel = "ensemble_30";
+    }
+  } catch { /* non-fatal */ }
+
   // --- 3. Opponent adjustment ---
   let opponentAdj = 1.0;
   let opponentExplain = "No matchup data — neutral adjustment";
@@ -197,6 +232,9 @@ export async function computeProjection(
   // Fix 10: p99 ceiling is meaningless for prior-only projections (no real game data).
   const p99 = sourceLabel === "prior_only" ? null : Math.round((mean + 2.33 * effectiveStd) * 100) / 100;
 
+  // --- 7b. Value Over Replacement (Addition 13) ---
+  const vor = effectiveStd > 0 ? Math.round(((mean - ppLine) / effectiveStd) * 1000) / 1000 : null;
+
   // --- 8. Confidence label ---
   const finalDQ = Math.max(0, Math.min(100, dataQualityScore));
   const confidence =
@@ -234,6 +272,9 @@ export async function computeProjection(
     noPlayReason,
     opponentAdj: Math.round(opponentAdj * 1000) / 1000,
     volatilityPct: Math.round(volPct * 10) / 10,
+    ensembleBlendPct,
+    calSampleSize,
+    vor,
     expiresAt: new Date(Date.now() + PROJECTION_TTL_HOURS * 60 * 60 * 1000),
     reasoning: {
       sampleSize: n < MIN_GAMES_FOR_PLAY
@@ -338,6 +379,8 @@ export async function computeAllProjections(): Promise<number> {
         noPlayReason: result.noPlayReason,
         sourceLabel: result.sourceLabel,
         opponentAdj: result.opponentAdj.toString(),
+        ensembleBlendPct: result.ensembleBlendPct,
+        vor: result.vor != null ? result.vor.toString() : null,
         expiresAt: result.expiresAt,
         generatedAt: new Date(),
       };

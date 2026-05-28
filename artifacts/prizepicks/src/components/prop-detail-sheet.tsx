@@ -78,6 +78,9 @@ interface OurProjection {
   gamesUsed: number | null;
   isStale: boolean;
   reasoning: Record<string, unknown> | null;
+  vor: number | null;
+  ensembleBlendPct: 0 | 30 | 70;
+  calSampleSize: number;
 }
 
 interface PropDetail {
@@ -586,6 +589,12 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                       <span className="text-slate-600">shrink {(op.shrinkageFactor * 100).toFixed(0)}%→prior</span>
                     )}
                     {op.isStale && <span className="text-amber-400">stale</span>}
+                    {op.ensembleBlendPct > 0 && (
+                      <span className="text-indigo-400">
+                        Model blending: CAL {op.ensembleBlendPct}% / FP {100 - op.ensembleBlendPct}%
+                        {op.calSampleSize > 0 && ` (${op.calSampleSize} settled results)`}
+                      </span>
+                    )}
                   </div>
 
                   {/* No-play gate warning */}

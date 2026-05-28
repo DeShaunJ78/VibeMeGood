@@ -36,6 +36,12 @@ export const ourProjectionsTable = pgTable("our_projections", {
   // Ceiling
   p99: numeric("p99"),                                                // mean + 2.33σ
 
+  // Ensemble blending (Addition 9)
+  ensembleBlendPct: integer("ensemble_blend_pct").default(0),       // 0 | 30 | 70
+
+  // Value Over Replacement (Addition 13)
+  vor: numeric("vor"),                                               // (mean − line) / σ
+
   // Lifecycle
   modelVersion: varchar("model_version", { length: 20 }).default("v2"),
   expiresAt: timestamp("expires_at"),

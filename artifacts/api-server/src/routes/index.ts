@@ -39,6 +39,7 @@ import platformLinesRouter from "./platform-lines";
 import paceRouter from "./pace";
 import sharpRouter from "./sharp";
 import nflAdvancedRouter from "./nfl-advanced";
+import portfolioRouter from "./portfolio";
 
 const router: IRouter = Router();
 
@@ -82,5 +83,6 @@ router.use(platformLinesRouter);
 router.use(paceRouter);
 router.use(sharpRouter);
 router.use(nflAdvancedRouter);
+router.use(portfolioRouter);
 
 export default router;
