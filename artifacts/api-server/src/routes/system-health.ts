@@ -4,9 +4,9 @@ import {
   dataPullLogsTable, ppLinesTable, externalLinesTable,
   ourProjectionsTable, entriesTable, entryPicksTable, varianceScoresTable,
   probabilityCalibrationTable, playerGameLogsTable, teamPaceRatingsTable,
-  lineMoveEventsTable, nflAdvancedMetricsTable,
+  lineMoveEventsTable, nflAdvancedMetricsTable, propScoresTable,
 } from "@workspace/db/schema";
-import { desc, count, isNotNull, eq, sql, and, max, gte } from "drizzle-orm";
+import { desc, count, isNotNull, eq, sql, and, max, min, gte } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { simulateEntry } from "../lib/simulation/entry-simulator";
 
@@ -157,6 +157,29 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
   const nflAdvAgeMins = nflAdvTs ? (Date.now() - nflAdvTs.getTime()) / (60000 * 60 * 24) : Infinity;
   const fmtPaceAge = paceAgeMins === Infinity ? "never synced" : paceAgeMins < 60 ? `${Math.round(paceAgeMins)}m ago` : `${(paceAgeMins / 60).toFixed(0)}h ago`;
   const fmtNflAdvAge = nflAdvAgeMins === Infinity ? "never synced" : nflAdvAgeMins < 1 ? "today" : `${Math.round(nflAdvAgeMins)}d ago`;
+  const fmtAge = (m: number) => m === Infinity ? "never" : m < 60 ? `${Math.round(m)}m ago` : `${(m / 60).toFixed(1)}h ago`;
+
+  const [scoringRows, playCountRows, oldestEventRows, p99CountRows, p99TotalRows] = await Promise.all([
+    db.select({ total: count(), lastScored: max(propScoresTable.scoredAt) })
+      .from(propScoresTable)
+      .where(isNotNull(propScoresTable.actionTag)),
+    db.select({ n: count() }).from(propScoresTable).where(eq(propScoresTable.actionTag, "PLAY")),
+    db.select({ oldest: min(lineMoveEventsTable.capturedAt) }).from(lineMoveEventsTable),
+    db.select({ n: count() }).from(ourProjectionsTable).where(isNotNull(ourProjectionsTable.p99)),
+    db.select({ n: count() }).from(ourProjectionsTable),
+  ]);
+
+  const scoringTotal    = Number(scoringRows[0]?.total ?? 0);
+  const scoringLastTs   = scoringRows[0]?.lastScored ?? null;
+  const scoringPlayN    = Number(playCountRows[0]?.n ?? 0);
+  const scoringAgeMins  = scoringLastTs ? (Date.now() - scoringLastTs.getTime()) / 60000 : Infinity;
+
+  const oldestTs        = oldestEventRows[0]?.oldest ?? null;
+  const oldestAgeDays   = oldestTs ? (Date.now() - oldestTs.getTime()) / (1000 * 60 * 60 * 24) : 0;
+
+  const p99WithValue    = Number(p99CountRows[0]?.n ?? 0);
+  const p99TotalCount   = Number(p99TotalRows[0]?.n ?? 0);
+  const p99Coverage     = p99TotalCount > 0 ? Math.round(p99WithValue / p99TotalCount * 100) : 0;
 
   return [
     {
@@ -242,6 +265,35 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
         : `${clvWithClv}/${clvTotalSettled} settled picks have CLV (${Math.round(clvPct * 100)}%)`,
       lastUpdated: null,
       fixAction: null,
+    },
+    {
+      name: "Prop Scoring (4-Gate)",
+      status: (scoringAgeMins < 120 ? "green" : scoringAgeMins < 360 ? "amber" : "red") as "green" | "amber" | "red",
+      detail: scoringTotal === 0
+        ? "No props scored yet — run sync"
+        : `${scoringPlayN} PLAY · ${scoringTotal} total · scored ${fmtAge(scoringAgeMins)}`,
+      lastUpdated: scoringLastTs?.toISOString() ?? null,
+      fixAction: "external-odds",
+    },
+    {
+      name: "Data Retention",
+      status: (oldestAgeDays <= 8 ? "green" : "amber") as "green" | "amber" | "red",
+      detail: oldestAgeDays === 0
+        ? "No line events yet"
+        : oldestAgeDays <= 8
+          ? "Cleanup running — data within 7-day window"
+          : `Oldest event ${Math.round(oldestAgeDays)}d ago — cleanup may not have run`,
+      lastUpdated: null,
+      fixAction: null,
+    },
+    {
+      name: "p99 Ceiling Coverage",
+      status: (p99Coverage >= 80 ? "green" : p99Coverage >= 40 ? "amber" : "red") as "green" | "amber" | "red",
+      detail: p99Coverage === 0
+        ? "No p99 values — run projections"
+        : `${p99Coverage}% of projections have p99 ceiling`,
+      lastUpdated: null,
+      fixAction: p99Coverage < 40 ? "projections" : null,
     },
   ];
 }

@@ -42,6 +42,7 @@ async function triggerSync(action: string): Promise<void> {
   const map: Record<string, string> = {
     "pp-lines":       "/api/sync/pp-lines",
     "external-odds":  "/api/sync/external-odds",
+    "prop-scores":    "/api/sync/external-odds",
     "projections":    "/api/sync/projections",
     "injuries":       "/api/sync/injuries",
     "variance":       "/api/sync/variance",
@@ -158,6 +159,7 @@ function Section({
 const QUICK_FIXES = [
   { label: "Sync PP Lines",    action: "pp-lines",      endpoint: "/api/sync/pp-lines" },
   { label: "Sync Odds",        action: "external-odds", endpoint: "/api/sync/external-odds" },
+  { label: "Rescore Props",    action: "prop-scores",   endpoint: "/api/sync/external-odds" },
   { label: "Sync Projections", action: "projections",   endpoint: "/api/sync/projections" },
   { label: "Sync Injuries",    action: "injuries",      endpoint: "/api/sync/injuries" },
   { label: "Compute Variance", action: "variance",      endpoint: "/api/sync/variance" },

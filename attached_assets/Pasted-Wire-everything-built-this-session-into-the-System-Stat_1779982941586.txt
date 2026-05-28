@@ -1,0 +1,116 @@
+Wire everything built this session into
+the System Status health check system.
+Every feature needs a health check entry.
+Every fixable item needs a fix button.
+
+FILE 1: artifacts/api-server/src/routes/system-health.ts
+
+In checkDatabaseHealth() add these checks
+to the returned array:
+
+// Prop Scoring Status
+const [scoringStats] = await db
+  .select({
+    total: count(),
+    lastScored: max(propScoresTable.scoredAt),
+  })
+  .from(propScoresTable)
+  .where(isNotNull(propScoresTable.actionTag));
+
+const playCount = await db
+  .select({ n: count() })
+  .from(propScoresTable)
+  .where(eq(propScoresTable.actionTag, 'PLAY'));
+
+const scoringAgeMins = scoringStats?.lastScored
+  ? (Date.now() - new Date(scoringStats.lastScored).getTime()) / 60000
+  : Infinity;
+
+{
+  name: "Prop Scoring (4-Gate)",
+  status: scoringAgeMins < 120 ? "green" 
+        : scoringAgeMins < 360 ? "amber" : "red",
+  detail: scoringStats?.total === 0
+    ? "No props scored yet — run sync"
+    : `${Number(playCount[0]?.n ?? 0)} PLAY · ` +
+      `${Number(scoringStats.total)} total · ` +
+      `scored ${fmtAge(scoringAgeMins)}`,
+  lastUpdated: scoringStats?.lastScored ?? null,
+  fixAction: "external-odds",
+}
+
+// Data Retention Status
+const oldestEvent = await db
+  .select({ oldest: min(lineMoveEventsTable.capturedAt) })
+  .from(lineMoveEventsTable);
+
+const oldestAgeDays = oldestEvent[0]?.oldest
+  ? (Date.now() - new Date(oldestEvent[0].oldest).getTime()) 
+    / (1000 * 60 * 60 * 24)
+  : 0;
+
+{
+  name: "Data Retention",
+  status: oldestAgeDays <= 8 ? "green" : "amber",
+  detail: oldestAgeDays === 0
+    ? "No line events yet"
+    : oldestAgeDays <= 8
+      ? "Cleanup running — data within 7-day window"
+      : `Oldest event ${Math.round(oldestAgeDays)}d ago — cleanup may not have run`,
+  lastUpdated: null,
+  fixAction: null,
+}
+
+// p99 Ceiling Coverage
+const p99Count = await db
+  .select({ n: count() })
+  .from(ourProjectionsTable)
+  .where(isNotNull(ourProjectionsTable.p99));
+
+const p99Total = await db
+  .select({ n: count() })
+  .from(ourProjectionsTable);
+
+const p99Coverage = Number(p99Total[0]?.n ?? 0) > 0
+  ? Math.round(Number(p99Count[0]?.n ?? 0) 
+    / Number(p99Total[0]?.n ?? 1) * 100)
+  : 0;
+
+{
+  name: "p99 Ceiling Coverage",
+  status: p99Coverage >= 80 ? "green" 
+        : p99Coverage >= 40 ? "amber" : "red",
+  detail: p99Coverage === 0
+    ? "No p99 values — run projections"
+    : `${p99Coverage}% of projections have p99 ceiling`,
+  lastUpdated: null,
+  fixAction: p99Coverage < 40 ? "projections" : null,
+}
+
+FILE 2: artifacts/prizepicks/src/pages/system-health.tsx
+
+In the triggerSync action map add:
+"external-odds": "/api/sync/external-odds",
+"prop-scores":   "/api/sync/external-odds",
+
+In the QUICK FIX buttons array add:
+{ 
+  label: "Rescore Props", 
+  action: "prop-scores",
+  endpoint: "/api/sync/external-odds" 
+},
+
+After all changes:
+Run pnpm run typecheck — must pass
+Run pnpm run build — must pass
+
+Then open System Status and click
+Run Health Check.
+
+Report:
+- Typecheck: PASS or FAIL
+- New health check items showing correctly
+- Prop Scoring showing PLAY count
+- Data Retention showing status
+- p99 Coverage showing percentage
+- Rescore Props button visible in Quick Fix
