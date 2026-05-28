@@ -11,6 +11,7 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useUserSettings } from "@/hooks/use-user-settings";
 import { useEntry } from "@/lib/entry-context";
 import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown, ShieldAlert, AlertTriangle, ClipboardCheck, BarChart2, Shuffle, Loader2 } from "lucide-react";
 import { Link } from "wouter";
@@ -157,6 +158,9 @@ export default function EntryBuilder() {
       .then(data => setPendingCount(Array.isArray(data) ? data.length : 0))
       .catch(() => {});
   }, []);
+
+  const { data: userSettings } = useUserSettings();
+  const dailyLossLimit = userSettings?.dailyLossLimit != null ? parseFloat(userSettings.dailyLossLimit as string) : null;
 
   const { data: todaySummary } = useQuery<{ todayStake: number; entryCount: number }>({
     queryKey: ["today-summary"],
@@ -896,21 +900,40 @@ export default function EntryBuilder() {
 
       {/* Bankroll exposure indicator */}
       {stakeNum > 0 && picks.length >= 2 && (() => {
-        const totalExposure = (todaySummary?.todayStake ?? 0) + stakeNum;
-        const isHigh = totalExposure > 200;
-        return (
-          <div className={`p-3 rounded-lg border flex items-center justify-between gap-3 text-xs font-mono shrink-0 ${
-            isHigh ? "bg-rose-950/30 border-rose-700/40 text-rose-300" : "bg-slate-900 border-slate-800 text-slate-400"
-          }`}>
-            <div className="flex items-center gap-2 flex-wrap">
-              <ShieldAlert className={`w-3.5 h-3.5 shrink-0 ${isHigh ? "text-rose-400" : "text-slate-500"}`} />
-              <span>Today's total exposure:</span>
-              <span className={`font-bold ${isHigh ? "text-rose-300" : "text-foreground"}`}>${totalExposure.toFixed(2)}</span>
-              <span className="text-slate-500">
-                ({todaySummary?.entryCount ?? 0} prior entr{todaySummary?.entryCount === 1 ? "y" : "ies"} + this ${stakeNum.toFixed(2)})
-              </span>
+        if (dailyLossLimit == null) {
+          return (
+            <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono text-slate-500 flex items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                Set a daily limit in Settings to enable bankroll tracking
+              </div>
+              <Link href="/settings" className="text-cyan-400 hover:text-cyan-300 shrink-0 font-mono">→ Settings</Link>
             </div>
-            {isHigh && <span className="font-bold text-rose-400 uppercase tracking-wide shrink-0">High Exposure</span>}
+          );
+        }
+        const todayTotal = todaySummary?.todayStake ?? 0;
+        const totalExposure = todayTotal + stakeNum;
+        const pct = (totalExposure / dailyLossLimit) * 100;
+        const tier = pct >= 80 ? "rose" : pct >= 50 ? "amber" : "green";
+        return (
+          <div className={`p-3 rounded-lg border text-xs font-mono shrink-0 ${
+            tier === "rose"  ? "bg-rose-950/30 border-rose-700/40" :
+            tier === "amber" ? "bg-amber-950/30 border-amber-700/40" :
+                               "bg-slate-900 border-slate-800"
+          }`}>
+            <div className="flex items-center gap-1.5 mb-2">
+              <ShieldAlert className={`w-3.5 h-3.5 shrink-0 ${tier === "rose" ? "text-rose-400" : tier === "amber" ? "text-amber-400" : "text-slate-500"}`} />
+              <span className={tier === "rose" ? "text-rose-300" : tier === "amber" ? "text-amber-300" : "text-slate-400"}>Bankroll Exposure</span>
+              {tier === "rose" && <span className="ml-auto text-rose-400 font-bold tracking-wide">Consider waiting — near daily limit</span>}
+            </div>
+            <div className="space-y-0.5 text-slate-400">
+              <div className="flex justify-between"><span>Today's entries</span><span className="text-foreground">${todayTotal.toFixed(2)} staked</span></div>
+              <div className="flex justify-between"><span>This entry</span><span className="text-foreground">${stakeNum.toFixed(2)}</span></div>
+              <div className={`flex justify-between font-bold border-t border-slate-700 pt-1 mt-1 ${tier === "rose" ? "text-rose-300" : tier === "amber" ? "text-amber-300" : "text-emerald-400"}`}>
+                <span>Daily limit ${dailyLossLimit.toFixed(2)}</span>
+                <span>{pct.toFixed(0)}% used</span>
+              </div>
+            </div>
           </div>
         );
       })()}

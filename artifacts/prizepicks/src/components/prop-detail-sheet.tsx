@@ -692,7 +692,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                       </div>
 
                       {/* Convergence signal */}
-                      {pOver != null && hitRates.last30.total >= 5 && (() => {
+                      {pOver != null && hitRates.last30.total >= 5 && op?.gamesUsed != null && op.gamesUsed >= 5 && (() => {
                         const modelPct = pOver;
                         const histPct  = hitRates.last30.rate;
                         const agree = (modelPct >= 55 && histPct >= 55) || (modelPct < 50 && histPct < 50);

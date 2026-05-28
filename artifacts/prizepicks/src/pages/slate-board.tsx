@@ -415,6 +415,34 @@ function MiniGameChart({ values, ppLine }: { values: number[]; ppLine: number })
   );
 }
 
+function HitRateChart({ values, ppLine }: { values: number[]; ppLine: number }) {
+  if (!values.length) return <span className="text-slate-600 text-xs font-mono">no data</span>;
+  const hits = values.filter(v => v > ppLine).length;
+  const rate = Math.round((hits / values.length) * 100);
+  const barColor = rate >= 60 ? "#34d399" : rate >= 50 ? "#fbbf24" : "#f87171";
+  const data = [{ rate, miss: 100 - rate }];
+  return (
+    <div className="flex flex-col gap-1 min-w-0">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-mono text-slate-500 uppercase">Hit Rate (L{values.length})</span>
+        <span className="text-[10px] font-mono font-bold" style={{ color: barColor }}>{rate}%</span>
+      </div>
+      <ResponsiveContainer width="100%" height={64}>
+        <BarChart data={data} layout="vertical" margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+          <XAxis type="number" domain={[0, 100]} tick={false} axisLine={false} />
+          <YAxis type="category" dataKey="name" hide />
+          <ReferenceLine x={60} stroke="#64748b" strokeDasharray="3 3" strokeWidth={1} />
+          <Bar dataKey="rate" stackId="a" fill={barColor} radius={[2, 0, 0, 2]} isAnimationActive={false} />
+          <Bar dataKey="miss" stackId="a" fill="#1e293b" radius={[0, 2, 2, 0]} isAnimationActive={false} />
+        </BarChart>
+      </ResponsiveContainer>
+      <div className="flex justify-between text-[9px] font-mono text-slate-600">
+        <span>0%</span><span className="text-slate-500">60% threshold</span><span>100%</span>
+      </div>
+    </div>
+  );
+}
+
 function DistributionChart({ mean, stdDev, ppLine }: { mean: number; stdDev: number; ppLine: number }) {
   const lo = mean - 3.2 * stdDev;
   const hi = mean + 3.2 * stdDev;
@@ -437,6 +465,18 @@ function DistributionChart({ mean, stdDev, ppLine }: { mean: number; stdDev: num
 
 export default function SlateBoard() {
   const { data: userSettings } = useUserSettings();
+  const { data: allEntriesForCount } = useQuery<{ length: number }>({
+    queryKey: ["entries-total-count"],
+    queryFn: async () => {
+      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+      const r = await fetch(`${base}/api/entries`);
+      const arr = (await r.json()) as unknown[];
+      return { length: Array.isArray(arr) ? arr.length : 0 };
+    },
+    staleTime: 60_000,
+  });
+  const totalEntries = allEntriesForCount?.length ?? 0;
+  const presetsUnlocked = totalEntries >= 30;
   const varianceEnabled = userSettings?.varianceIntelEnabled ?? false;
   const [tab, setTab] = useState<"player" | "team">("player");
   const [sport, setSport] = useState<string>("all");
@@ -892,7 +932,19 @@ export default function SlateBoard() {
             {/* Quick-filter preset toolbar */}
             <div className="hidden md:flex items-center gap-1.5 flex-wrap py-0.5">
               <span className="text-[10px] font-mono text-slate-600 uppercase tracking-wider">Quick:</span>
-              {DEFAULT_PRESETS.map(p => {
+              {!presetsUnlocked && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-[10px] font-mono text-slate-600 cursor-help italic">
+                      Presets unlock at 30 entries — {totalEntries}/30
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="font-mono text-xs max-w-xs">
+                    Available after 30 paper trades logged. Log entries in the Entry Builder to unlock.
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {presetsUnlocked && DEFAULT_PRESETS.map(p => {
                 const isActive = activePreset === p.label;
                 const getSaved = () => { try { return (JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>)[p.label] ?? null; } catch { return null; } };
                 return (
@@ -914,7 +966,7 @@ export default function SlateBoard() {
                   </button>
                 );
               })}
-              {activePreset === "My Style" && (
+              {presetsUnlocked && activePreset === "My Style" && (
                 <button
                   onClick={() => { try { const saved = JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>; saved["My Style"] = { sport, lineType: lineTypeFilter, minEdge, actionTag: actionTagFilter, sharpOnly }; localStorage.setItem(PRESET_LS_KEY, JSON.stringify(saved)); } catch {} }}
                   className="text-[10px] font-mono text-amber-400 hover:text-amber-300 px-1"
@@ -922,7 +974,7 @@ export default function SlateBoard() {
                   💾 save
                 </button>
               )}
-              {activePreset && (
+              {presetsUnlocked && activePreset && (
                 <button
                   onClick={() => { setSport("all"); setLineTypeFilter("all"); setMinEdge(""); setActionTagFilter("all"); setSharpOnly(false); setActivePreset(null); }}
                   className="text-[10px] font-mono text-slate-500 hover:text-rose-400 px-1"
@@ -1410,31 +1462,25 @@ export default function SlateBoard() {
                       {isExpanded && (
                         <TableRow className="border-slate-800 bg-slate-950/80">
                           <TableCell colSpan={100} className="p-4">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                              <MiniGameChart values={row.gameLogs ?? []} ppLine={row.lineValue} />
-                              {proj?.stdDev != null ? (
-                                <DistributionChart mean={proj.value} stdDev={proj.stdDev} ppLine={row.lineValue} />
-                              ) : (
-                                <div className="flex flex-col gap-1">
-                                  <span className="text-[10px] font-mono text-slate-500 uppercase">Distribution</span>
-                                  <span className="text-xs font-mono text-slate-600">No std dev data</span>
-                                </div>
-                              )}
-                              <div className="flex flex-col gap-2">
-                                <span className="text-[10px] font-mono text-slate-500 uppercase">Model Stats</span>
-                                {proj ? (
-                                  <div className="space-y-1 font-mono text-xs">
-                                    <div className="flex justify-between gap-4"><span className="text-slate-500">Projection</span><span className="text-cyan-400">{proj.value.toFixed(1)}</span></div>
-                                    <div className="flex justify-between gap-4"><span className="text-slate-500">P(Over)</span><span className={proj.pOver != null && proj.pOver >= 55 ? "text-emerald-400" : "text-slate-300"}>{proj.pOver != null ? `${proj.pOver.toFixed(1)}%` : "—"}</span></div>
-                                    <div className="flex justify-between gap-4"><span className="text-slate-500">Std Dev</span><span className="text-slate-300">{proj.stdDev != null ? proj.stdDev.toFixed(2) : "—"}</span></div>
-                                    <div className="flex justify-between gap-4"><span className="text-slate-500">DQ Score</span><span className="text-slate-300">{proj.dataQualityScore != null ? `${proj.dataQualityScore}/100` : "—"}</span></div>
-                                    <div className="flex justify-between gap-4"><span className="text-slate-500">Games</span><span className="text-slate-300">{proj.gamesUsed ?? "—"}</span></div>
-                                  </div>
+                            {proj?.gamesUsed != null && proj.gamesUsed < 5 ? (
+                              <div className="flex items-center gap-2 text-xs font-mono text-amber-400/70 bg-amber-950/10 border border-amber-800/20 rounded px-3 py-2">
+                                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                Charts unlock after 5+ games logged — only {proj.gamesUsed} game{proj.gamesUsed !== 1 ? "s" : ""} recorded for this prop
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <MiniGameChart values={row.gameLogs ?? []} ppLine={row.lineValue} />
+                                <HitRateChart values={row.gameLogs ?? []} ppLine={row.lineValue} />
+                                {proj?.stdDev != null ? (
+                                  <DistributionChart mean={proj.value} stdDev={proj.stdDev} ppLine={row.lineValue} />
                                 ) : (
-                                  <span className="text-xs font-mono text-slate-600">No projection data</span>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-[10px] font-mono text-slate-500 uppercase">Distribution</span>
+                                    <span className="text-xs font-mono text-slate-600">No std dev available</span>
+                                  </div>
                                 )}
                               </div>
-                            </div>
+                            )}
                           </TableCell>
                         </TableRow>
                       )}
