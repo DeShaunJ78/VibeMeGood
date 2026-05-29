@@ -687,25 +687,34 @@ export default function SlateBoard() {
       rows = rows.filter(r => r.sharpSignal === "sharp");
     }
 
-    // Deduplicate — keep best row per (playerId, statType)
-    // "Best" = highest finalScore, then highest pOver
-    const deduped = new Map<string, typeof rows[0]>();
+    // Deduplicate — one row per (playerId, statType)
+    // Pick tier closest to our projection.
+    // Falls back to highest finalScore if no projection exists.
+    const dedupMap = new Map<string, typeof rows[0]>();
     for (const r of rows) {
       const key = `${r.playerId}:${r.statType}`;
-      const existing = deduped.get(key);
-      if (!existing) {
-        deduped.set(key, r);
+      const prev = dedupMap.get(key);
+      if (!prev) {
+        dedupMap.set(key, r);
       } else {
-        const existScore = existing.ourProjection?.pOver ?? 0;
-        const newScore = r.ourProjection?.pOver ?? 0;
-        const existFinal = existing.finalScore ?? 0;
-        const newFinal = r.finalScore ?? 0;
-        if (newFinal > existFinal || (newFinal === existFinal && newScore > existScore)) {
-          deduped.set(key, r);
+        const projVal = r.ourProjection?.value ?? null;
+        if (projVal !== null) {
+          const prevDist = Math.abs((prev.lineValue ?? 0) - projVal);
+          const currDist = Math.abs((r.lineValue ?? 0) - projVal);
+          if (currDist < prevDist) {
+            dedupMap.set(key, r);
+          }
+        } else {
+          // No projection — keep highest finalScore
+          const prevScore = prev.finalScore ?? 0;
+          const currScore = r.finalScore ?? 0;
+          if (currScore > prevScore) {
+            dedupMap.set(key, r);
+          }
         }
       }
     }
-    rows = Array.from(deduped.values());
+    rows = Array.from(dedupMap.values());
 
     return [...rows].sort((a, b) => {
       let cmp = 0;
