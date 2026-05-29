@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 import {
   CheckCircle2, AlertTriangle, XCircle, RefreshCw, Zap,
   Database, Wifi, Activity, Clock, Play,
@@ -38,7 +39,7 @@ async function fetchHealth(): Promise<HealthData> {
   return res.json();
 }
 
-async function triggerSync(action: string): Promise<void> {
+async function triggerSync(action: string): Promise<Response | null> {
   const map: Record<string, string> = {
     "pp-lines":       "/api/sync/pp-lines",
     "external-odds":  "/api/sync/external-odds",
@@ -57,8 +58,8 @@ async function triggerSync(action: string): Promise<void> {
     "game-schedule-history":  "/api/sync/game-schedule-history",
   };
   const path = map[action];
-  if (!path) return;
-  await fetch(`${BASE}${path}`, { method: "POST" });
+  if (!path) return null;
+  return fetch(`${BASE}${path}`, { method: "POST" });
 }
 
 function StatusIcon({ status, size = 16 }: { status: CheckStatus; size?: number }) {
@@ -181,9 +182,10 @@ const QUICK_FIXES = [
 
 export default function SystemHealth() {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [fixing, setFixing] = useState<string | null>(null);
-  const [fixStatus, setFixStatus] = useState<Record<string, "running" | "done">>({});
+  const [fixStatus, setFixStatus] = useState<Record<string, "running" | "done" | "error">>({});
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data, isFetching, refetch, dataUpdatedAt } = useQuery<HealthData>({
@@ -207,12 +209,36 @@ export default function SystemHealth() {
   }, [autoRefresh, refetch]);
 
   const handleFix = async (action: string) => {
+    const label = QUICK_FIXES.find(f => f.action === action)?.label ?? action;
     setFixing(action);
     setFixStatus(s => ({ ...s, [action]: "running" }));
-    await triggerSync(action);
-    setFixStatus(s => ({ ...s, [action]: "done" }));
-    setFixing(null);
-    setTimeout(() => refetch(), 2000);
+    try {
+      const res = await triggerSync(action);
+      if (res && !res.ok) {
+        setFixStatus(s => ({ ...s, [action]: "error" }));
+        toast({
+          title: "Sync failed",
+          description: `${label} returned an error — check server logs`,
+          variant: "destructive",
+        });
+      } else {
+        setFixStatus(s => ({ ...s, [action]: "done" }));
+        toast({
+          title: "Sync complete",
+          description: `${label} finished successfully`,
+        });
+      }
+    } catch {
+      setFixStatus(s => ({ ...s, [action]: "error" }));
+      toast({
+        title: "Sync failed",
+        description: `${label} returned an error — check server logs`,
+        variant: "destructive",
+      });
+    } finally {
+      setFixing(null);
+      setTimeout(() => refetch(), 2000);
+    }
   };
 
   const overall = data?.overall;
@@ -294,7 +320,8 @@ export default function SystemHealth() {
                 className={cn(
                   "text-xs font-mono h-8 gap-1.5 border-border/50",
                   st === "running" && "opacity-60",
-                  st === "done" && "border-emerald-700/50 text-emerald-400",
+                  st === "done"    && "border-emerald-700/50 text-emerald-400",
+                  st === "error"   && "border-red-700/50 text-red-400",
                 )}
                 onClick={() => handleFix(f.action)}
                 disabled={!!fixing}
@@ -303,6 +330,8 @@ export default function SystemHealth() {
                   <><RefreshCw size={11} className="animate-spin" />{f.label}</>
                 ) : st === "done" ? (
                   <><CheckCircle2 size={11} />{f.label}</>
+                ) : st === "error" ? (
+                  <><XCircle size={11} />{f.label}</>
                 ) : (
                   <><Zap size={11} />{f.label}</>
                 )}
