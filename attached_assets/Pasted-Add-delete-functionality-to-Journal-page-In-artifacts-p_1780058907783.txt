@@ -1,0 +1,96 @@
+Add delete functionality to Journal page.
+
+In artifacts/prizepicks/src/pages/
+journal.tsx
+
+STEP 1 — Add delete handler function:
+
+const [deletingId, setDeletingId] =
+  useState<number | null>(null);
+const [confirmDeleteId, setConfirmDeleteId] =
+  useState<number | null>(null);
+
+async function handleDeleteEntry(
+  entryId: number
+) {
+  setDeletingId(entryId);
+  try {
+    const res = await fetch(
+      `/api/entries/${entryId}`,
+      { method: "DELETE" });
+    if (!res.ok) throw new Error(
+      "Delete failed");
+    toast({
+      title: "Entry deleted",
+      variant: "default" });
+    refetch(); // refresh journal list
+  } catch (e) {
+    toast({
+      title: "Failed to delete entry",
+      variant: "destructive" });
+  } finally {
+    setDeletingId(null);
+    setConfirmDeleteId(null);
+  }
+}
+
+STEP 2 — Add delete button to each
+entry row in the journal list.
+
+Find where each entry card/row renders.
+Add a trash icon button on the right:
+
+import { Trash2 } from "lucide-react";
+
+{confirmDeleteId === entry.id ? (
+  <div className="flex items-center
+    gap-1">
+    <button
+      onClick={() =>
+        handleDeleteEntry(entry.id)}
+      disabled={deletingId === entry.id}
+      className="text-xs text-rose-400
+        hover:text-rose-300 font-mono
+        border border-rose-800 rounded
+        px-2 py-0.5">
+      {deletingId === entry.id
+        ? "Deleting..." : "Confirm"}
+    </button>
+    <button
+      onClick={() =>
+        setConfirmDeleteId(null)}
+      className="text-xs text-slate-500
+        hover:text-slate-300 font-mono">
+      Cancel
+    </button>
+  </div>
+) : (
+  <button
+    onClick={() =>
+      setConfirmDeleteId(entry.id)}
+    className="text-slate-600
+      hover:text-rose-400
+      transition-colors">
+    <Trash2 className="w-4 h-4" />
+  </button>
+)}
+
+Two-step confirmation prevents
+accidental deletes.
+
+STEP 3 — Verify the backend route
+In routes/entries.ts confirm
+DELETE /entries/:id also deletes
+the associated picks.
+
+It should cascade:
+1. DELETE FROM entry_picks
+   WHERE entry_id = :id
+2. DELETE FROM entries
+   WHERE id = :id
+
+Check lines 300-310 and confirm
+both tables are cleared.
+
+Run pnpm run typecheck — must pass.
+Report PASS or FAIL.

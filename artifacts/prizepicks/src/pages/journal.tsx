@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X } from "lucide-react";
+import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
 const SPORTS = ["NFL", "NBA", "MLB", "NHL", "WNBA", "MMA", "PGA", "NASCAR", "SOCCER"];
@@ -256,6 +256,26 @@ function EntryRow({ entry }: { entry: any }) {
   const [explaining, setExplaining] = useState(false);
   const [explainText, setExplainText] = useState("");
   const abortRef = useRef<AbortController | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  async function handleDeleteEntry(entryId: number) {
+    setDeletingId(entryId);
+    try {
+      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+      const res = await fetch(`${base}/api/entries/${entryId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      toast({ title: "Entry deleted" });
+      await qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
+    } catch {
+      toast({ title: "Failed to delete entry", variant: "destructive" });
+    } finally {
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+    }
+  }
 
   const stake = Number(entry.stake);
   const payout = Number(entry.actualPayout ?? 0);
@@ -351,6 +371,32 @@ function EntryRow({ entry }: { entry: any }) {
             </span>
           )}
           <ResultBadge result={entry.result} />
+          <div onClick={e => e.stopPropagation()}>
+            {confirmDeleteId === entry.id ? (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleDeleteEntry(entry.id)}
+                  disabled={deletingId === entry.id}
+                  className="text-xs text-rose-400 hover:text-rose-300 font-mono border border-rose-800 rounded px-2 py-0.5"
+                >
+                  {deletingId === entry.id ? "Deleting…" : "Confirm"}
+                </button>
+                <button
+                  onClick={() => setConfirmDeleteId(null)}
+                  className="text-xs text-slate-500 hover:text-slate-300 font-mono"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDeleteId(entry.id)}
+                className="text-slate-600 hover:text-rose-400 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
