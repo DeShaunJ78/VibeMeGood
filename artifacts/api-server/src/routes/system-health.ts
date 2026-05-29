@@ -79,6 +79,14 @@ async function checkDataFreshness(): Promise<CheckResult[]> {
   const fmt = (d: Date | null) => d ? d.toISOString() : null;
   const fmtAge = (m: number) => m === Infinity ? "never" : m < 60 ? `${Math.round(m)}m ago` : `${(m / 60).toFixed(1)}h ago`;
 
+  const [extStats] = await db
+    .select({ n: count(), latest: max(externalLinesTable.pulledAt) })
+    .from(externalLinesTable);
+  const extN = Number(extStats?.n ?? 0);
+  const extAge = extStats?.latest
+    ? (Date.now() - new Date(extStats.latest).getTime()) / 3600000
+    : 999;
+
   return [
     {
       name: "PP Lines",
@@ -89,10 +97,12 @@ async function checkDataFreshness(): Promise<CheckResult[]> {
     },
     {
       name: "External Odds",
-      status: oddsMins < 30 ? "green" : oddsMins < 120 ? "amber" : "red",
-      detail: oddsMins === Infinity ? "Never synced" : `Last sync ${fmtAge(oddsMins)}`,
+      status: extN > 100 && extAge < 8 ? "green" : extN > 0 ? "amber" : "red",
+      detail: extN === 0
+        ? "No external odds — ensure DraftData is syncing"
+        : `${extN} lines · ${extAge.toFixed(1)}h ago · sourced from DraftData`,
       lastUpdated: fmt(oddsLast),
-      fixAction: "external-odds",
+      fixAction: extN === 0 ? "external-odds" : null,
     },
     {
       name: "Projections",
@@ -354,8 +364,12 @@ async function checkApiConnectivity(): Promise<CheckResult[]> {
         }, 4000);
         return {
           name: c.name,
-          status: res.ok ? "green" : "red",
-          detail: res.ok ? `HTTP ${res.status} OK` : `HTTP ${res.status} error`,
+          status: res.ok ? "green" : res.status === 429 ? "amber" : "red",
+          detail: res.ok
+            ? `HTTP ${res.status} OK`
+            : res.status === 429
+              ? "HTTP 429 — rate limited (transient)"
+              : `HTTP ${res.status} error`,
           lastUpdated: null,
           fixAction: null,
         };

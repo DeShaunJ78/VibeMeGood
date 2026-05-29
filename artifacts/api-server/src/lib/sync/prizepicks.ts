@@ -8,10 +8,22 @@ import { logger } from "../logger";
 
 const PP_BASE = process.env.PP_API_BASE || "https://api.prizepicks.com";
 
+async function fetchPP(url: string): Promise<Response> {
+  const delays = [0, 1000, 3000];
+  for (let i = 0; i < delays.length; i++) {
+    if (delays[i] > 0) await new Promise(r => setTimeout(r, delays[i]));
+    const res = await fetch(url, {
+      headers: { "User-Agent": "VibeMeGood/1.0", "Accept": "application/json" },
+    });
+    if (res.status !== 429) return res;
+    logger.warn({ attempt: i + 1 }, "PP API 429 — retrying");
+  }
+  throw new Error("PP API rate limited after 3 attempts");
+}
+
 export async function syncPpLines(): Promise<number> {
-  const res = await fetch(
+  const res = await fetchPP(
     `${PP_BASE}/projections?per_page=500&single_stat=true&include=new_player,league`,
-    { headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" } },
   );
   if (!res.ok) throw new Error(`PrizePicks API error: ${res.status}`);
   const data = await res.json() as {

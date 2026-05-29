@@ -1,0 +1,100 @@
+Three fixes for System Status false alarms.
+
+FIX 1 — External Odds health check
+The external odds cron is intentionally
+disabled. VibeMeGood reads odds from
+DraftData's shared database instead.
+The health check incorrectly shows RED.
+
+In artifacts/api-server/src/routes/
+system-health.ts find the External Odds
+freshness check.
+
+Replace its status logic with a direct
+count from externalLinesTable:
+
+const [extStats] = await db
+  .select({
+    n: count(),
+    latest: max(
+      externalLinesTable.pulledAt)
+  })
+  .from(externalLinesTable);
+
+const extN = Number(extStats?.n ?? 0);
+const extAge = extStats?.latest
+  ? (Date.now() - new Date(
+      extStats.latest).getTime())
+    / 3600000
+  : 999;
+
+status: extN > 100 && extAge < 8
+  ? "green"
+  : extN > 0
+    ? "amber"
+    : "red",
+
+detail: extN === 0
+  ? "No external odds — ensure DraftData is syncing"
+  : `${extN} lines · ${extAge.toFixed(1)}h ago · sourced from DraftData`,
+
+fixAction: extN === 0
+  ? "external-odds" : null,
+
+FIX 2 — PrizePicks 429 retry logic
+In artifacts/api-server/src/lib/sync/
+prizepicks.ts
+
+Add retry function before syncPpLines:
+
+async function fetchPP(
+  url: string
+): Promise<Response> {
+  const delays = [0, 1000, 3000];
+  for (let i = 0; i < delays.length;
+    i++) {
+    if (delays[i] > 0)
+      await new Promise(r =>
+        setTimeout(r, delays[i]));
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "VibeMeGood/1.0",
+        "Accept": "application/json",
+      }
+    });
+    if (res.status !== 429) return res;
+    logger.warn(
+      { attempt: i + 1 },
+      "PP API 429 — retrying"
+    );
+  }
+  throw new Error(
+    "PP API rate limited after 3 attempts"
+  );
+}
+
+Replace the existing fetch(PP_BASE...)
+call with fetchPP(PP_BASE...).
+
+FIX 3 — PrizePicks 429 health check
+In artifacts/api-server/src/routes/
+system-health.ts
+
+Find the checkApiConnectivity function.
+Current logic:
+status: res.ok ? "green" : "red",
+
+Replace with:
+status: res.ok
+  ? "green"
+  : res.status === 429
+    ? "amber"
+    : "red",
+detail: res.ok
+  ? `HTTP ${res.status} OK`
+  : res.status === 429
+    ? "HTTP 429 — rate limited (transient)"
+    : `HTTP ${res.status} error`,
+
+Run pnpm run typecheck — must pass.
+Report PASS or FAIL.
