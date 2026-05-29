@@ -51,9 +51,10 @@ async function triggerSync(action: string): Promise<void> {
     "nfl-advanced":   "/api/admin/sync/nfl-advanced",
     "calibration":      "/api/sync/calibration",
     "historical-stats": "/api/sync/historical-stats",
-    "backfill-game-ids":  "/api/sync/backfill-game-ids",
-    "matchup-history":    "/api/sync/matchup-history",
-    "game-logs":          "/api/sync/game-logs",
+    "backfill-game-ids":      "/api/sync/backfill-game-ids",
+    "matchup-history":        "/api/sync/matchup-history",
+    "game-logs":              "/api/sync/game-logs",
+    "game-schedule-history":  "/api/sync/game-schedule-history",
   };
   const path = map[action];
   if (!path) return;
@@ -174,7 +175,8 @@ const QUICK_FIXES = [
   { label: "Backfill History", action: "historical-stats", endpoint: "/api/sync/historical-stats" },
   { label: "Backfill Game IDs", action: "backfill-game-ids", endpoint: "/api/sync/backfill-game-ids" },
   { label: "Compute Matchups",  action: "matchup-history",   endpoint: "/api/sync/matchup-history" },
-  { label: "Sync Game Logs",    action: "game-logs",         endpoint: "/api/sync/game-logs" },
+  { label: "Sync Game Logs",       action: "game-logs",            endpoint: "/api/sync/game-logs" },
+  { label: "Sync Schedule History", action: "game-schedule-history", endpoint: "/api/sync/game-schedule-history" },
 ];
 
 export default function SystemHealth() {

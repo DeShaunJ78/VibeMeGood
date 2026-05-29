@@ -1,0 +1,130 @@
+Three fixes needed. Do in order.
+
+FIX 1 — Add date range to games.ts
+and add game-schedule-history route.
+
+In lib/sync/games.ts update
+syncGameSchedule to accept optional
+fromDate and toDate:
+
+export async function syncGameSchedule(
+  options?: {
+    fromDate?: Date;
+    toDate?: Date;
+  }
+): Promise<number>
+
+When fromDate/toDate provided loop
+through each date in range and fetch:
+https://site.api.espn.com/apis/site/v2/
+sports/basketball/nba/scoreboard
+?dates=YYYYMMDD
+
+Where YYYYMMDD is each date in range.
+
+Do this for all 5 sports.
+Add 100ms delay between requests
+to avoid rate limiting.
+
+When no options provided keep existing
+behavior — fetch today only.
+
+Add route to sync.ts:
+router.post("/sync/game-schedule-history",
+  async (req, res) => {
+    const {
+      fromDate = "2025-10-01",
+      toDate = new Date()
+        .toISOString().slice(0, 10),
+    } = (req.body ?? {}) as {
+      fromDate?: string;
+      toDate?: string;
+    };
+    res.json({ status: "started",
+      fromDate, toDate });
+    try {
+      const n = await syncGameSchedule({
+        fromDate: new Date(fromDate),
+        toDate: new Date(toDate),
+      });
+      logger.info({ n },
+        "Game schedule history complete");
+    } catch (e) {
+      logger.error({ err: e },
+        "Game schedule history failed");
+    }
+  }
+);
+
+Add to system-health.tsx triggerSync:
+"game-schedule-history":
+  "/api/sync/game-schedule-history"
+
+Add Quick Fix button:
+{
+  label: "Sync Schedule History",
+  action: "game-schedule-history",
+  endpoint:
+    "/api/sync/game-schedule-history"
+}
+
+FIX 2 — Sport normalization in
+backfill-game-ids route.
+
+In the backfill-game-ids route
+after fetching player.sport add:
+
+const normalizeSport = (s: string) => {
+  if (s.startsWith("MLB")) return "MLB";
+  if (s.startsWith("NBA")) return "NBA";
+  if (s.startsWith("NHL")) return "NHL";
+  if (s.startsWith("NFL")) return "NFL";
+  if (s.startsWith("WNBA")) return "WNBA";
+  return s;
+};
+
+const sportKey = normalizeSport(
+  player.sport ?? "");
+
+Replace eq(gamesTable.sport, player.sport!)
+with eq(gamesTable.sport, sportKey)
+
+FIX 3 — Add nightly game log sync
+to cron.ts.
+
+In lib/cron.ts add:
+
+import { backfillHistoricalStats }
+  from "./sync/historical-stats";
+
+// Nightly game log sync at 2 AM
+// Pulls last 2 days of results
+cron.schedule("0 2 * * *", () =>
+  logPull("espn", "game-logs", async () => {
+    const r = await backfillHistoricalStats(
+      { nba: true, mlb: true,
+        nhl: true, nfl: false });
+    return r.total;
+  })
+);
+
+After all 3 fixes:
+Run pnpm run typecheck — must pass
+
+Then run:
+POST /api/sync/game-schedule-history
+Body: {
+  "fromDate": "2025-10-01",
+  "toDate": "2026-05-28"
+}
+
+This fills gamesTable with the full
+2025-26 season for all sports.
+Report how many games added.
+
+Then run:
+POST /api/sync/backfill-game-ids
+Report how many PP lines now have
+gameId set.
+
+Report all results.

@@ -113,6 +113,15 @@ router.post("/sync/backfill-game-ids", async (req, res) => {
         isNull(ppLinesTable.gameId),
       ));
 
+    const normalizeSport = (s: string) => {
+      if (s.startsWith("MLB"))  return "MLB";
+      if (s.startsWith("NBA"))  return "NBA";
+      if (s.startsWith("NHL"))  return "NHL";
+      if (s.startsWith("NFL"))  return "NFL";
+      if (s.startsWith("WNBA")) return "WNBA";
+      return s;
+    };
+
     let updated = 0;
     for (const line of lines) {
       try {
@@ -124,6 +133,8 @@ router.post("/sync/backfill-game-ids", async (req, res) => {
 
         if (!player?.teamId) continue;
 
+        const sportKey = normalizeSport(player.sport ?? "");
+
         const dayStart = new Date(line.openedAt!);
         dayStart.setHours(0, 0, 0, 0);
         const dayEnd = new Date(line.openedAt!);
@@ -133,7 +144,7 @@ router.post("/sync/backfill-game-ids", async (req, res) => {
           .select({ id: gamesTable.id })
           .from(gamesTable)
           .where(and(
-            eq(gamesTable.sport, player.sport!),
+            eq(gamesTable.sport, sportKey),
             gte(gamesTable.startTime, dayStart),
             lte(gamesTable.startTime, dayEnd),
             or(
@@ -198,19 +209,13 @@ router.post("/sync/game-schedule", async (req, res) => {
 });
 
 router.post("/sync/game-schedule-history", async (req, res) => {
-  const { fromDate: fromStr, toDate: toStr } =
-    (req.body ?? {}) as { fromDate?: string; toDate?: string };
+  const {
+    fromDate: fromStr = "2025-10-01",
+    toDate:   toStr   = new Date().toISOString().slice(0, 10),
+  } = (req.body ?? {}) as { fromDate?: string; toDate?: string };
 
-  if (!fromStr || !toStr) {
-    res.status(400).json({ error: "fromDate and toDate required (YYYY-MM-DD)" });
-    return;
-  }
   const fromDate = new Date(`${fromStr}T12:00:00Z`);
   const toDate   = new Date(`${toStr}T12:00:00Z`);
-  if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
-    res.status(400).json({ error: "Invalid date — use YYYY-MM-DD" });
-    return;
-  }
 
   res.json({ status: "started", fromDate: fromStr, toDate: toStr });
 

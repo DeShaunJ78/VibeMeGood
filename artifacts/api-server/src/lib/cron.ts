@@ -17,6 +17,7 @@ import { syncProjections } from "./projections/sync";
 import { syncNflAdvancedMetrics } from "./sync/nfl-advanced";
 import { syncGameSchedule } from "./sync/games";
 import { computeMatchupHistory } from "./sync/matchup-history";
+import { backfillHistoricalStats } from "./sync/historical-stats";
 
 export let preLockActive = false;
 export function isPreLockActive(): boolean { return preLockActive; }
@@ -162,6 +163,14 @@ export function startCronJobs() {
   // NFL advanced metrics every Tuesday at 6 AM (after MNF finalizes)
   cron.schedule("0 6 * * 2", () =>
     logPull("nflverse", "nfl-advanced-metrics", syncNflAdvancedMetrics)
+  );
+
+  // Nightly game log sync at 2 AM — pulls current season results for NBA/MLB/NHL
+  cron.schedule("0 2 * * *", () =>
+    logPull("espn", "game-logs", async () => {
+      const r = await backfillHistoricalStats({ nba: true, mlb: true, nhl: true, nfl: false });
+      return r.total;
+    })
   );
 
   // Nightly matchup history rebuild at 4 AM (after game logs are updated)

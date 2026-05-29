@@ -161,7 +161,7 @@ export async function syncGameSchedule(options?: {
       }
 
       current.setUTCDate(current.getUTCDate() + 1);
-      await sleep(60); // gentle cadence — ~60 ms between dates
+      await sleep(100); // ~100 ms between dates to avoid rate limiting
     }
 
     logger.info({ total, dateCount }, "Game schedule history sync complete");
