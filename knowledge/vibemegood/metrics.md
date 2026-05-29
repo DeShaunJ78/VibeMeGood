@@ -132,3 +132,28 @@ Why it matters: P(Over) tells you the win probability, but VOR tells you the siz
 Best use: Sort the Slate Board by VOR to find structurally mispriced props. Combine high VOR with high P(Over) for top-quality picks.
 
 VOR is null for prior-only projections (insufficient game data) since there is no reliable σ estimate.
+
+## VOR — Value Over Replacement
+
+VOR = (OurProjection - PP Line) / HistoricalStdDev
+
+Z-score of the projection vs the line.
+Above 0.5 = meaningful edge.
+Above 1.0 = strong edge.
+
+Color coding on Slate Board:
++0.5 or higher = emerald green
+0 to 0.5 = slate gray
+Below 0 = rose red
+
+## Game Log Confidence Levels
+
+LOW confidence: fewer than 5 games used
+MEDIUM confidence: 5-20 games used
+HIGH confidence: 20+ games used
+
+LOW SAMPLE calibration badge: fewer than 30 calibration records for this stat type. PLAY tag suppressed until 30+ records exist.
+
+## Stale Odds Gate
+
+If external odds are older than 4 hours the True Edge column is hidden and an amber banner appears on Slate Board. Do not act on hidden True Edge. Click Sync Odds in System Status to refresh.

@@ -1,0 +1,256 @@
+Three knowledge base updates needed.
+No typecheck required — markdown only.
+
+TASK 1 — Append to knowledge/vibemegood/
+overview.md at the very end:
+
+## Data Infrastructure
+
+VibeMeGood is backed by 1,192,538
+historical game log records across
+four sports:
+
+NBA: 77,248 records
+- 3 seasons (2023-24 through 2025-26)
+- 11 stat types per game entry
+- Source: ESPN scoreboard API
+
+MLB: approximately 900,000 records
+- 3 seasons (2023, 2024, 2025)
+- 8 batter + 4 pitcher stat types
+- Source: statsapi.mlb.com
+
+NHL: 139,159 records
+- 3 seasons (2023-24 through 2025-26)
+- 5 stat types per game entry
+- Source: api-web.nhle.com
+
+NFL: 72,932 records
+- 2 seasons (2023, 2024)
+- 7 stat types per entry
+- Source: nflverse GitHub CSVs
+- 2025 season auto-populates when
+  nflverse publishes it
+
+## Nightly Data Pipeline
+
+2:00 AM — Game log sync (NBA/MLB/NHL)
+3:00 AM — Data retention cleanup
+4:00 AM — Matchup history rebuild
+6:00 AM — Projections computed
+6:30 AM — Variance scores computed
+6:35 AM — Fatigue data synced
+7:00 AM — FantasyPros scraper runs
+Every 10 min — PP lines synced
+Every 30 min — Game schedule updated
+Every minute — Pre-lock check
+
+## Ensemble Blending
+
+When calibration records reach 100+
+the projection engine blends:
+- 30% blend at 30-99 records
+- 70% blend at 100+ records
+
+Blend uses your actual hit rates per
+stat type weighted against the model
+base projection.
+
+## Game Schedule Linking
+
+PP lines are linked to ESPN game
+schedule entries via gameId. Enables:
+- Pre-lock scraper (fires 2h before tip)
+- Calibration job matching lines to
+  outcomes
+- Accurate game time display
+
+Sport normalization maps PP variants:
+MLBLIVE → MLB
+NBA1Q → NBA
+NHL1P → NHL
+WNBA1H → WNBA
+
+TASK 2 — Append to knowledge/vibemegood/
+metrics.md at the very end:
+
+## VOR — Value Over Replacement
+
+VOR = (OurProjection - PP Line)
+  / HistoricalStdDev
+
+Z-score of the projection vs the line.
+Above 0.5 = meaningful edge.
+Above 1.0 = strong edge.
+
+Color coding on Slate Board:
++0.5 or higher = emerald green
+0 to 0.5 = slate gray
+Below 0 = rose red
+
+## Game Log Confidence Levels
+
+LOW confidence: fewer than 5 games used
+MEDIUM confidence: 5-20 games used
+HIGH confidence: 20+ games used
+
+LOW SAMPLE calibration badge: fewer
+than 30 calibration records for this
+stat type. PLAY tag suppressed until
+30+ records exist.
+
+## Stale Odds Gate
+
+If external odds are older than 4 hours
+the True Edge column is hidden and an
+amber banner appears on Slate Board.
+Do not act on hidden True Edge.
+Click Sync Odds in System Status to
+refresh.
+
+TASK 3 — Create new file:
+knowledge/shared/daily-flowchart.md
+
+File contents:
+
+# VibeMeGood — Daily Operating Flowchart
+
+## MORNING ROUTINE (7:00–9:00 AM)
+
+### Step 1 — System Status Check
+Open: Settings and Data Health
+Click: Run Health Check
+
+All items must be GREEN before proceeding.
+
+RED items — fix in this order:
+1. Click Sync PP Lines → wait 30s
+2. Click Sync Odds → wait 30s
+3. Click Sync Projections → wait 60s
+4. Click Rescore Props → wait 30s
+5. Click Sync Injuries → wait 30s
+
+If External Odds shows AMBER:
+→ Normal. Odds flow from DraftData.
+→ Open DraftData and run Ingest Odds.
+
+If PrizePicks API shows AMBER (429):
+→ Normal rate limiting. Wait 10 minutes.
+→ Retries automatically.
+
+### Step 2 — Run Quick Syncs
+Click in order:
+1. Sync Game Logs
+2. Backfill Game IDs
+3. Rescore Props
+
+### Step 3 — Review Injury News
+Open: Injuries and News
+Flag any OUT or GTD players.
+Remove from consideration.
+
+### Step 4 — Slate Board Review
+Open: Slate Board
+Filter: Sport (NBA, MLB, etc.)
+Sort: Overall Score descending
+
+Look for:
+- PLAY tags (overall >= 75, edge >= 60)
+- WATCH tags with P(Over) > 58%
+- VOR above 0.5
+
+Avoid:
+- Prior-only projections
+- LOW confidence badges
+- LOW SAMPLE calibration badge
+- B2B players with high fatigue
+- High blowout risk
+
+## PRE-LOCK ROUTINE (60-30 min before)
+
+### Step 5 — Final Line Check
+Verify on Slate Board:
+- Lines have not moved significantly
+- True Edge still showing (not hidden)
+- No late injury news
+
+### Step 6 — Build Entry
+Open: Entry Builder
+
+Add 2-3 picks (Power) or 3-5 (Flex).
+For each pick set MORE or LESS.
+Check P(Hit) per leg.
+Check Entry EV at bottom.
+
+Entry Rules:
+- Each leg P(Over) above break-even
+  Power 2: above 50%
+  Power 3: above 57.7%
+  Flex 3: above 52%
+- No B2B players
+- No HIGH blowout risk
+- EV indicator green or amber
+- No more than 1 player per team
+- LOG ENTRY before games lock
+
+## EVENING ROUTINE (after games end)
+
+### Step 7 — Mark Results
+Open: Journal
+Click each entry.
+Mark each pick HIT or MISS.
+
+### Step 8 — Run Nightly Syncs
+Click in order:
+1. Sync Game Logs
+2. Backfill Game IDs
+3. Run Calibration (limit 5000)
+
+### Step 9 — Review CLV
+Open: Journal
+Check CLV column on settled picks.
+Positive CLV = beat the closing line.
+Target: positive CLV average over
+30+ picks.
+
+## WEEKLY REVIEW (every Sunday)
+
+Open: Review Dashboard
+Check:
+- Hit Rate by sport and stat type
+- CLV trend (should be positive)
+- Entry P&L curve
+- Bankroll vs starting balance
+
+## GATING STATUS
+
+Feature — Unlocks When:
+PLAY tags — 30+ calibration records
+Preset filters — 30+ entries logged
+Portfolio optimizer — 30+ entries logged
+Ensemble blending — 100+ calibration
+Convergence signal — 5+ games + 5+ hits
+Streak badges — 3+ consecutive games
+Hit rate windows — 5+ games per window
+
+## DAILY CHECKLIST
+
+Morning:
+- Health check all GREEN
+- Sync Game Logs
+- Backfill Game IDs
+- Rescore Props
+- Check injuries
+
+Pre-lock:
+- Review Slate Board PLAY and WATCH
+- Verify True Edge not stale
+- Check late injury news
+- Build and log entry
+
+Evening:
+- Mark results in Journal
+- Run Calibration
+- Note CLV
+
+Confirm all three files saved.
