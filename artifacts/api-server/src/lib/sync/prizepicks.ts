@@ -23,7 +23,7 @@ async function fetchPP(url: string): Promise<Response> {
 
 export async function syncPpLines(): Promise<number> {
   const res = await fetchPP(
-    `${PP_BASE}/projections?per_page=500&single_stat=true&include=new_player,league`,
+    `${PP_BASE}/projections?per_page=25000&single_stat=true&include=new_player,league`,
   );
   if (!res.ok) throw new Error(`PrizePicks API error: ${res.status}`);
   const data = await res.json() as {
