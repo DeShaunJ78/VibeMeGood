@@ -299,8 +299,10 @@ router.patch("/entries/:id", async (req, res): Promise<void> => {
 
 router.delete("/entries/:id", async (req, res) => {
   try {
-    await db.delete(entryPicksTable).where(eq(entryPicksTable.entryId, Number(req.params.id)));
-    await db.delete(entriesTable).where(eq(entriesTable.id, Number(req.params.id)));
+    const id = Number(req.params.id);
+    await db.delete(behavioralLogsTable).where(eq(behavioralLogsTable.entryId, id));
+    await db.delete(entryPicksTable).where(eq(entryPicksTable.entryId, id));
+    await db.delete(entriesTable).where(eq(entriesTable.id, id));
     res.status(204).send();
   } catch (err) {
     req.log.error(err);
