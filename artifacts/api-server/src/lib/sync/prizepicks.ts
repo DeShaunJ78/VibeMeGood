@@ -121,49 +121,52 @@ export async function syncPpLines(): Promise<number> {
         gameId = matchingGame?.id ?? null;
       }
 
-      // Check for existing active line
-      const [existing] = await db.select().from(ppLinesTable)
+      // Upsert on (playerId, statType, lineValue, lineType)
+      const [existing] = await db
+        .select()
+        .from(ppLinesTable)
         .where(and(
           eq(ppLinesTable.playerId, player.id),
           eq(ppLinesTable.statType, statType),
-          eq(ppLinesTable.isActive, true),
-        )).limit(1);
+          eq(ppLinesTable.lineValue, lineValue.toString()),
+          eq(ppLinesTable.lineType, lineType),
+        ))
+        .limit(1);
 
       if (existing) {
-        if (Number(existing.lineValue) !== lineValue || existing.lineType !== lineType) {
-          await db.insert(ppLineHistoryTable).values({
-            ppLineId: existing.id,
-            lineValue: Number(existing.lineValue).toString(),
-            lineType: existing.lineType,
+        // Row exists — update timestamps and gameId only
+        await db.update(ppLinesTable)
+          .set({
+            isActive: true,
+            lastSyncedAt: new Date(),
+            updatedAt: new Date(),
+            ...(gameId ? { gameId } : {}),
+          })
+          .where(eq(ppLinesTable.id, existing.id));
+      } else {
+        // New tier — insert fresh row
+        const [newLine] = await db
+          .insert(ppLinesTable)
+          .values({
+            playerId: player.id,
+            statType,
+            lineValue: lineValue.toString(),
+            lineType,
+            gameId,
+            directionalityType: "over_under",
+            isActive: true,
+            openedAt: new Date(),
+            lastSyncedAt: new Date(),
+          })
+          .returning();
+
+        await db.insert(ppLineHistoryTable)
+          .values({
+            ppLineId: newLine.id,
+            lineValue: lineValue.toString(),
+            lineType,
             capturedAt: new Date(),
           });
-          await db.update(ppLinesTable)
-            .set({ lineValue: lineValue.toString(), lineType, gameId, lastSyncedAt: new Date(), updatedAt: new Date() })
-            .where(eq(ppLinesTable.id, existing.id));
-        } else {
-          // Line unchanged — stamp lastSyncedAt and update gameId if newly resolved
-          await db.update(ppLinesTable)
-            .set({ lastSyncedAt: new Date(), ...(gameId ? { gameId } : {}) })
-            .where(eq(ppLinesTable.id, existing.id));
-        }
-      } else {
-        const [newLine] = await db.insert(ppLinesTable).values({
-          playerId: player.id,
-          statType,
-          lineValue: lineValue.toString(),
-          lineType,
-          gameId,
-          directionalityType: "over_under",
-          isActive: true,
-          openedAt: new Date(),
-          lastSyncedAt: new Date(),
-        }).returning();
-        await db.insert(ppLineHistoryTable).values({
-          ppLineId: newLine.id,
-          lineValue: lineValue.toString(),
-          lineType,
-          capturedAt: new Date(),
-        });
 
         if (lineType === "goblin") {
           broadcastNewGoblin(playerName, statType, lineValue, sport);

@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, numeric, text, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, numeric, text, boolean, timestamp, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -20,7 +20,9 @@ export const ppLinesTable = pgTable("pp_lines", {
   sourceSnapshotId: integer("source_snapshot_id"),
   lastSyncedAt: timestamp("last_synced_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => [
+  uniqueIndex("pp_lines_unique").on(t.playerId, t.statType, t.lineValue, t.lineType),
+]);
 
 export const insertPpLineSchema = createInsertSchema(ppLinesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertPpLine = z.infer<typeof insertPpLineSchema>;

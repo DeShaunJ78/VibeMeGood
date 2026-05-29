@@ -1,0 +1,107 @@
+Implement the fix. Two changes only.
+
+CHANGE 1 — Add unique index to schema
+In lib/db/src/schema/pp-lines.ts
+
+Add uniqueIndex to the table definition:
+
+uniqueIndex("pp_lines_unique").on(
+  t.playerId,
+  t.statType,
+  t.lineValue,
+  t.lineType
+)
+
+Run pnpm --filter @workspace/db run push
+to apply to the database.
+
+CHANGE 2 — Fix sync upsert logic
+In artifacts/api-server/src/lib/sync/
+prizepicks.ts
+
+Replace the existing/upsert block
+(the section that does LIMIT 1 select
+then update or insert) with:
+
+// Upsert on (playerId, statType,
+// lineValue, lineType)
+const [existing] = await db
+  .select()
+  .from(ppLinesTable)
+  .where(and(
+    eq(ppLinesTable.playerId, player.id),
+    eq(ppLinesTable.statType, statType),
+    eq(ppLinesTable.lineValue,
+      lineValue.toString()),
+    eq(ppLinesTable.lineType, lineType),
+  ))
+  .limit(1);
+
+if (existing) {
+  // Row exists — update timestamps
+  // and gameId only
+  await db.update(ppLinesTable)
+    .set({
+      isActive: true,
+      lastSyncedAt: new Date(),
+      updatedAt: new Date(),
+      ...(gameId ? { gameId } : {}),
+    })
+    .where(eq(ppLinesTable.id,
+      existing.id));
+} else {
+  // New tier — insert fresh row
+  const [newLine] = await db
+    .insert(ppLinesTable)
+    .values({
+      playerId: player.id,
+      statType,
+      lineValue: lineValue.toString(),
+      lineType,
+      gameId,
+      directionalityType: "over_under",
+      isActive: true,
+      openedAt: new Date(),
+      lastSyncedAt: new Date(),
+    })
+    .returning();
+
+  await db.insert(ppLineHistoryTable)
+    .values({
+      ppLineId: newLine.id,
+      lineValue: lineValue.toString(),
+      lineType,
+      capturedAt: new Date(),
+    });
+
+  if (lineType === "goblin") {
+    broadcastNewGoblin(
+      playerName, statType,
+      lineValue, sport);
+  }
+}
+
+Note: remove the ppLineHistoryTable
+insert from the update path since
+line value is not changing — we are
+matching on line_value now so an
+existing row means same value already.
+
+After both changes:
+Run pnpm run typecheck — must pass
+Run pnpm --filter @workspace/db run push
+Restart server
+Run POST /api/sync/pp-lines
+
+Then verify:
+SELECT line_value, line_type,
+  is_active, last_synced_at
+FROM pp_lines pl
+JOIN players p ON p.id = pl.player_id
+WHERE p.full_name = 'Chet Holmgren'
+AND pl.is_active = true
+AND pl.stat_type = 'Points'
+ORDER BY line_value DESC;
+
+13.5 must be present.
+Report all rows.
