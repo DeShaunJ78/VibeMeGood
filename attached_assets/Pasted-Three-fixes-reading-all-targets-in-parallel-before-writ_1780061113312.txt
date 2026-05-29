@@ -1,0 +1,46 @@
+Three fixes — reading all targets in parallel before writing:
+
+
+4 actions
+Patterns not found — searching more broadly across all artifacts:
+
+
+6 actions
+The checks don't exist yet — need to find externalLinesTable and any prizepicks sync file before writing:
+
+
+4 actions
+externalLinesTable and prizepicks.ts don't exist yet — checking what's in the sync dir and DB schema before deciding how to proceed:
+
+
+3 actions
+The three prerequisites referenced in the spec don't exist in this codebase:
+
+What spec refers to	Status in this project
+externalLinesTable	Not in DB schema — no such table
+artifacts/api-server/src/lib/sync/prizepicks.ts	File doesn't exist
+"External Odds freshness check" in system-health.ts	Check doesn't exist
+"PrizePicks API connectivity check" in system-health.ts	Check doesn't exist
+The spec mentions VibeMeGood reading odds from DraftData's shared database — that's a separate app not present in this workspace. The health checks and PrizePicks sync logic described belong to VibeMeGood, not DraftData.
+
+A few ways to interpret what you want:
+
+You have a VibeMeGood repo elsewhere — these three fixes go there, not here. They can't be applied here because the table and file they target don't exist.
+
+VibeMeGood should live in this same workspace — I'd create it as a new artifact alongside DraftData, add externalLinesTable to the shared DB schema, create the PrizePicks sync file, and add the health checks.
+
+These checks should be added to DraftData's system-health.ts anyway (as new checks, not replacements) — I'd create the externalLinesTable, create prizepicks.ts in the api-server sync lib, and add the two new health check functions.
+
+
+Worked for 1 minute
+
+Scroll to latest
+Agent has a question for you
+Which of these is closest to what you need?
+
+
+These fixes are for a VibeMeGood app in a different repo — you just sent them to the wrong project
+
+VibeMeGood should be added to this workspace — set it up and apply the fixes
+
+Add the missing table + prizepicks sync file to DraftData and wire up the health checks here
