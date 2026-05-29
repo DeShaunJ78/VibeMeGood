@@ -686,6 +686,27 @@ export default function SlateBoard() {
     if (sharpOnly) {
       rows = rows.filter(r => r.sharpSignal === "sharp");
     }
+
+    // Deduplicate — keep best row per (playerId, statType)
+    // "Best" = highest finalScore, then highest pOver
+    const deduped = new Map<string, typeof rows[0]>();
+    for (const r of rows) {
+      const key = `${r.playerId}:${r.statType}`;
+      const existing = deduped.get(key);
+      if (!existing) {
+        deduped.set(key, r);
+      } else {
+        const existScore = existing.ourProjection?.pOver ?? 0;
+        const newScore = r.ourProjection?.pOver ?? 0;
+        const existFinal = existing.finalScore ?? 0;
+        const newFinal = r.finalScore ?? 0;
+        if (newFinal > existFinal || (newFinal === existFinal && newScore > existScore)) {
+          deduped.set(key, r);
+        }
+      }
+    }
+    rows = Array.from(deduped.values());
+
     return [...rows].sort((a, b) => {
       let cmp = 0;
       switch (sortCol) {
