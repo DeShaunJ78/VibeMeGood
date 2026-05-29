@@ -95,12 +95,28 @@ export async function syncExternalOdds(): Promise<number> {
               const underOutcome = playerOutcomes.find((o: any) => o.name?.toLowerCase() === "under");
               if (!overOutcome?.point) continue;
 
-              const match = lines.find(l => {
+              // Find all PP lines for this player and stat type
+              const statType = Object.entries(STAT_MARKETS).find(
+                ([, v]) => v === market.key
+              )?.[0];
+
+              const playerMatches = lines.filter(l => {
                 const ppLast  = l.player.fullName.split(" ").pop()?.toLowerCase() || "";
                 const mktLast = playerName.split(" ").pop()?.toLowerCase() || "";
-                return ppLast === mktLast || l.player.fullName.toLowerCase() === playerName.toLowerCase();
+                const nameMatch = ppLast === mktLast || l.player.fullName.toLowerCase() === playerName.toLowerCase();
+                const statMatch = statType ? l.line.statType === statType : true;
+                return nameMatch && statMatch;
               });
-              if (!match) continue;
+
+              if (!playerMatches.length) continue;
+
+              // Pick the tier closest to the sportsbook line value
+              const sbLine = overOutcome.point;
+              const match = playerMatches.reduce((best, curr) => {
+                const bestDist = Math.abs(parseFloat(best.line.lineValue.toString()) - sbLine);
+                const currDist = Math.abs(parseFloat(curr.line.lineValue.toString()) - sbLine);
+                return currDist < bestDist ? curr : best;
+              });
 
               const lineVal    = overOutcome.point.toString();
               const overPrice  = overOutcome.price  != null ? Number(overOutcome.price)  : null;
