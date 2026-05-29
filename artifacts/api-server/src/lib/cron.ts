@@ -97,8 +97,8 @@ export function startCronJobs() {
     logPull("internal", "variance-scores", computeAllVarianceScores)
   );
 
-  // Fatigue data at 6:30 AM (after projections populate game logs)
-  cron.schedule("30 6 * * *", () =>
+  // Fatigue data at 6:35 AM (after projections populate game logs)
+  cron.schedule("35 6 * * *", () =>
     logPull("internal", "fatigue", syncFatigueData)
   );
 
