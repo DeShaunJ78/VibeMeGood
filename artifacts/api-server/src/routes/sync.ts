@@ -233,6 +233,7 @@ router.post("/sync/game-schedule-history", async (req, res) => {
 
 router.post("/sync/pp-lines", async (req, res) => {
   await runSync("prizepicks", "pp-lines", syncPpLines, res);
+  await recalcPropScores();
 });
 
 router.post("/sync/injuries", async (req, res) => {
