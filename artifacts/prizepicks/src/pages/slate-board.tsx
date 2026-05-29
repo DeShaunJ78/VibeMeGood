@@ -683,10 +683,6 @@ export default function SlateBoard() {
         (r.teamAbbr ?? "").toLowerCase().includes(q)
       );
     }
-    if (sharpOnly) {
-      rows = rows.filter(r => r.sharpSignal === "sharp");
-    }
-
     // Deduplicate — one row per (playerId, statType)
     // Pick tier closest to our projection.
     // Falls back to highest finalScore if no projection exists.
@@ -715,6 +711,10 @@ export default function SlateBoard() {
       }
     }
     rows = Array.from(dedupMap.values());
+
+    if (sharpOnly) {
+      rows = rows.filter(r => r.sharpSignal === "sharp");
+    }
 
     return [...rows].sort((a, b) => {
       let cmp = 0;
@@ -1026,6 +1026,16 @@ export default function SlateBoard() {
               )}
             </div>
 
+            {/* Full-width search bar */}
+            <div className="w-full mb-3">
+              <Input
+                placeholder="Search player…"
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                className="w-full bg-slate-900 border-slate-700 font-mono text-sm h-9"
+              />
+            </div>
+
             {/* Desktop: full filter row */}
             <div className="hidden md:flex items-center gap-2">
               {watchCount > 0 && (
@@ -1083,12 +1093,6 @@ export default function SlateBoard() {
                 value={minEdge}
                 onChange={e => setMinEdge(e.target.value)}
                 className="w-24 bg-slate-900 border-slate-800 font-mono text-sm"
-              />
-              <Input
-                placeholder="Search player…"
-                value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-                className="w-36 bg-slate-900 border-slate-800 font-mono text-sm"
               />
               <Button
                 onClick={runOptimizer}
