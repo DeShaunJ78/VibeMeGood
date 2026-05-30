@@ -521,7 +521,17 @@ export default function SlateBoard() {
   const [sortCol, setSortCol] = useState<string>("projGap");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [lastOddsSync, setLastOddsSync] = useState<string | null | undefined>(undefined);
-  const [lineOverrides, setLineOverrides] = useState<Map<number, number>>(new Map());
+  const OVERRIDE_LS_KEY = "pp_line_overrides";
+  const [lineOverrides, setLineOverrides] = useState<Map<number, number>>(() => {
+    try {
+      const saved = localStorage.getItem(OVERRIDE_LS_KEY);
+      if (!saved) return new Map();
+      const obj = JSON.parse(saved) as Record<string, number>;
+      return new Map(Object.entries(obj).map(([k, v]) => [Number(k), v]));
+    } catch {
+      return new Map();
+    }
+  });
   const [editingLine, setEditingLine] = useState<number | null>(null);
   const [editValue, setEditValue] = useState<string>("");
 
@@ -1166,6 +1176,17 @@ export default function SlateBoard() {
               </Button>
               <SyncProjectionsButton />
               <ForceSyncButton />
+              {lineOverrides.size > 0 && (
+                <button
+                  onClick={() => {
+                    setLineOverrides(new Map());
+                    try { localStorage.removeItem(OVERRIDE_LS_KEY); } catch {}
+                  }}
+                  className="text-xs font-mono text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-700 rounded px-2 py-1 transition-colors"
+                >
+                  Clear {lineOverrides.size} override{lineOverrides.size > 1 ? "s" : ""}
+                </button>
+              )}
             </div>
           </>
         )}
@@ -1327,6 +1348,7 @@ export default function SlateBoard() {
                                         setLineOverrides(prev => {
                                           const next = new Map(prev);
                                           next.set(row.ppLineId, v);
+                                          try { localStorage.setItem(OVERRIDE_LS_KEY, JSON.stringify(Object.fromEntries(next))); } catch {}
                                           return next;
                                         });
                                       }
@@ -1337,6 +1359,7 @@ export default function SlateBoard() {
                                       setLineOverrides(prev => {
                                         const next = new Map(prev);
                                         next.delete(row.ppLineId);
+                                        try { localStorage.setItem(OVERRIDE_LS_KEY, JSON.stringify(Object.fromEntries(next))); } catch {}
                                         return next;
                                       });
                                       setEditingLine(null);
@@ -1348,6 +1371,7 @@ export default function SlateBoard() {
                                       setLineOverrides(prev => {
                                         const next = new Map(prev);
                                         next.set(row.ppLineId, v);
+                                        try { localStorage.setItem(OVERRIDE_LS_KEY, JSON.stringify(Object.fromEntries(next))); } catch {}
                                         return next;
                                       });
                                     }
@@ -1629,7 +1653,31 @@ export default function SlateBoard() {
                             </Tooltip>
                           ) : (
                             <div className="flex items-center gap-1 justify-center">
-                              <ActionTagBadge tag={row.actionTag} />
+                              {(() => {
+                                const overridePOver = getOverridePOver(row);
+                                if (overridePOver !== null) {
+                                  if (overridePOver >= 62) {
+                                    return (
+                                      <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-emerald-900/50 border border-emerald-600/50 text-emerald-300">
+                                        ▲ MORE
+                                      </span>
+                                    );
+                                  } else if (overridePOver <= 38) {
+                                    return (
+                                      <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-rose-900/50 border border-rose-600/50 text-rose-300">
+                                        ▼ LESS
+                                      </span>
+                                    );
+                                  } else {
+                                    return (
+                                      <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-800/50 border border-slate-600/50 text-slate-400">
+                                        — PASS
+                                      </span>
+                                    );
+                                  }
+                                }
+                                return <ActionTagBadge tag={row.actionTag} />;
+                              })()}
                               {row.sharpSignal === "sharp" && (
                                 <Tooltip>
                                   <TooltipTrigger asChild>

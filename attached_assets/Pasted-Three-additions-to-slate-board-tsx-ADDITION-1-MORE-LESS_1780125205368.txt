@@ -1,0 +1,157 @@
+Three additions to slate-board.tsx.
+
+ADDITION 1 — MORE/LESS/PASS decision
+based on override pOver.
+
+After line 1632 where ActionTagBadge
+renders — add override-aware decision:
+
+Find this block:
+<ActionTagBadge tag={row.actionTag} />
+
+Replace with:
+
+{(() => {
+  const overridePOver =
+    getOverridePOver(row);
+  if (overridePOver !== null) {
+    // Override active — show
+    // MORE/LESS/PASS decision
+    if (overridePOver >= 62) {
+      return (
+        <span className="font-mono
+          text-xs font-bold px-2 py-0.5
+          rounded bg-emerald-900/50
+          border border-emerald-600/50
+          text-emerald-300">
+          ▲ MORE
+        </span>
+      );
+    } else if (overridePOver <= 38) {
+      return (
+        <span className="font-mono
+          text-xs font-bold px-2 py-0.5
+          rounded bg-rose-900/50
+          border border-rose-600/50
+          text-rose-300">
+          ▼ LESS
+        </span>
+      );
+    } else {
+      return (
+        <span className="font-mono
+          text-xs font-bold px-2 py-0.5
+          rounded bg-slate-800/50
+          border border-slate-600/50
+          text-slate-400">
+          — PASS
+        </span>
+      );
+    }
+  }
+  // No override — show normal tag
+  return (
+    <ActionTagBadge tag={row.actionTag} />
+  );
+})()}
+
+ADDITION 2 — Persist overrides to
+localStorage so they survive refresh.
+
+Find the lineOverrides useState:
+const [lineOverrides, setLineOverrides] =
+  useState<Map<number, number>>(new Map());
+
+Replace with:
+
+const OVERRIDE_LS_KEY = "pp_line_overrides";
+
+const [lineOverrides, setLineOverrides] =
+  useState<Map<number, number>>(() => {
+    try {
+      const saved = localStorage.getItem(
+        OVERRIDE_LS_KEY);
+      if (!saved) return new Map();
+      const obj = JSON.parse(saved) as
+        Record<string, number>;
+      return new Map(
+        Object.entries(obj).map(
+          ([k, v]) => [Number(k), v]));
+    } catch {
+      return new Map();
+    }
+  });
+
+Then find both places where
+setLineOverrides is called and
+add localStorage persistence:
+
+Replace:
+setLineOverrides(prev => {
+  const next = new Map(prev);
+  next.set(row.ppLineId, v);
+  return next;
+});
+
+With:
+setLineOverrides(prev => {
+  const next = new Map(prev);
+  next.set(row.ppLineId, v);
+  try {
+    localStorage.setItem(
+      OVERRIDE_LS_KEY,
+      JSON.stringify(
+        Object.fromEntries(next)));
+  } catch {}
+  return next;
+});
+
+And replace the delete call:
+setLineOverrides(prev => {
+  const next = new Map(prev);
+  next.delete(row.ppLineId);
+  return next;
+});
+
+With:
+setLineOverrides(prev => {
+  const next = new Map(prev);
+  next.delete(row.ppLineId);
+  try {
+    localStorage.setItem(
+      OVERRIDE_LS_KEY,
+      JSON.stringify(
+        Object.fromEntries(next)));
+  } catch {}
+  return next;
+});
+
+ADDITION 3 — Add "Clear All Overrides"
+button in the toolbar.
+
+Find the Force Sync button area
+in the toolbar. Add after it:
+
+{lineOverrides.size > 0 && (
+  <button
+    onClick={() => {
+      setLineOverrides(new Map());
+      try {
+        localStorage.removeItem(
+          OVERRIDE_LS_KEY);
+      } catch {}
+    }}
+    className="text-xs font-mono
+      text-slate-400 hover:text-rose-400
+      border border-slate-700
+      hover:border-rose-700
+      rounded px-2 py-1
+      transition-colors">
+    Clear {lineOverrides.size} override
+    {lineOverrides.size > 1 ? "s" : ""}
+  </button>
+)}
+
+Run pnpm run typecheck — must pass.
+Do not publish yet.
+Report PASS or FAIL.
