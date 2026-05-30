@@ -1,0 +1,98 @@
+Fix the dedup tier selection in
+artifacts/prizepicks/src/pages/
+slate-board.tsx
+
+Replace the current dedup logic with:
+
+const dedupMap = new Map<string,
+  typeof rows[0]>();
+
+for (const r of rows) {
+  const key =
+    `${r.playerId}:${r.statType}`;
+  const prev = dedupMap.get(key);
+
+  const projVal =
+    r.ourProjection?.value ?? null;
+
+  // Classify tier using projection ratio
+  const classifyTier = (
+    lineVal: number,
+    proj: number
+  ): "goblin" | "standard" | "demon" => {
+    const ratio = lineVal / proj;
+    if (ratio < 0.6) return "goblin";
+    if (ratio > 1.2) return "demon";
+    return "standard";
+  };
+
+  const getTierScore = (row: typeof r)
+    : number => {
+    const line = row.lineValue ?? 0;
+    const proj = projVal;
+
+    // Priority 1: has external odds
+    if ((row.externalLinesCount ?? 0) > 0)
+      return 1000 + (row.finalScore ?? 0);
+
+    // Priority 2: standard tier
+    // (within 60-120% of projection)
+    if (proj && proj > 0) {
+      const tier = classifyTier(line, proj);
+      if (tier === "standard")
+        return 500 + line; // highest standard wins
+    }
+
+    // Priority 3: fallback to finalScore
+    return row.finalScore ?? 0;
+  };
+
+  if (!prev) {
+    dedupMap.set(key, r);
+  } else {
+    if (getTierScore(r) >
+        getTierScore(prev)) {
+      dedupMap.set(key, r);
+    }
+  }
+}
+rows = Array.from(dedupMap.values());
+
+Also add a tier label to each row
+so the UI can show it.
+
+In the slate board row render add
+a small badge after the line value:
+
+const getTierLabel = (
+  lineVal: number,
+  projVal: number | null
+): string | null => {
+  if (!projVal || projVal === 0)
+    return null;
+  const ratio = lineVal / projVal;
+  if (ratio < 0.6) return "goblin";
+  if (ratio > 1.2) return "demon";
+  return null; // standard shows nothing
+};
+
+In the row render after lineValue:
+{(() => {
+  const label = getTierLabel(
+    row.lineValue ?? 0,
+    row.ourProjection?.value ?? null);
+  if (!label) return null;
+  return (
+    <span className={
+      label === "goblin"
+        ? "text-xs text-emerald-400 font-mono ml-1"
+        : "text-xs text-rose-400 font-mono ml-1"
+    }>
+      {label === "goblin" ? "👹" : "😈"}
+    </span>
+  );
+})()}
+
+Run pnpm run typecheck — must pass.
+Do not publish yet.
+Report PASS or FAIL.

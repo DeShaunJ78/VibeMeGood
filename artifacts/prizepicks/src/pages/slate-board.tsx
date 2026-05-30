@@ -684,29 +684,46 @@ export default function SlateBoard() {
       );
     }
     // Deduplicate — one row per (playerId, statType)
-    // Pick tier closest to our projection.
-    // Falls back to highest finalScore if no projection exists.
+    // Priority: 1) has external odds  2) standard tier  3) highest finalScore
     const dedupMap = new Map<string, typeof rows[0]>();
+
     for (const r of rows) {
       const key = `${r.playerId}:${r.statType}`;
       const prev = dedupMap.get(key);
+
+      const projVal = r.ourProjection?.value ?? null;
+
+      const classifyTier = (lineVal: number, proj: number): "goblin" | "standard" | "demon" => {
+        const ratio = lineVal / proj;
+        if (ratio < 0.6) return "goblin";
+        if (ratio > 1.2) return "demon";
+        return "standard";
+      };
+
+      const getTierScore = (row: typeof r): number => {
+        const line = row.lineValue ?? 0;
+        const proj = row.ourProjection?.value ?? null;
+
+        // Priority 1: has external odds
+        if ((row.bookCount ?? 0) > 0)
+          return 1000 + (row.finalScore ?? 0);
+
+        // Priority 2: standard tier (within 60–120% of projection)
+        if (proj && proj > 0) {
+          const tier = classifyTier(line, proj);
+          if (tier === "standard")
+            return 500 + line;
+        }
+
+        // Priority 3: fallback to finalScore
+        return row.finalScore ?? 0;
+      };
+
       if (!prev) {
         dedupMap.set(key, r);
       } else {
-        const projVal = r.ourProjection?.value ?? null;
-        if (projVal !== null) {
-          const prevDist = Math.abs((prev.lineValue ?? 0) - projVal);
-          const currDist = Math.abs((r.lineValue ?? 0) - projVal);
-          if (currDist < prevDist) {
-            dedupMap.set(key, r);
-          }
-        } else {
-          // No projection — keep highest finalScore
-          const prevScore = prev.finalScore ?? 0;
-          const currScore = r.finalScore ?? 0;
-          if (currScore > prevScore) {
-            dedupMap.set(key, r);
-          }
+        if (getTierScore(r) > getTierScore(prev)) {
+          dedupMap.set(key, r);
         }
       }
     }
@@ -1260,6 +1277,15 @@ export default function SlateBoard() {
                         <TableCell className="font-mono text-sm font-bold text-right">
                           <div className="flex flex-col items-end gap-0.5">
                             <span className="text-cyan-400">{row.lineValue}</span>
+                            {(() => {
+                              const lineVal = row.lineValue ?? 0;
+                              const projVal = row.ourProjection?.value ?? null;
+                              if (!projVal || projVal === 0) return null;
+                              const ratio = lineVal / projVal;
+                              if (ratio < 0.6) return <span className="text-xs text-emerald-400 font-mono ml-1">👹</span>;
+                              if (ratio > 1.2) return <span className="text-xs text-rose-400 font-mono ml-1">😈</span>;
+                              return null;
+                            })()}
                             {betterLineMap.has(row.ppLineId) && (() => {
                               const bl = betterLineMap.get(row.ppLineId)!;
                               const pLabel = bl.platform === "underdog" ? "UD" : bl.platform.charAt(0).toUpperCase() + bl.platform.slice(1);
