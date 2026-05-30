@@ -522,17 +522,17 @@ export default function SlateBoard() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [lastOddsSync, setLastOddsSync] = useState<string | null | undefined>(undefined);
   const OVERRIDE_LS_KEY = "pp_line_overrides";
-  const [lineOverrides, setLineOverrides] = useState<Map<number, number>>(() => {
+  const [lineOverrides, setLineOverrides] = useState<Map<string, number>>(() => {
     try {
       const saved = localStorage.getItem(OVERRIDE_LS_KEY);
       if (!saved) return new Map();
       const obj = JSON.parse(saved) as Record<string, number>;
-      return new Map(Object.entries(obj).map(([k, v]) => [Number(k), v]));
+      return new Map(Object.entries(obj));
     } catch {
       return new Map();
     }
   });
-  const [editingLine, setEditingLine] = useState<number | null>(null);
+  const [editingLine, setEditingLine] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>("");
 
   const oddsStale = lastOddsSync !== undefined && (
@@ -823,12 +823,16 @@ export default function SlateBoard() {
     return m;
   }, [betterLinesData]);
 
+  function overrideKey(row: typeof playerRows[0]): string {
+    return `${row.playerId}:${row.statType}`;
+  }
+
   function getEffectiveLine(row: typeof playerRows[0]): number {
-    return lineOverrides.get(row.ppLineId) ?? row.lineValue ?? 0;
+    return lineOverrides.get(overrideKey(row)) ?? row.lineValue ?? 0;
   }
 
   function getOverridePOver(row: typeof playerRows[0]): number | null {
-    const override = lineOverrides.get(row.ppLineId);
+    const override = lineOverrides.get(overrideKey(row));
     if (!override) return null;
     const proj = row.ourProjection;
     if (!proj?.value) return null;
@@ -1339,7 +1343,7 @@ export default function SlateBoard() {
                         <TableCell className="font-mono text-xs">{row.statType}</TableCell>
                         <TableCell className="font-mono text-sm font-bold text-right">
                           <div className="flex flex-col items-end gap-0.5">
-                            {editingLine === row.ppLineId ? (
+                            {editingLine === overrideKey(row) ? (
                               <div className="flex items-center gap-1">
                                 <input
                                   type="number"
@@ -1352,7 +1356,7 @@ export default function SlateBoard() {
                                       if (!isNaN(v) && v > 0) {
                                         setLineOverrides(prev => {
                                           const next = new Map(prev);
-                                          next.set(row.ppLineId, v);
+                                          next.set(overrideKey(row), v);
                                           try { localStorage.setItem(OVERRIDE_LS_KEY, JSON.stringify(Object.fromEntries(next))); } catch {}
                                           return next;
                                         });
@@ -1363,7 +1367,7 @@ export default function SlateBoard() {
                                     if (e.key === "Delete") {
                                       setLineOverrides(prev => {
                                         const next = new Map(prev);
-                                        next.delete(row.ppLineId);
+                                        next.delete(overrideKey(row));
                                         try { localStorage.setItem(OVERRIDE_LS_KEY, JSON.stringify(Object.fromEntries(next))); } catch {}
                                         return next;
                                       });
@@ -1375,7 +1379,7 @@ export default function SlateBoard() {
                                     if (!isNaN(v) && v > 0) {
                                       setLineOverrides(prev => {
                                         const next = new Map(prev);
-                                        next.set(row.ppLineId, v);
+                                        next.set(overrideKey(row), v);
                                         try { localStorage.setItem(OVERRIDE_LS_KEY, JSON.stringify(Object.fromEntries(next))); } catch {}
                                         return next;
                                       });
@@ -1390,14 +1394,14 @@ export default function SlateBoard() {
                               <button
                                 onClick={e => {
                                   e.stopPropagation();
-                                  setEditingLine(row.ppLineId);
-                                  setEditValue((lineOverrides.get(row.ppLineId) ?? row.lineValue ?? 0).toString());
+                                  setEditingLine(overrideKey(row));
+                                  setEditValue((lineOverrides.get(overrideKey(row)) ?? row.lineValue ?? 0).toString());
                                 }}
                                 className="text-cyan-400 hover:text-cyan-300 hover:underline transition-colors cursor-pointer"
                                 title="Click to confirm PP line"
                               >
                                 {getEffectiveLine(row)}
-                                {lineOverrides.has(row.ppLineId) && (
+                                {lineOverrides.has(overrideKey(row)) && (
                                   <span className="text-[9px] text-emerald-400 ml-1">✓</span>
                                 )}
                               </button>
