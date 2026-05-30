@@ -482,7 +482,7 @@ export default function SlateBoard() {
   const presetsUnlocked = totalEntries >= 30;
   const varianceEnabled = userSettings?.varianceIntelEnabled ?? false;
   const [tab, setTab] = useState<"player" | "team">("player");
-  const [sport, setSport] = useState<string>("all");
+  const [sport, setSport] = useState<string>("NBA");
   const [lineTypeFilter, setLineTypeFilter] = useState<string>("all");
   const [minEdge, setMinEdge] = useState<string>("");
   const [filterOpen, setFilterOpen] = useState(false);

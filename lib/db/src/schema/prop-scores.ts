@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, numeric, text, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, numeric, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -16,7 +16,10 @@ export const propScoresTable = pgTable("prop_scores", {
   actionTag: text("action_tag").notNull(), // PLAY | WATCH | PASS
   reasoning: jsonb("reasoning"),
   scoredAt: timestamp("scored_at").notNull(),
-});
+}, (t) => [
+  index("prop_scores_pp_line_id_idx").on(t.ppLineId),
+  index("prop_scores_player_stat_idx").on(t.playerId, t.statType),
+]);
 
 export const insertPropScoreSchema = createInsertSchema(propScoresTable).omit({ id: true });
 export type InsertPropScore = z.infer<typeof insertPropScoreSchema>;

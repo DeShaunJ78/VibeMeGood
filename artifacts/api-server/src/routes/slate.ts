@@ -102,7 +102,13 @@ router.get("/slate", async (req, res) => {
 
     let filtered = rows;
     if (sport) {
-      const sportsToMatch = sport === "NFL" ? ["NFL", "NFLSZN"] : [sport];
+      const sportsToMatch =
+        sport === "NFL"  ? ["NFL", "NFLSZN"] :
+        sport === "NBA"  ? ["NBA", "NBA1Q", "NBA1H", "NBA1P"] :
+        sport === "MLB"  ? ["MLB", "MLBLIVE"] :
+        sport === "NHL"  ? ["NHL", "NHL1P"] :
+        sport === "WNBA" ? ["WNBA", "WNBA1H"] :
+        [sport];
       filtered = filtered.filter(r => sportsToMatch.includes(r.sport));
     }
     if (actionTag) filtered = filtered.filter(r => r.actionTag === actionTag);

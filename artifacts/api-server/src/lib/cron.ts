@@ -62,10 +62,10 @@ export function startCronJobs() {
     logPull("injury-news", "injuries", syncInjuries)
   );
 
-  // External odds: disabled — external_lines is populated by DraftData, not direct API calls
-  // cron.schedule("*/20 * * * *", () =>
-  //   logPull("the-odds-api", "external-odds", syncExternalOdds)
-  // );
+  // External odds every 30 minutes
+  cron.schedule("*/30 * * * *", () =>
+    logPull("the-odds-api", "external-odds", syncExternalOdds)
+  );
 
   // Projections at 6 AM, 11 AM, and 2 PM daily
   const projectionsJob = () =>

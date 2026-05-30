@@ -24,6 +24,15 @@ export interface CalibrationResult {
   mae: number | null;
 }
 
+function normalizeSport(s: string): string {
+  if (s.startsWith("NBA"))  return "NBA";
+  if (s.startsWith("MLB"))  return "MLB";
+  if (s.startsWith("NHL"))  return "NHL";
+  if (s.startsWith("NFL"))  return "NFL";
+  if (s.startsWith("WNBA")) return "WNBA";
+  return s;
+}
+
 function getEdgeBucket(edgePct: number): string {
   if (edgePct < 5)  return "0-5";
   if (edgePct < 10) return "5-10";
@@ -107,6 +116,7 @@ export const calibrationJob = {
 
         if (!player) continue;
 
+        const sport = normalizeSport(player.sport);
         const ppLine      = parseFloat(line.lineValue.toString());
         const actualValue = parseFloat(gameLog.value.toString());
 
@@ -116,7 +126,7 @@ export const calibrationJob = {
           line.statType,
           ppLine,
           line.lineType,
-          player.sport,
+          sport,
           gameLog.opponentTeamId ?? undefined,
         );
 
@@ -136,14 +146,14 @@ export const calibrationJob = {
         maeAccum.push(Math.abs(predictedProb - hit));
 
         // Accumulate into bucket
-        const key = `${player.sport}|${line.statType}|${line.lineType}|${edgeBucket}|${direction}`;
+        const key = `${sport}|${line.statType}|${line.lineType}|${edgeBucket}|${direction}`;
         const existing = buckets.get(key);
         if (existing) {
           existing.sampleSize++;
           existing.hitCount += hit;
         } else {
           buckets.set(key, {
-            sport:      player.sport,
+            sport,
             statType:   line.statType,
             lineType:   line.lineType,
             edgeBucket,

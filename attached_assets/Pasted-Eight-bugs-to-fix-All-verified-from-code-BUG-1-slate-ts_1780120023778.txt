@@ -1,0 +1,144 @@
+Eight bugs to fix. All verified from code.
+
+BUG 1 — slate.ts sport filter
+In artifacts/api-server/src/routes/
+slate.ts line 105
+
+Replace:
+const sportsToMatch = sport === "NFL"
+  ? ["NFL", "NFLSZN"] : [sport];
+
+With:
+const sportsToMatch =
+  sport === "NFL"  ? ["NFL","NFLSZN"] :
+  sport === "NBA"  ? ["NBA","NBA1Q",
+    "NBA1H","NBA1P"] :
+  sport === "MLB"  ? ["MLB","MLBLIVE"] :
+  sport === "NHL"  ? ["NHL","NHL1P"] :
+  sport === "WNBA" ? ["WNBA","WNBA1H"] :
+  [sport];
+
+BUG 2 — market-intel.ts sport filter
+In artifacts/api-server/src/routes/
+market-intel.ts line 82
+
+Replace:
+if (sport) baseConditions.push(
+  eq(playersTable.sport, sport));
+
+With:
+if (sport) {
+  const sportsToMatch =
+    sport === "NFL"  ? ["NFL","NFLSZN"] :
+    sport === "NBA"  ? ["NBA","NBA1Q",
+      "NBA1H","NBA1P"] :
+    sport === "MLB"  ? ["MLB","MLBLIVE"] :
+    sport === "NHL"  ? ["NHL","NHL1P"] :
+    sport === "WNBA" ? ["WNBA","WNBA1H"] :
+    [sport];
+  baseConditions.push(
+    inArray(playersTable.sport,
+      sportsToMatch));
+}
+
+inArray is already imported at line 10.
+
+BUG 3 — Enable external odds cron
+In artifacts/api-server/src/lib/cron.ts
+
+The external odds cron is disabled.
+Enable it to run every 30 minutes:
+
+Find:
+// cron.schedule("*/20 * * * *", () =>
+//   logPull("the-odds-api",
+//     "external-odds", syncExternalOdds)
+// );
+
+Replace with:
+cron.schedule("*/30 * * * *", () =>
+  logPull("the-odds-api",
+    "external-odds", syncExternalOdds)
+);
+
+BUG 4 — Remove debug console.log
+In artifacts/prizepicks/src/pages/
+entry-builder.tsx line 177
+
+Remove this line entirely:
+console.log("[EntryBuilder] picks from
+  context:", picks.length,
+  picks.map(p => p.playerName));
+
+BUG 5 — Add index on prop_scores
+In lib/db/src/schema/prop-scores.ts
+
+Add index on pp_line_id for fast
+lookup during rescore:
+
+import { pgTable, serial, integer,
+  numeric, text, timestamp, jsonb,
+  index } from "drizzle-orm/pg-core";
+
+Add to table definition:
+}, (t) => [
+  index("prop_scores_pp_line_id_idx")
+    .on(t.ppLineId),
+  index("prop_scores_player_stat_idx")
+    .on(t.playerId, t.statType),
+]);
+
+Then run:
+pnpm --filter @workspace/db run push
+
+BUG 6 — Fix dedup externalLinesCount
+In artifacts/prizepicks/src/pages/
+slate-board.tsx
+
+Find in getTierScore:
+if ((row.externalLinesCount ?? 0) > 0)
+
+Replace with:
+if ((row.bookCount ?? 0) > 0)
+
+BUG 7 — Default sport to NBA
+In artifacts/prizepicks/src/pages/
+slate-board.tsx line 485
+
+Replace:
+const [sport, setSport] =
+  useState<string>("all");
+
+With:
+const [sport, setSport] =
+  useState<string>("NBA");
+
+BUG 8 — Calibration sport normalization
+In artifacts/api-server/src/scripts/
+calibration-job.ts
+
+Find where sport is used to match
+calibration records.
+
+Add normalization before any sport
+comparison:
+
+const normalizeSport = (s: string) => {
+  if (s.startsWith("NBA")) return "NBA";
+  if (s.startsWith("MLB")) return "MLB";
+  if (s.startsWith("NHL")) return "NHL";
+  if (s.startsWith("NFL")) return "NFL";
+  if (s.startsWith("WNBA")) return "WNBA";
+  return s;
+};
+
+Apply normalizeSport() wherever
+sport strings are compared in the
+calibration job.
+
+After all 8 fixes:
+Run pnpm run typecheck — must pass
+Run pnpm --filter @workspace/db
+  run push (for the index)
+Publish
+Report PASS or FAIL for each bug.

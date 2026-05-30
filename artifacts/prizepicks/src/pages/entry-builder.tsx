@@ -173,9 +173,6 @@ export default function EntryBuilder() {
   const [portfolioResult, setPortfolioResult] = useState<PortfolioResult | null>(null);
   const [portfolioLoggedSet, setPortfolioLoggedSet] = useState<Set<number>>(new Set());
   const { picks, removePick, updateDirection, clearPicks } = useEntry();
-  // DEBUG — confirm picks arrive from context
-  console.log("[EntryBuilder] picks from context:", picks.length, picks.map(p => p.playerName));
-
   function togglePickSort(col: string) {
     if (pickSortCol === col) {
       setPickSortDir(d => d === "asc" ? "desc" : "asc");

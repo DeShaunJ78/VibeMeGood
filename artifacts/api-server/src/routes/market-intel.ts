@@ -79,7 +79,16 @@ router.get("/market-intel", async (req, res) => {
       ) as ReturnType<typeof eq>,
     ];
 
-    if (sport) baseConditions.push(eq(playersTable.sport, sport));
+    if (sport) {
+      const sportsToMatch =
+        sport === "NFL"  ? ["NFL", "NFLSZN"] :
+        sport === "NBA"  ? ["NBA", "NBA1Q", "NBA1H", "NBA1P"] :
+        sport === "MLB"  ? ["MLB", "MLBLIVE"] :
+        sport === "NHL"  ? ["NHL", "NHL1P"] :
+        sport === "WNBA" ? ["WNBA", "WNBA1H"] :
+        [sport];
+      baseConditions.push(inArray(playersTable.sport, sportsToMatch));
+    }
     if (lineType) baseConditions.push(eq(ppLinesTable.lineType, lineType));
     if (actionTag) baseConditions.push(eq(propScoresTable.actionTag, actionTag));
     if (minEdgeScore) {
