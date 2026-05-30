@@ -466,6 +466,26 @@ function DistributionChart({ mean, stdDev, ppLine }: { mean: number; stdDev: num
   );
 }
 
+function erf(x: number): number {
+  const sign = x >= 0 ? 1 : -1;
+  x = Math.abs(x);
+  const a1 =  0.254829592;
+  const a2 = -0.284496736;
+  const a3 =  1.421413741;
+  const a4 = -1.453152027;
+  const a5 =  1.061405429;
+  const p  =  0.3275911;
+  const t = 1.0 / (1.0 + p * x);
+  const y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t*Math.exp(-x*x);
+  return sign * y;
+}
+
+function normalCDF(mean: number, std: number, line: number): number {
+  if (std <= 0) return line < mean ? 1 : 0;
+  const z = (line - mean) / (std * Math.sqrt(2));
+  return (1 - erf(z)) / 2;
+}
+
 export default function SlateBoard() {
   const { data: userSettings } = useUserSettings();
   const { data: allEntriesForCount } = useQuery<{ length: number }>({
@@ -501,6 +521,9 @@ export default function SlateBoard() {
   const [sortCol, setSortCol] = useState<string>("projGap");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [lastOddsSync, setLastOddsSync] = useState<string | null | undefined>(undefined);
+  const [lineOverrides, setLineOverrides] = useState<Map<number, number>>(new Map());
+  const [editingLine, setEditingLine] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState<string>("");
 
   const oddsStale = lastOddsSync !== undefined && (
     lastOddsSync === null ||
@@ -789,6 +812,18 @@ export default function SlateBoard() {
     for (const b of betterLinesData) m.set(b.ppLineId, { platform: b.bestPlatform, lineValue: b.bestLineValue });
     return m;
   }, [betterLinesData]);
+
+  function getEffectiveLine(row: typeof playerRows[0]): number {
+    return lineOverrides.get(row.ppLineId) ?? row.lineValue ?? 0;
+  }
+
+  function getOverridePOver(row: typeof playerRows[0]): number | null {
+    const override = lineOverrides.get(row.ppLineId);
+    if (!override) return null;
+    const proj = row.ourProjection;
+    if (!proj?.value || !proj?.stdDev) return null;
+    return Math.round(normalCDF(proj.value, proj.stdDev, override) * 100 * 10) / 10;
+  }
 
   type TonightPace = {
     gameId: number;
@@ -1233,6 +1268,7 @@ export default function SlateBoard() {
                   visibleRows.map((row) => {
                     const isNoPlay = row.actionTag === "NO-PLAY";
                     const proj: OurProjection | null = row.ourProjection ?? null;
+                    const displayPOver = getOverridePOver(row) ?? proj?.pOver ?? null;
 
                     const isExpanded = expandedRow === row.ppLineId;
 
@@ -1277,15 +1313,81 @@ export default function SlateBoard() {
                         <TableCell className="font-mono text-xs">{row.statType}</TableCell>
                         <TableCell className="font-mono text-sm font-bold text-right">
                           <div className="flex flex-col items-end gap-0.5">
-                            <span className="text-cyan-400">{row.lineValue}</span>
+                            {editingLine === row.ppLineId ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  value={editValue}
+                                  onChange={e => setEditValue(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === "Enter") {
+                                      const v = parseFloat(editValue);
+                                      if (!isNaN(v) && v > 0) {
+                                        setLineOverrides(prev => {
+                                          const next = new Map(prev);
+                                          next.set(row.ppLineId, v);
+                                          return next;
+                                        });
+                                      }
+                                      setEditingLine(null);
+                                    }
+                                    if (e.key === "Escape") setEditingLine(null);
+                                    if (e.key === "Delete") {
+                                      setLineOverrides(prev => {
+                                        const next = new Map(prev);
+                                        next.delete(row.ppLineId);
+                                        return next;
+                                      });
+                                      setEditingLine(null);
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    const v = parseFloat(editValue);
+                                    if (!isNaN(v) && v > 0) {
+                                      setLineOverrides(prev => {
+                                        const next = new Map(prev);
+                                        next.set(row.ppLineId, v);
+                                        return next;
+                                      });
+                                    }
+                                    setEditingLine(null);
+                                  }}
+                                  autoFocus
+                                  className="w-16 bg-slate-800 border border-cyan-500 rounded px-1 py-0.5 text-cyan-400 text-xs font-mono text-right"
+                                />
+                              </div>
+                            ) : (
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setEditingLine(row.ppLineId);
+                                  setEditValue((lineOverrides.get(row.ppLineId) ?? row.lineValue ?? 0).toString());
+                                }}
+                                className="text-cyan-400 hover:text-cyan-300 hover:underline transition-colors cursor-pointer"
+                                title="Click to confirm PP line"
+                              >
+                                {getEffectiveLine(row)}
+                                {lineOverrides.has(row.ppLineId) && (
+                                  <span className="text-[9px] text-emerald-400 ml-1">✓</span>
+                                )}
+                              </button>
+                            )}
                             {(() => {
-                              const lineVal = row.lineValue ?? 0;
+                              const overridePOver = getOverridePOver(row);
+                              const lineVal = getEffectiveLine(row);
                               const projVal = row.ourProjection?.value ?? null;
                               if (!projVal || projVal === 0) return null;
                               const ratio = lineVal / projVal;
-                              if (ratio < 0.6) return <span className="text-xs text-emerald-400 font-mono ml-1">👹</span>;
-                              if (ratio > 1.2) return <span className="text-xs text-rose-400 font-mono ml-1">😈</span>;
-                              return null;
+                              return (
+                                <>
+                                  {overridePOver !== null && (
+                                    <span className="text-[9px] text-emerald-300 font-mono">{overridePOver}%↑</span>
+                                  )}
+                                  {ratio < 0.6 && <span className="text-xs text-emerald-400 font-mono ml-1">👹</span>}
+                                  {ratio > 1.2 && <span className="text-xs text-rose-400 font-mono ml-1">😈</span>}
+                                </>
+                              );
                             })()}
                             {betterLineMap.has(row.ppLineId) && (() => {
                               const bl = betterLineMap.get(row.ppLineId)!;
@@ -1387,7 +1489,7 @@ export default function SlateBoard() {
                             </span>
                           ) : (
                             <POverBadge
-                              pOver={proj?.pOver}
+                              pOver={displayPOver}
                               noPlayReason={proj?.noPlayReason}
                             />
                           )}

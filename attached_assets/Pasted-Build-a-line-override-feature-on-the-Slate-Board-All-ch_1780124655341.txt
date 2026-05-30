@@ -1,0 +1,253 @@
+Build a line override feature on the
+Slate Board. All changes in one file:
+artifacts/prizepicks/src/pages/
+slate-board.tsx
+
+STEP 1 — Add state for overrides
+After existing useState declarations
+add:
+
+const [lineOverrides, setLineOverrides] =
+  useState<Map<number, number>>(
+    new Map());
+const [editingLine, setEditingLine] =
+  useState<number | null>(null);
+const [editValue, setEditValue] =
+  useState<string>("");
+
+STEP 2 — Add normal CDF helper
+Add this function near the top of
+the component (after imports):
+
+function normalCDF(
+  mean: number,
+  std: number,
+  x: number
+): number {
+  const z = (x - mean) / (std * Math.sqrt(2));
+  return (1 - Math.erf(z)) / 2;
+}
+
+Note: Math.erf may not exist in all
+environments. Use this polyfill:
+
+function erf(x: number): number {
+  const sign = x >= 0 ? 1 : -1;
+  x = Math.abs(x);
+  const a1 =  0.254829592;
+  const a2 = -0.284496736;
+  const a3 =  1.421413741;
+  const a4 = -1.453152027;
+  const a5 =  1.061405429;
+  const p  =  0.3275911;
+  const t = 1.0 / (1.0 + p * x);
+  const y = 1.0 - (((((a5*t + a4)*t) +
+    a3)*t + a2)*t + a1)*t*Math.exp(-x*x);
+  return sign * y;
+}
+
+function normalCDF(
+  mean: number,
+  std: number,
+  line: number
+): number {
+  if (std <= 0) return line < mean ? 1 : 0;
+  const z = (line - mean) /
+    (std * Math.sqrt(2));
+  return (1 - erf(z)) / 2;
+}
+
+STEP 3 — Add getEffectiveLine helper
+
+function getEffectiveLine(
+  row: typeof playerRows[0]
+): number {
+  return lineOverrides.get(row.ppLineId)
+    ?? row.lineValue ?? 0;
+}
+
+STEP 4 — Add getOverridePOver helper
+
+function getOverridePOver(
+  row: typeof playerRows[0]
+): number | null {
+  const override =
+    lineOverrides.get(row.ppLineId);
+  if (!override) return null;
+  const proj = row.ourProjection;
+  if (!proj?.value || !proj?.stdDev)
+    return null;
+  return Math.round(
+    normalCDF(proj.value, proj.stdDev,
+      override) * 100 * 10) / 10;
+}
+
+STEP 5 — Add override UI in the
+line value cell.
+
+Find the TableCell that shows
+row.lineValue (the cyan-400 span).
+
+Replace the entire TableCell content
+with:
+
+<TableCell className="font-mono text-sm font-bold text-right">
+  <div className="flex flex-col items-end gap-0.5">
+    {editingLine === row.ppLineId ? (
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          step="0.5"
+          value={editValue}
+          onChange={e =>
+            setEditValue(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter") {
+              const v = parseFloat(editValue);
+              if (!isNaN(v) && v > 0) {
+                setLineOverrides(prev => {
+                  const next = new Map(prev);
+                  next.set(row.ppLineId, v);
+                  return next;
+                });
+              }
+              setEditingLine(null);
+            }
+            if (e.key === "Escape")
+              setEditingLine(null);
+          }}
+          onBlur={() => {
+            const v = parseFloat(editValue);
+            if (!isNaN(v) && v > 0) {
+              setLineOverrides(prev => {
+                const next = new Map(prev);
+                next.set(row.ppLineId, v);
+                return next;
+              });
+            }
+            setEditingLine(null);
+          }}
+          autoFocus
+          className="w-16 bg-slate-800
+            border border-cyan-500
+            rounded px-1 py-0.5
+            text-cyan-400 text-xs
+            font-mono text-right"
+        />
+      </div>
+    ) : (
+      <button
+        onClick={() => {
+          setEditingLine(row.ppLineId);
+          const current =
+            lineOverrides.get(row.ppLineId)
+            ?? row.lineValue ?? 0;
+          setEditValue(
+            current.toString());
+        }}
+        className="text-cyan-400
+          hover:text-cyan-300
+          hover:underline transition-colors
+          cursor-pointer"
+        title="Click to confirm PP line"
+      >
+        {getEffectiveLine(row)}
+        {lineOverrides.has(row.ppLineId) && (
+          <span className="text-[9px]
+            text-emerald-400 ml-1">
+            ✓
+          </span>
+        )}
+      </button>
+    )}
+    {(() => {
+      const overridePOver =
+        getOverridePOver(row);
+      const lineVal =
+        getEffectiveLine(row);
+      const projVal =
+        row.ourProjection?.value ?? null;
+      if (!projVal || projVal === 0)
+        return null;
+      const ratio = lineVal / projVal;
+      return (
+        <>
+          {overridePOver !== null && (
+            <span className="text-[9px]
+              text-emerald-300 font-mono">
+              {overridePOver}%↑
+            </span>
+          )}
+          {ratio < 0.6 &&
+            <span className="text-xs
+              text-emerald-400 font-mono
+              ml-1">👹</span>}
+          {ratio > 1.2 &&
+            <span className="text-xs
+              text-rose-400 font-mono
+              ml-1">😈</span>}
+        </>
+      );
+    })()}
+    {betterLineMap.has(row.ppLineId) &&
+      (() => {
+        const bl =
+          betterLineMap.get(row.ppLineId)!;
+        const pLabel =
+          bl.platform === "underdog"
+          ? "UD"
+          : bl.platform.charAt(0)
+              .toUpperCase() +
+            bl.platform.slice(1);
+        return (
+          <span className="text-[9px]
+            font-mono font-medium
+            text-emerald-400
+            bg-emerald-950/50
+            border border-emerald-800/40
+            rounded px-1 py-px
+            leading-none whitespace-nowrap">
+            ↓{bl.lineValue} {pLabel}
+          </span>
+        );
+      })()}
+  </div>
+</TableCell>
+
+STEP 6 — Show override pOver in
+the action column too.
+
+Find where pOver is displayed in
+the action/probability column.
+
+Add this check: if lineOverrides has
+an override for this row use
+getOverridePOver instead of
+row.ourProjection?.pOver.
+
+Find the action column pOver display
+and wrap it:
+
+const displayPOver =
+  getOverridePOver(row) ??
+  row.ourProjection?.pOver ?? null;
+
+Use displayPOver wherever pOver
+is shown in the action column.
+
+STEP 7 — Add a "Clear override"
+option.
+
+In the edit input onKeyDown add:
+if (e.key === "Delete") {
+  setLineOverrides(prev => {
+    const next = new Map(prev);
+    next.delete(row.ppLineId);
+    return next;
+  });
+  setEditingLine(null);
+}
+
+Run pnpm run typecheck — must pass.
+Do not publish yet.
+Report PASS or FAIL.
