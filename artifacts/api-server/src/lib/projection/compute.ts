@@ -63,7 +63,59 @@ export async function computeProjection(
     .orderBy(desc(playerGameLogsTable.gameDate))
     .limit(20);
 
-  const rawValues = logs.map(l => parseFloat(l.value.toString()));
+  let rawValues = logs.map(l => parseFloat(l.value.toString()));
+
+  // --- Combo stat fallback: compute from individual component logs ---
+  const COMBO_MAP: Record<string, string[]> = {
+    "Pts+Rebs+Asts": ["Points", "Rebounds", "Assists"],
+    "Pts+Rebs":      ["Points", "Rebounds"],
+    "Pts+Asts":      ["Points", "Assists"],
+    "Rebs+Asts":     ["Rebounds", "Assists"],
+  };
+  const comboComponents = COMBO_MAP[statType] ?? null;
+
+  if (rawValues.length === 0 && comboComponents) {
+    const componentLogs = await db
+      .select({
+        gameDate: playerGameLogsTable.gameDate,
+        statType: playerGameLogsTable.statType,
+        value:    playerGameLogsTable.value,
+      })
+      .from(playerGameLogsTable)
+      .where(and(
+        eq(playerGameLogsTable.playerId, playerId),
+        inArray(playerGameLogsTable.statType, comboComponents),
+      ))
+      .orderBy(desc(playerGameLogsTable.gameDate))
+      .limit(60);
+
+    // Sum all components per game date
+    const byDate = new Map<string, number>();
+    for (const log of componentLogs) {
+      const d = log.gameDate ?? "";
+      byDate.set(d, (byDate.get(d) ?? 0) + parseFloat(log.value.toString()));
+    }
+
+    // Only keep dates where ALL components are present
+    const completeDates = new Map<string, number>();
+    for (const [date, total] of byDate) {
+      const compsForDate = componentLogs.filter(l => l.gameDate === date);
+      const uniqueStats = new Set(compsForDate.map(l => l.statType));
+      if (uniqueStats.size === comboComponents.length) {
+        completeDates.set(date, total);
+      }
+    }
+
+    const comboValues = Array.from(completeDates.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .slice(0, 20)
+      .map(([, v]) => v);
+
+    if (comboValues.length > 0) {
+      rawValues = comboValues;
+    }
+  }
+
   const n = Math.min(rawValues.length, 15);
   const usedValues = rawValues.slice(0, n);
 

@@ -1,0 +1,135 @@
+Two fixes for combo stat projections.
+
+FIX 1 — Fix prior key names in
+artifacts/api-server/src/lib/
+projection/priors.ts
+
+The PP API uses these exact stat type
+strings. Update the NBA PRIORS keys
+to match exactly:
+
+Replace:
+"Pts+Reb+Ast": { mean: 28.2, std: 10.5 }
+"Pts+Reb":     { mean: 24.3, std: 9.8  }
+"Pts+Ast":     { mean: 22.4, std: 9.4  }
+"Reb+Ast":     { mean: 9.7,  std: 4.8  }
+
+With:
+"Pts+Rebs+Asts": { mean: 28.2, std: 10.5 }
+"Pts+Rebs":      { mean: 24.3, std: 9.8  }
+"Pts+Asts":      { mean: 22.4, std: 9.4  }
+"Rebs+Asts":     { mean: 9.7,  std: 4.8  }
+
+Also update WNBA PRIORS keys:
+"Pts+Reb+Ast" → "Pts+Rebs+Asts"
+"Pts+Reb"     → "Pts+Rebs"
+"Pts+Ast"     → "Pts+Asts"
+"Reb+Ast"     → "Rebs+Asts"
+
+FIX 2 — Compute combo stats from
+individual game logs.
+
+In artifacts/api-server/src/lib/
+projection/compute.ts
+
+In the computeProjection function
+after fetching logs — if logs.length
+is 0 and statType is a combo type,
+compute from individual stats:
+
+const COMBO_MAP: Record<string,
+  string[]> = {
+  "Pts+Rebs+Asts": [
+    "Points", "Rebounds", "Assists"],
+  "Pts+Rebs": ["Points", "Rebounds"],
+  "Pts+Asts": ["Points", "Assists"],
+  "Rebs+Asts": ["Rebounds", "Assists"],
+  "Pts+Rebs+Asts".toLowerCase():
+    ["Points", "Rebounds", "Assists"],
+};
+
+const comboComponents =
+  COMBO_MAP[statType] ?? null;
+
+if (logs.length === 0 &&
+    comboComponents) {
+  // Fetch individual component logs
+  // for the same player and date
+  const componentLogs = await db
+    .select({
+      gameDate:
+        playerGameLogsTable.gameDate,
+      statType:
+        playerGameLogsTable.statType,
+      value:
+        playerGameLogsTable.value,
+    })
+    .from(playerGameLogsTable)
+    .where(and(
+      eq(playerGameLogsTable.playerId,
+        playerId),
+      inArray(
+        playerGameLogsTable.statType,
+        comboComponents)
+    ))
+    .orderBy(
+      desc(playerGameLogsTable.gameDate))
+    .limit(60);
+
+  // Group by gameDate and sum
+  const byDate = new Map<string,
+    number>();
+  for (const log of componentLogs) {
+    const d = log.gameDate ?? "";
+    byDate.set(d,
+      (byDate.get(d) ?? 0) +
+      parseFloat(log.value.toString()));
+  }
+
+  // Only keep dates where ALL
+  // components are present
+  const completeDates = new Map
+    string, number>();
+  for (const [date, total] of byDate) {
+    const compsForDate = componentLogs
+      .filter(l => l.gameDate === date);
+    const uniqueStats = new Set(
+      compsForDate.map(l => l.statType));
+    if (uniqueStats.size ===
+        comboComponents.length) {
+      completeDates.set(date, total);
+    }
+  }
+
+  // Replace logs with computed combo
+  const comboValues = Array.from(
+    completeDates.entries())
+    .sort(([a], [b]) =>
+      b.localeCompare(a)) // newest first
+    .slice(0, 20)
+    .map(([, v]) => v);
+
+  if (comboValues.length > 0) {
+    rawValues.length = 0;
+    rawValues.push(...comboValues);
+  }
+}
+
+Note: rawValues is declared with
+let — make sure it is let not const
+so we can push to it.
+
+Actually rawValues is const but we
+push to it. Change the declaration:
+
+Find:
+const rawValues = logs.map(l =>
+  parseFloat(l.value.toString()));
+
+Change to:
+let rawValues = logs.map(l =>
+  parseFloat(l.value.toString()));
+
+Run pnpm run typecheck — must pass.
+Do not publish yet.
+Report PASS or FAIL.
