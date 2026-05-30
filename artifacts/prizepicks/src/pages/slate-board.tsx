@@ -831,8 +831,13 @@ export default function SlateBoard() {
     const override = lineOverrides.get(row.ppLineId);
     if (!override) return null;
     const proj = row.ourProjection;
-    if (!proj?.value || !proj?.stdDev) return null;
-    return Math.round(normalCDF(proj.value, proj.stdDev, override) * 100 * 10) / 10;
+    if (!proj?.value) return null;
+    const std = proj.stdDev && proj.stdDev > 0
+      ? proj.stdDev
+      : proj.value * 0.30;
+    return Math.round(
+      normalCDF(proj.value, std, override)
+      * 100 * 10) / 10;
   }
 
   type TonightPace = {
