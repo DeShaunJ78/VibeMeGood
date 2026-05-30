@@ -7,7 +7,7 @@ import {
   varianceScoresTable, platformLinesTable, playerGameLogsTable,
   probabilityCalibrationTable,
 } from "@workspace/db/schema";
-import { eq, and, or, isNull, isNotNull, desc, gte, asc, inArray, sql } from "drizzle-orm";
+import { eq, and, or, isNull, isNotNull, desc, gte, asc, inArray, ilike, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { consensusFairProb, edgePct, holdWarning } from "../lib/analytics/odds-math";
 import { detectSharpMoney } from "../lib/propedge/sharp-detector";
@@ -61,7 +61,7 @@ const router = Router();
 router.get("/market-intel", async (req, res) => {
   try {
     const {
-      sport, actionTag, lineType, minEdgeScore,
+      sport, actionTag, lineType, minEdgeScore, search,
       page = "1", limit = "100",
     } = req.query as Record<string, string>;
 
@@ -89,6 +89,7 @@ router.get("/market-intel", async (req, res) => {
         [sport];
       baseConditions.push(inArray(playersTable.sport, sportsToMatch));
     }
+    if (search) baseConditions.push(ilike(playersTable.fullName, `%${search}%`) as ReturnType<typeof eq>);
     if (lineType) baseConditions.push(eq(ppLinesTable.lineType, lineType));
     if (actionTag) baseConditions.push(eq(propScoresTable.actionTag, actionTag));
     if (minEdgeScore) {

@@ -556,6 +556,7 @@ export default function SlateBoard() {
     sport: sport !== "all" ? sport : undefined,
     lineType: lineTypeFilter !== "all" ? lineTypeFilter : undefined,
     actionTag: actionTagFilter !== "all" ? actionTagFilter : undefined,
+    search: searchQuery || undefined,
   };
 
   // Pagination state for market-intel
