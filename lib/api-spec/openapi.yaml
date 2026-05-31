@@ -2203,6 +2203,7 @@ components:
         allowStaleMarketData: { type: boolean }
         demonUnderAllowed: { type: boolean }
         sport: { type: string }
+        monteCarloIterations: { type: integer, minimum: 1000, maximum: 50000 }
       required: [format, picksPerEntry, numEntries, varianceProfile, optimizationObjective, maxPlayerExposure, maxPickExposure, maxTeamExposure, maxGameExposure, maxPairwiseOverlap, stakePerEntry, allowGtdPlayers, allowSingleBookData, allowStaleMarketData, demonUnderAllowed]
 
     FactoryScoredProp:

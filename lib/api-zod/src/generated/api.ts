@@ -1698,6 +1698,9 @@ export const generateLineupFactoryBodyPicksPerEntryMax = 6;
 
 export const generateLineupFactoryBodyNumEntriesMax = 25;
 
+export const generateLineupFactoryBodyMonteCarloIterationsMin = 1000;
+export const generateLineupFactoryBodyMonteCarloIterationsMax = 50000;
+
 
 
 export const GenerateLineupFactoryBody = zod.object({
@@ -1719,7 +1722,8 @@ export const GenerateLineupFactoryBody = zod.object({
   "allowSingleBookData": zod.boolean(),
   "allowStaleMarketData": zod.boolean(),
   "demonUnderAllowed": zod.boolean(),
-  "sport": zod.string().optional()
+  "sport": zod.string().optional(),
+  "monteCarloIterations": zod.number().min(generateLineupFactoryBodyMonteCarloIterationsMin).max(generateLineupFactoryBodyMonteCarloIterationsMax).optional()
 })
 
 export const GenerateLineupFactoryResponse = zod.object({

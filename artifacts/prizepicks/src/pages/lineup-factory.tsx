@@ -44,7 +44,16 @@ const DEFAULTS: LineupFactoryConfig = {
   allowSingleBookData: true,
   allowStaleMarketData: true,
   demonUnderAllowed: false,
+  monteCarloIterations: 10000,
 };
+
+const ITERATION_OPTIONS = [
+  { label: "1K", value: 1000 },
+  { label: "5K", value: 5000 },
+  { label: "10K", value: 10000 },
+  { label: "25K", value: 25000 },
+  { label: "50K", value: 50000 },
+];
 
 const FORMAT_LABELS: Record<string, string> = {
   power: "Power Play", flex: "Flex Play",
@@ -225,6 +234,15 @@ function ConfigPanel({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1.5 block">Simulation Iterations</Label>
+            <ToggleGroup
+              value={cfg.monteCarloIterations ?? 10000}
+              onChange={v => set("monteCarloIterations", Number(v))}
+              options={ITERATION_OPTIONS}
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">More iterations = more accurate break-even/profit odds, slightly slower.</p>
           </div>
         </CardContent>
       </Card>

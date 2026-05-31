@@ -43,6 +43,7 @@ const configSchema = z.object({
   allowStaleMarketData: z.boolean(),
   demonUnderAllowed: z.boolean(),
   sport: z.string().optional(),
+  monteCarloIterations: z.number().int().min(1000).max(50000).optional(),
 });
 
 type FactoryConfig = z.infer<typeof configSchema>;
@@ -197,7 +198,7 @@ function applyProfile(cfg: FactoryConfig): FactoryConfig {
   return c;
 }
 
-function monteCarloPortfolio(lineups: GeneratedLineup[], totalStake: number, iterations = 4000) {
+function monteCarloPortfolio(lineups: GeneratedLineup[], totalStake: number, iterations = 10000) {
   let breakEven = 0, profitable = 0;
   for (let i = 0; i < iterations; i++) {
     let payout = 0;
@@ -579,7 +580,7 @@ router.post("/lineup-factory/generate", async (req, res) => {
     const pNoneCash = lineups.reduce((acc, lu) => acc * (1 - lu.hitProbability), 1);
     const probAtLeastOneCashes = 1 - pNoneCash;
     const maxPayout = lineups.reduce((acc, lu) => acc + lu.grossPayout, 0);
-    const { probBreakEven, probProfitable } = monteCarloPortfolio(lineups, totalStake);
+    const { probBreakEven, probProfitable } = monteCarloPortfolio(lineups, totalStake, cfg.monteCarloIterations ?? 10000);
 
     const playerExposure: Record<string, number> = {};
     const pickExposure: Record<string, number> = {};

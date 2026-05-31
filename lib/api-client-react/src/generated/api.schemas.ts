@@ -895,6 +895,11 @@ export interface LineupFactoryConfig {
   allowStaleMarketData: boolean;
   demonUnderAllowed: boolean;
   sport?: string;
+  /**
+     * @minimum 1000
+     * @maximum 50000
+     */
+  monteCarloIterations?: number;
 }
 
 export type FactoryScoredPropDirection = typeof FactoryScoredPropDirection[keyof typeof FactoryScoredPropDirection];
