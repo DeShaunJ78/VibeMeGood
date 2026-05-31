@@ -1,0 +1,86 @@
+Do not change any code yet.
+
+Explain only — no fixes.
+
+The core problem with PrizePicks line
+identification in VibeMeGood:
+
+PrizePicks offers multiple tiers for
+the same player and stat type — for
+example Chet Holmgren Points has 17
+active lines ranging from 0.5 to 19.5.
+
+The PP API returns all tiers tagged
+as "standard" line_type with no
+"featured" flag to identify which
+tier PP actually displays as their
+main line.
+
+The dedup logic in slate-board.tsx
+tries to pick one tier per player/stat
+to display. Currently it uses:
+
+Priority 1: tier with external odds
+linked (bookCount > 0)
+Priority 2: standard tier closest to
+60-120% of our projection
+Priority 3: highest finalScore
+
+The problem: sportsbooks only price
+individual stats (Points, Rebounds,
+Assists) — not combo stats
+(Pts+Rebs, PRA, Pts+Asts). So combo
+stat tiers have no external odds
+linkage and fall through to Priority 2.
+
+Priority 2 uses our projection value.
+But our projection for combo stats
+is often wrong because it is computed
+by adding individual projections rather
+than from historical combined game
+totals.
+
+Example: Jalen Williams Pts+Rebs
+- Our projection: 25.99
+- PP featured line: 10.5
+- Dedup picks: 19.5 (closest to 25.99)
+- Wrong by 9 points
+
+The user must manually override each
+line on the Slate Board by clicking
+the line value and typing the correct
+PP featured line. This triggers a
+normalCDF recalculation using the
+confirmed line.
+
+The override persists via localStorage
+keyed by playerId:statType so it
+survives page refresh and line ID
+rotation after resyncs.
+
+The remaining gap: after game lock
+all overrides become stale. Next
+day requires re-entering all overrides.
+
+Question for Replit: given this
+architecture, what is the most
+reliable way to automatically identify
+the PP featured line without manual
+override? Consider:
+
+1. The PP API response structure —
+   is there any field that identifies
+   the featured tier?
+
+2. Whether Underdog Fantasy API
+   (product=fantasy endpoint) could
+   serve as an anchor for combo stats
+
+3. Whether a hold percentage
+   calculation across tiers could
+   identify the featured line
+
+4. Any other approach you can identify
+   from the codebase
+
+Report findings only. No code changes.
