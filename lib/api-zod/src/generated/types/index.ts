@@ -95,6 +95,7 @@ export * from './sharpSignalRowSignal';
 export * from './sharpSummary';
 export * from './sharpSyncResult';
 export * from './slateRow';
+export * from './slateSportCount';
 export * from './syncResult';
 export * from './team';
 export * from './teamInput';

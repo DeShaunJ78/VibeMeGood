@@ -1653,6 +1653,13 @@ components:
         teamId: { type: ["integer", "null"] }
       required: [ppLineId, playerId, playerName, sport, statType, lineValue, lineType, directionalityType, isWatched, updatedAt]
 
+    SlateSportCount:
+      type: object
+      properties:
+        sport: { type: string }
+        count: { type: integer }
+      required: [sport, count]
+
     # ─── PROP DETAIL ────────────────────────────────────────────────
     PropDetail:
       type: object

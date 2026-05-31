@@ -615,6 +615,16 @@ export const GetSlateResponse = zod.array(GetSlateResponseItem)
 
 
 /**
+ * @summary Active-line counts grouped by canonical sport, ordered by count desc
+ */
+export const GetSlateSportsResponseItem = zod.object({
+  "sport": zod.string(),
+  "count": zod.number()
+})
+export const GetSlateSportsResponse = zod.array(GetSlateSportsResponseItem)
+
+
+/**
  * @summary Get full prop detail for one line
  */
 export const GetSlateRowParams = zod.object({

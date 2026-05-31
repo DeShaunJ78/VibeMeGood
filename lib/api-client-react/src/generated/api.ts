@@ -93,6 +93,7 @@ import type {
   SharpSummary,
   SharpSyncResult,
   SlateRow,
+  SlateSportCount,
   SyncResult,
   Team,
   TeamInput,
@@ -2200,6 +2201,83 @@ export function useGetSlate<TData = Awaited<ReturnType<typeof getSlate>>, TError
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetSlateQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetSlateSportsUrl = () => {
+
+
+
+
+  return `/api/slate-sports`
+}
+
+/**
+ * @summary Active-line counts grouped by canonical sport, ordered by count desc
+ */
+export const getSlateSports = async ( options?: RequestInit): Promise<SlateSportCount[]> => {
+
+  return customFetch<SlateSportCount[]>(getGetSlateSportsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSlateSportsQueryKey = () => {
+    return [
+    `/api/slate-sports`
+    ] as const;
+    }
+
+
+export const getGetSlateSportsQueryOptions = <TData = Awaited<ReturnType<typeof getSlateSports>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSlateSports>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSlateSportsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSlateSports>>> = ({ signal }) => getSlateSports({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSlateSports>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSlateSportsQueryResult = NonNullable<Awaited<ReturnType<typeof getSlateSports>>>
+export type GetSlateSportsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Active-line counts grouped by canonical sport, ordered by count desc
+ */
+
+export function useGetSlateSports<TData = Awaited<ReturnType<typeof getSlateSports>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSlateSports>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSlateSportsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

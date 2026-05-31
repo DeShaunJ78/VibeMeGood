@@ -325,6 +325,11 @@ export interface SlateRow {
   teamId?: number | null;
 }
 
+export interface SlateSportCount {
+  sport: string;
+  count: number;
+}
+
 export interface PropDetail {
   ppLine: PpLine;
   player: Player;

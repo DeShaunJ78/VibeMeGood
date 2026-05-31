@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import {
-  useGetSlate, getGetSlateQueryKey,
+  useGetSlate, getGetSlateQueryKey, useGetSlateSports,
   useAddToWatchlist, useRemoveFromWatchlist,
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -96,7 +96,7 @@ type MarketIntelPage = {
   lastOddsSync?: string | null;
 };
 
-function useMarketIntel(params: Record<string, string | undefined>, page: number) {
+function useMarketIntel(params: Record<string, string | undefined>, page: number, enabled = true) {
   const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v) qs.set(k, v);
@@ -110,6 +110,7 @@ function useMarketIntel(params: Record<string, string | undefined>, page: number
       return r.json();
     },
     staleTime: 60_000,
+    enabled,
   });
 }
 
@@ -509,7 +510,11 @@ export default function SlateBoard() {
   const presetsUnlocked = totalEntries >= 30;
   const varianceEnabled = userSettings?.varianceIntelEnabled ?? false;
   const [tab, setTab] = useState<"player" | "team">("player");
-  const [sport, setSport] = useState<string>("MLB");
+  // "" = unresolved; auto-defaults to the most-populated sport once counts load.
+  // Persists the user's manual choice across sessions.
+  const [sport, setSport] = useState<string>(() => {
+    try { return localStorage.getItem("slate-sport") ?? ""; } catch { return ""; }
+  });
   const [lineTypeFilter, setLineTypeFilter] = useState<string>("all");
   const [minEdge, setMinEdge] = useState<string>("");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -618,11 +623,25 @@ export default function SlateBoard() {
     }
   }, [miParamsStr]);
 
+  // Active-line counts per sport — used to auto-pick the most-populated sport
+  // so the board is never empty (off-season) nor overloaded (all sports).
+  const { data: sportCounts } = useGetSlateSports();
+  const sportResolved = sport !== "";
+  useEffect(() => {
+    if (sportResolved) return;
+    if (sportCounts && sportCounts.length > 0) setSport(sportCounts[0].sport);
+  }, [sportCounts, sportResolved]);
+
+  // Persist the user's resolved sport choice across sessions.
+  useEffect(() => {
+    if (sport !== "") { try { localStorage.setItem("slate-sport", sport); } catch {} }
+  }, [sport]);
+
   const { data: slate, isLoading: slateLoading } = useGetSlate(slateParams, {
-    query: { queryKey: getGetSlateQueryKey(slateParams) },
+    query: { queryKey: getGetSlateQueryKey(slateParams), enabled: sportResolved },
   });
 
-  const { data: miPageData, isLoading: miLoading } = useMarketIntel(miParams, miPage);
+  const { data: miPageData, isLoading: miLoading } = useMarketIntel(miParams, miPage, sportResolved);
 
   // Accumulate pages as they load; capture lastOddsSync from page 1
   useEffect(() => {
@@ -634,7 +653,7 @@ export default function SlateBoard() {
   }, [miPageData, miPage]);
 
   // Only block on skeleton for the very first page
-  const isLoading = slateLoading || (miPage === 1 && miLoading);
+  const isLoading = !sportResolved || slateLoading || (miPage === 1 && miLoading);
 
   // Merge market-intel into slate rows by ppLineId
   const miMap = new Map<number, MarketIntelRow>(allMiRows.map(r => [r.ppLineId, r]));

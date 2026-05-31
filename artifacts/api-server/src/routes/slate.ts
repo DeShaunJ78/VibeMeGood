@@ -128,6 +128,44 @@ router.get("/slate", async (req, res) => {
   }
 });
 
+// Canonical sport grouping — collapses variant leagues into one bucket.
+const SPORT_GROUP: Record<string, string> = {
+  NFL: "NFL", NFLSZN: "NFL",
+  NBA: "NBA", NBA1Q: "NBA", NBA1H: "NBA", NBA1P: "NBA", NBASZN: "NBA",
+  MLB: "MLB", MLBLIVE: "MLB",
+  NHL: "NHL", NHL1P: "NHL",
+  WNBA: "WNBA", WNBA1H: "WNBA", WNBA1Q: "WNBA",
+};
+
+router.get("/slate-sports", async (req, res) => {
+  try {
+    const cutoff12h = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    const rows = await db
+      .select({ sport: playersTable.sport })
+      .from(ppLinesTable)
+      .innerJoin(playersTable, eq(ppLinesTable.playerId, playersTable.id))
+      .where(and(
+        eq(ppLinesTable.isActive, true),
+        or(isNull(ppLinesTable.lastSyncedAt), gte(ppLinesTable.lastSyncedAt, cutoff12h)),
+      ));
+
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      const canonical = SPORT_GROUP[r.sport] ?? r.sport;
+      counts.set(canonical, (counts.get(canonical) ?? 0) + 1);
+    }
+
+    const result = [...counts.entries()]
+      .map(([sport, count]) => ({ sport, count }))
+      .sort((a, b) => b.count - a.count);
+
+    res.json(result);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
   try {
     const lineId = Number(req.params.ppLineId);
