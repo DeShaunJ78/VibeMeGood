@@ -8,10 +8,12 @@ const router = Router();
 
 // Manual hybrid overrides. `null` clears the override (falls back to synced value /
 // auto estimate). Never mutates lineValue/lineType — those are the synced upsert key.
-// Bounds are data-quality guards: reject negatives/zero, absurd typos, and out-of-range
-// multipliers so garbage values can never reach the optimizer EV calculation.
+// Bounds are data-quality guards against absurd typos. The override mirrors the raw
+// line domain, which may be legitimately negative (spreads, certain goblin lines), so
+// we bound magnitude (|x| <= 10000) rather than forcing positivity. Multipliers stay
+// in [0.1, 10] so garbage values can never reach the optimizer EV calculation.
 const overrideSchema = z.object({
-  lineValueOverride: z.number().positive().max(10000).nullable().optional(),
+  lineValueOverride: z.number().min(-10000).max(10000).nullable().optional(),
   payoutMultiplier: z.number().min(0.1).max(10).nullable().optional(),
 });
 

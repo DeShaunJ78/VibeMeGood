@@ -8,8 +8,8 @@
 
 export interface PpLineOverrideInput {
   /**
+     * @minimum -10000
      * @maximum 10000
-     * @exclusiveMinimum 0
      * @nullable
      */
   lineValueOverride?: number | null;

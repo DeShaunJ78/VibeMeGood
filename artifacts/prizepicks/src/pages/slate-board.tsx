@@ -1393,7 +1393,7 @@ export default function SlateBoard() {
                                   onKeyDown={e => {
                                     if (e.key === "Enter") {
                                       const v = parseFloat(editValue);
-                                      if (!isNaN(v) && v > 0) saveOverride(row.ppLineId, { lineValueOverride: v });
+                                      if (!isNaN(v) && Math.abs(v) <= 10000) saveOverride(row.ppLineId, { lineValueOverride: v });
                                       setEditingLine(null);
                                     }
                                     if (e.key === "Escape") setEditingLine(null);
@@ -1404,7 +1404,7 @@ export default function SlateBoard() {
                                   }}
                                   onBlur={() => {
                                     const v = parseFloat(editValue);
-                                    if (!isNaN(v) && v > 0 && v !== (row.lineValueOverride ?? row.lineValue)) {
+                                    if (!isNaN(v) && Math.abs(v) <= 10000 && v !== (row.lineValueOverride ?? row.lineValue)) {
                                       saveOverride(row.ppLineId, { lineValueOverride: v });
                                     }
                                     setEditingLine(null);
