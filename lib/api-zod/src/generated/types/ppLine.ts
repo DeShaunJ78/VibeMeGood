@@ -16,6 +16,10 @@ export interface PpLine {
   lineValue: number;
   lineType: string;
   payoutModifier?: unknown;
+  /** @nullable */
+  lineValueOverride?: number | null;
+  /** @nullable */
+  payoutMultiplier?: number | null;
   openedAt: Date;
   updatedAt: Date;
   isActive: boolean;

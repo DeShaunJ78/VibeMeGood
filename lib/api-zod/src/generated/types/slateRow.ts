@@ -21,6 +21,13 @@ export interface SlateRow {
   startTime?: string | null;
   statType: string;
   lineValue: number;
+  /** @nullable */
+  lineValueOverride?: number | null;
+  effectiveLine?: number;
+  /** @nullable */
+  payoutMultiplier?: number | null;
+  /** @nullable */
+  effectivePayoutMultiplier?: number | null;
   lineType: string;
   directionalityType: string;
   /** @nullable */

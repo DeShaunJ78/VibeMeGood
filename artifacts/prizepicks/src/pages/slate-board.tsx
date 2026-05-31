@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import {
   useGetSlate, getGetSlateQueryKey, useGetSlateSports,
-  useAddToWatchlist, useRemoveFromWatchlist,
+  useAddToWatchlist, useRemoveFromWatchlist, useSetPpLineOverrides,
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -495,6 +495,7 @@ function normalCDF(mean: number, std: number, line: number): number {
 }
 
 export default function SlateBoard() {
+  const qc = useQueryClient();
   const { data: userSettings } = useUserSettings();
   const { data: allEntriesForCount } = useQuery<{ length: number }>({
     queryKey: ["entries-total-count"],
@@ -533,18 +534,11 @@ export default function SlateBoard() {
   const [sortCol, setSortCol] = useState<string>("projGap");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [lastOddsSync, setLastOddsSync] = useState<string | null | undefined>(undefined);
-  const OVERRIDE_LS_KEY = "pp_line_overrides";
-  const [lineOverrides, setLineOverrides] = useState<Map<string, number>>(() => {
-    try {
-      const saved = localStorage.getItem(OVERRIDE_LS_KEY);
-      if (!saved) return new Map();
-      const obj = JSON.parse(saved) as Record<string, number>;
-      return new Map(Object.entries(obj));
-    } catch {
-      return new Map();
-    }
-  });
-  const [editingLine, setEditingLine] = useState<string | null>(null);
+  // Line corrections + demon/goblin payout multipliers persist server-side, keyed by
+  // ppLineId so a standard-line fix never bleeds onto its goblin/demon siblings, and the
+  // optimizer sees the same corrections.
+  const setOverride = useSetPpLineOverrides();
+  const [editingLine, setEditingLine] = useState<number | null>(null);
   const [editValue, setEditValue] = useState<string>("");
 
   const oddsStale = lastOddsSync !== undefined && (
@@ -596,6 +590,16 @@ export default function SlateBoard() {
   const slateParams = {
     sport: sport !== "all" ? sport : undefined,
   };
+
+  const saveOverride = useCallback(
+    (ppLineId: number, patch: { lineValueOverride?: number | null; payoutMultiplier?: number | null }) => {
+      setOverride.mutate(
+        { id: ppLineId, data: patch },
+        { onSuccess: () => { qc.invalidateQueries({ queryKey: getGetSlateQueryKey(slateParams) }); } },
+      );
+    },
+    [setOverride, qc, slateParams],
+  );
 
   const miParams: Record<string, string | undefined> = {
     sport: sport !== "all" ? sport : undefined,
@@ -805,11 +809,11 @@ export default function SlateBoard() {
       switch (sortCol) {
         case "playerName": cmp = (a.playerName ?? "").localeCompare(b.playerName ?? ""); break;
         case "statType":   cmp = (a.statType ?? "").localeCompare(b.statType ?? ""); break;
-        case "ppLine":     cmp = (a.lineValue ?? 0) - (b.lineValue ?? 0); break;
+        case "ppLine":     cmp = (a.lineValueOverride ?? a.lineValue ?? 0) - (b.lineValueOverride ?? b.lineValue ?? 0); break;
         case "ourProj":    cmp = (a.ourProjection?.value ?? -1) - (b.ourProjection?.value ?? -1); break;
         case "projGap": {
-          const ga = a.ourProjection ? a.ourProjection.value - a.lineValue : -999;
-          const gb = b.ourProjection ? b.ourProjection.value - b.lineValue : -999;
+          const ga = a.ourProjection ? a.ourProjection.value - (a.lineValueOverride ?? a.lineValue) : -999;
+          const gb = b.ourProjection ? b.ourProjection.value - (b.lineValueOverride ?? b.lineValue) : -999;
           cmp = ga - gb; break;
         }
         case "vor":      cmp = (a.ourProjection?.vor ?? -999) - (b.ourProjection?.vor ?? -999); break;
@@ -856,17 +860,17 @@ export default function SlateBoard() {
     return m;
   }, [betterLinesData]);
 
-  function overrideKey(row: typeof playerRows[0]): string {
-    return `${row.playerId}:${row.statType}`;
+  function getEffectiveLine(row: typeof playerRows[0]): number {
+    return row.lineValueOverride ?? row.effectiveLine ?? row.lineValue ?? 0;
   }
 
-  function getEffectiveLine(row: typeof playerRows[0]): number {
-    return lineOverrides.get(overrideKey(row)) ?? row.lineValue ?? 0;
+  function hasOverride(row: typeof playerRows[0]): boolean {
+    return row.lineValueOverride != null;
   }
 
   function getOverridePOver(row: typeof playerRows[0]): number | null {
-    const override = lineOverrides.get(overrideKey(row));
-    if (!override) return null;
+    const override = row.lineValueOverride;
+    if (override == null) return null;
     const proj = row.ourProjection;
     if (!proj?.value) return null;
     const std = proj.stdDev && proj.stdDev > 0
@@ -1218,17 +1222,20 @@ export default function SlateBoard() {
               </Button>
               <SyncProjectionsButton />
               <ForceSyncButton />
-              {lineOverrides.size > 0 && (
-                <button
-                  onClick={() => {
-                    setLineOverrides(new Map());
-                    try { localStorage.removeItem(OVERRIDE_LS_KEY); } catch {}
-                  }}
-                  className="text-xs font-mono text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-700 rounded px-2 py-1 transition-colors"
-                >
-                  Clear {lineOverrides.size} override{lineOverrides.size > 1 ? "s" : ""}
-                </button>
-              )}
+              {(() => {
+                const overridden = playerRows.filter(r => r.lineValueOverride != null || r.payoutMultiplier != null);
+                if (overridden.length === 0) return null;
+                return (
+                  <button
+                    onClick={() => {
+                      for (const r of overridden) saveOverride(r.ppLineId, { lineValueOverride: null, payoutMultiplier: null });
+                    }}
+                    className="text-xs font-mono text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-700 rounded px-2 py-1 transition-colors"
+                  >
+                    Clear {overridden.length} override{overridden.length > 1 ? "s" : ""}
+                  </button>
+                );
+              })()}
             </div>
           </>
         )}
@@ -1376,7 +1383,7 @@ export default function SlateBoard() {
                         <TableCell className="font-mono text-xs">{row.statType}</TableCell>
                         <TableCell className="font-mono text-sm font-bold text-right">
                           <div className="flex flex-col items-end gap-0.5">
-                            {editingLine === overrideKey(row) ? (
+                            {editingLine === row.ppLineId ? (
                               <div className="flex items-center gap-1">
                                 <input
                                   type="number"
@@ -1386,36 +1393,19 @@ export default function SlateBoard() {
                                   onKeyDown={e => {
                                     if (e.key === "Enter") {
                                       const v = parseFloat(editValue);
-                                      if (!isNaN(v) && v > 0) {
-                                        setLineOverrides(prev => {
-                                          const next = new Map(prev);
-                                          next.set(overrideKey(row), v);
-                                          try { localStorage.setItem(OVERRIDE_LS_KEY, JSON.stringify(Object.fromEntries(next))); } catch {}
-                                          return next;
-                                        });
-                                      }
+                                      if (!isNaN(v) && v > 0) saveOverride(row.ppLineId, { lineValueOverride: v });
                                       setEditingLine(null);
                                     }
                                     if (e.key === "Escape") setEditingLine(null);
                                     if (e.key === "Delete") {
-                                      setLineOverrides(prev => {
-                                        const next = new Map(prev);
-                                        next.delete(overrideKey(row));
-                                        try { localStorage.setItem(OVERRIDE_LS_KEY, JSON.stringify(Object.fromEntries(next))); } catch {}
-                                        return next;
-                                      });
+                                      saveOverride(row.ppLineId, { lineValueOverride: null });
                                       setEditingLine(null);
                                     }
                                   }}
                                   onBlur={() => {
                                     const v = parseFloat(editValue);
-                                    if (!isNaN(v) && v > 0) {
-                                      setLineOverrides(prev => {
-                                        const next = new Map(prev);
-                                        next.set(overrideKey(row), v);
-                                        try { localStorage.setItem(OVERRIDE_LS_KEY, JSON.stringify(Object.fromEntries(next))); } catch {}
-                                        return next;
-                                      });
+                                    if (!isNaN(v) && v > 0 && v !== (row.lineValueOverride ?? row.lineValue)) {
+                                      saveOverride(row.ppLineId, { lineValueOverride: v });
                                     }
                                     setEditingLine(null);
                                   }}
@@ -1427,14 +1417,14 @@ export default function SlateBoard() {
                               <button
                                 onClick={e => {
                                   e.stopPropagation();
-                                  setEditingLine(overrideKey(row));
-                                  setEditValue((lineOverrides.get(overrideKey(row)) ?? row.lineValue ?? 0).toString());
+                                  setEditingLine(row.ppLineId);
+                                  setEditValue((row.lineValueOverride ?? row.lineValue ?? 0).toString());
                                 }}
                                 className="text-cyan-400 hover:text-cyan-300 hover:underline transition-colors cursor-pointer"
                                 title="Click to confirm PP line"
                               >
                                 {getEffectiveLine(row)}
-                                {lineOverrides.has(overrideKey(row)) && (
+                                {hasOverride(row) && (
                                   <span className="text-[9px] text-emerald-400 ml-1">✓</span>
                                 )}
                               </button>
@@ -1466,7 +1456,50 @@ export default function SlateBoard() {
                             })()}
                           </div>
                         </TableCell>
-                        <TableCell className="text-center"><LineTypeBadge type={row.lineType} /></TableCell>
+                        <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <LineTypeBadge type={row.lineType} />
+                            {(row.lineType === "demon" || row.lineType === "goblin") && (() => {
+                              const eff = row.effectivePayoutMultiplier
+                                ?? row.payoutMultiplier
+                                ?? (row.lineType === "demon" ? 1.5 : 0.75);
+                              const manual = row.payoutMultiplier != null;
+                              const editKey = -row.ppLineId; // negative = multiplier editor for this row
+                              return editingLine === editKey ? (
+                                <input
+                                  type="number"
+                                  step="0.05"
+                                  value={editValue}
+                                  onChange={e => setEditValue(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === "Enter") {
+                                      const v = parseFloat(editValue);
+                                      if (!isNaN(v) && v > 0) saveOverride(row.ppLineId, { payoutMultiplier: v });
+                                      setEditingLine(null);
+                                    }
+                                    if (e.key === "Escape") setEditingLine(null);
+                                    if (e.key === "Delete") { saveOverride(row.ppLineId, { payoutMultiplier: null }); setEditingLine(null); }
+                                  }}
+                                  onBlur={() => {
+                                    const v = parseFloat(editValue);
+                                    if (!isNaN(v) && v > 0 && v !== row.payoutMultiplier) saveOverride(row.ppLineId, { payoutMultiplier: v });
+                                    setEditingLine(null);
+                                  }}
+                                  autoFocus
+                                  className="w-12 bg-slate-800 border border-amber-500 rounded px-1 py-0.5 text-amber-300 text-[10px] font-mono text-center"
+                                />
+                              ) : (
+                                <button
+                                  onClick={e => { e.stopPropagation(); setEditingLine(editKey); setEditValue((row.payoutMultiplier ?? eff).toString()); }}
+                                  className={`text-[9px] font-mono rounded px-1 leading-none transition-colors ${manual ? "text-amber-300 hover:text-amber-200" : "text-slate-500 hover:text-slate-300"}`}
+                                  title={manual ? "Manual payout multiplier — click to edit, Delete to clear" : "Auto-estimated payout multiplier — click to override"}
+                                >
+                                  ×{eff.toFixed(2)}{manual ? "✓" : "≈"}
+                                </button>
+                              );
+                            })()}
+                          </div>
+                        </TableCell>
 
                         {/* Market avg */}
                         <TableCell className="hidden lg:table-cell font-mono text-xs text-right">
@@ -1525,7 +1558,7 @@ export default function SlateBoard() {
 
                         {/* Our projection */}
                         <TableCell className="hidden lg:table-cell text-right">
-                          <ProjectionCell proj={proj} ppLine={row.lineValue} />
+                          <ProjectionCell proj={proj} ppLine={getEffectiveLine(row)} />
                         </TableCell>
 
                         {/* VOR — Value Over Replacement */}
@@ -1767,10 +1800,10 @@ export default function SlateBoard() {
                               </div>
                             ) : (
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <MiniGameChart values={row.gameLogs ?? []} ppLine={row.lineValue} />
-                                <HitRateChart values={row.gameLogs ?? []} ppLine={row.lineValue} />
+                                <MiniGameChart values={row.gameLogs ?? []} ppLine={getEffectiveLine(row)} />
+                                <HitRateChart values={row.gameLogs ?? []} ppLine={getEffectiveLine(row)} />
                                 {proj?.stdDev != null ? (
-                                  <DistributionChart mean={proj.value} stdDev={proj.stdDev} ppLine={row.lineValue} />
+                                  <DistributionChart mean={proj.value} stdDev={proj.stdDev} ppLine={getEffectiveLine(row)} />
                                 ) : (
                                   <div className="flex flex-col gap-1">
                                     <span className="text-[10px] font-mono text-slate-500 uppercase">Distribution</span>

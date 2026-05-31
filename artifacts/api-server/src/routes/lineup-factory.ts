@@ -7,6 +7,7 @@ import {
 import { eq, and, inArray, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { pOverLine } from "../lib/projection/normal-dist";
+import { effectivePayoutMultiplier } from "../lib/payout/multiplier";
 import { z } from "zod";
 
 const router = Router();
@@ -59,6 +60,7 @@ type ScoredProp = {
   direction: "more" | "less";
   lineType: string;
   ppLine: number;
+  payoutMultiplier: number;
   hitProbability: number;
   probabilitySource: string;
   confidence: string;
@@ -93,7 +95,9 @@ function getFlexMultiplier(hits: number, total: number): number {
   return FLEX_MULT[`${hits}/${total}`] ?? 0;
 }
 
-function calcFlexEV(probs: number[], stake: number): number {
+// payoutFactor scales the entry's payout by the product of any demon (>1) / goblin (<1)
+// per-pick multipliers, so the EV reflects PrizePicks' boosted/discounted payouts.
+function calcFlexEV(probs: number[], stake: number, payoutFactor = 1): number {
   const n = probs.length;
   let ev = -stake;
   for (let mask = 0; mask < (1 << n); mask++) {
@@ -104,9 +108,14 @@ function calcFlexEV(probs: number[], stake: number): number {
       else { stateProb *= (1 - probs[i]); }
     }
     const mult = getFlexMultiplier(hits, n);
-    if (mult > 0) ev += stateProb * mult * stake;
+    if (mult > 0) ev += stateProb * mult * payoutFactor * stake;
   }
   return ev;
+}
+
+// Product of each pick's demon/goblin payout multiplier (standard = 1.0).
+function lineupPayoutFactor(picks: ScoredProp[]): number {
+  return picks.reduce((acc, p) => acc * (p.payoutMultiplier || 1), 1);
 }
 
 function calcCorrelationFactor(picks: ScoredProp[]): number {
@@ -125,7 +134,7 @@ function calcCorrelationFactor(picks: ScoredProp[]): number {
 }
 
 function calcPowerEV(picks: ScoredProp[], stake: number, n: number) {
-  const mult = POWER_MULT[n] ?? 10;
+  const mult = (POWER_MULT[n] ?? 10) * lineupPayoutFactor(picks);
   const rawPHit = picks.reduce((acc, p) => acc * p.hitProbability, 1);
   const corrFactor = calcCorrelationFactor(picks);
   const pHit = Math.min(0.97, Math.max(0.005, rawPHit * corrFactor));
@@ -258,6 +267,21 @@ router.post("/lineup-factory/generate", async (req, res) => {
       : Infinity;
 
     // ── 4. Score every prop ────────────────────────────────────────────────
+    // P(over) of each player/stat's STANDARD line — anchors the auto payout-multiplier
+    // estimate for goblin/demon siblings. The factory loads all active player lines, so
+    // the standard sibling is reliably present here.
+    const standardPOverByStat: Record<string, number> = {};
+    for (const row of rows) {
+      if (row.line.lineType !== "standard") continue;
+      const m = row.proj?.projectedValue ? parseFloat(row.proj.projectedValue.toString()) : null;
+      const s = row.proj?.stdDev ? parseFloat(row.proj.stdDev.toString()) : null;
+      if (m === null || s === null) continue;
+      const eff = row.line.lineValueOverride != null
+        ? parseFloat(row.line.lineValueOverride.toString())
+        : parseFloat(row.line.lineValue.toString());
+      standardPOverByStat[`${row.line.playerId}:${row.line.statType}`] = pOverLine(m, s, eff) / 100;
+    }
+
     const allScoredProps: ScoredProp[] = [];
 
     for (const row of rows) {
@@ -272,7 +296,12 @@ router.post("/lineup-factory/generate", async (req, res) => {
       const bookVals = Object.values(bookLines);
       const bookCount = bookVals.length;
       const marketAvg = bookCount ? bookVals.reduce((a, b) => a + b, 0) / bookCount : null;
-      const ppLine = parseFloat(row.line.lineValue.toString());
+      // Effective line = manual correction if set, else the synced PP value. All edge /
+      // probability math below runs against the corrected line so a Slate Board fix
+      // actually reaches the optimizer.
+      const ppLine = row.line.lineValueOverride != null
+        ? parseFloat(row.line.lineValueOverride.toString())
+        : parseFloat(row.line.lineValue.toString());
       const trueEdge = marketAvg ? (-(ppLine - marketAvg) / marketAvg) * 100 : null;
 
       let marketDataStatus: string;
@@ -290,7 +319,7 @@ router.post("/lineup-factory/generate", async (req, res) => {
       const pMean = row.proj?.projectedValue ? parseFloat(row.proj.projectedValue.toString()) : null;
       const pStd = row.proj?.stdDev ? parseFloat(row.proj.stdDev.toString()) : null;
       const pOver = (pMean !== null && pStd !== null)
-        ? pOverLine(pMean, pStd, parseFloat(row.line.lineValue.toString())) / 100
+        ? pOverLine(pMean, pStd, ppLine) / 100
         : null;
       let hitProbability: number;
       let probabilitySource: string;
@@ -329,11 +358,20 @@ router.post("/lineup-factory/generate", async (req, res) => {
       const direction: "more" | "less" =
         (row.line.lineType === "demon" && cfg.demonUnderAllowed) ? "less" : "more";
 
+      // Hybrid payout multiplier: manual override wins, else an EV-preserving auto
+      // estimate anchored to the standard-line P(over). Standard lines stay at 1.0.
+      const payoutMultiplier = effectivePayoutMultiplier(
+        row.line.payoutMultiplier != null ? parseFloat(row.line.payoutMultiplier.toString()) : null,
+        row.line.lineType,
+        pOver,
+        standardPOverByStat[`${row.line.playerId}:${row.line.statType}`],
+      );
+
       // EV (single-prop contribution for sorting)
       const stake = cfg.stakePerEntry;
       const expectedValue = cfg.format === "flex"
-        ? calcFlexEV([hitProbability], stake)
-        : hitProbability * (POWER_MULT[cfg.picksPerEntry] ?? 10) * stake - stake;
+        ? calcFlexEV([hitProbability], stake, payoutMultiplier)
+        : hitProbability * (POWER_MULT[cfg.picksPerEntry] ?? 10) * payoutMultiplier * stake - stake;
 
       const edgeScore = row.score
         ? parseFloat((row.score.finalScore ?? "0").toString())
@@ -373,6 +411,7 @@ router.post("/lineup-factory/generate", async (req, res) => {
         direction,
         lineType:          row.line.lineType,
         ppLine,
+        payoutMultiplier:  Math.round(payoutMultiplier * 100) / 100,
         hitProbability:    Math.round(hitProbability * 1000) / 1000,
         probabilitySource,
         confidence,
@@ -493,20 +532,22 @@ router.post("/lineup-factory/generate", async (req, res) => {
       if (picks.length < 2) continue;
 
       const stake = cfg.stakePerEntry;
+      // Product of demon/goblin payout boosts/discounts across the lineup's picks.
+      const payoutFactor = lineupPayoutFactor(picks);
       let ev: number, pHit: number, grossPayout: number;
       let correlationAdjusted = false;
       let correlationNote: string | null = null;
 
       if (cfg.format === "flex") {
-        ev = calcFlexEV(picks.map(p => p.hitProbability), stake);
+        ev = calcFlexEV(picks.map(p => p.hitProbability), stake, payoutFactor);
         pHit = picks.reduce((acc, p) => acc * p.hitProbability, 1);
-        grossPayout = (getFlexMultiplier(picks.length, picks.length) || 1) * stake;
+        grossPayout = (getFlexMultiplier(picks.length, picks.length) || 1) * payoutFactor * stake;
         correlationAdjusted = picks.some((p, i) => picks.slice(i + 1).some(q => q.playerId === p.playerId));
       } else {
         const result = calcPowerEV(picks, stake, picks.length);
         ev = result.ev;
         pHit = result.pHit;
-        grossPayout = (POWER_MULT[picks.length] ?? 10) * stake;
+        grossPayout = (POWER_MULT[picks.length] ?? 10) * payoutFactor * stake;
         correlationAdjusted = result.corrFactor !== 1.0;
         if (result.corrFactor > 1.01) {
           correlationNote = `Positive correlation detected (+${((result.corrFactor - 1) * 100).toFixed(1)}% joint-prob). Estimate is approximate.`;

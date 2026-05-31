@@ -83,6 +83,7 @@ export * from './portfolioStatsTeamExposure';
 export * from './ppLine';
 export * from './ppLineHistory';
 export * from './ppLineInput';
+export * from './ppLineOverrideInput';
 export * from './ppLineUpdate';
 export * from './projection';
 export * from './projectionInput';

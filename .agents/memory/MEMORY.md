@@ -2,3 +2,5 @@
 - [Slate list route fix](slate-route-fix.md) — slate list must JOIN ourProjectionsTable (not projectionsTable); projectionsTable has only 18 seeded legacy rows
 - [Data sources & Odds API credits](data-sources-and-credits.md) — provider→data mapping (don't collapse onto FantasyPros) + odds credit guards + shared SPORT_GROUP.
 - [PrizePicks tier & per-line pOver](prizepicks-tier-and-pover.md) — tier comes from `odds_type` not `line_type`; probability must be recomputed per line, never the single stored proj.pOver.
+- [pOver units](pover-units.md) — pOverLine() & stored pOver are 0..100 percentages, NOT fractions; divide by 100 before multiplier math, never x100 on display.
+- [Line overrides](line-overrides.md) — pp_lines lineValueOverride/payoutMultiplier keyed per-ppLineId (fixes bleed); survive resync; always eval against `lineValueOverride ?? lineValue`.

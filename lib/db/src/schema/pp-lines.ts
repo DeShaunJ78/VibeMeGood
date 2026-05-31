@@ -11,6 +11,10 @@ export const ppLinesTable = pgTable("pp_lines", {
   lineValue: numeric("line_value").notNull(),
   lineType: text("line_type").notNull().default("standard"), // standard | demon | goblin
   payoutModifier: jsonb("payout_modifier"),
+  // Manual hybrid overrides (null = use synced value / auto estimate). Survive resync
+  // because the sync upsert only touches timestamps on existing rows.
+  lineValueOverride: numeric("line_value_override"), // user-corrected PP line value
+  payoutMultiplier: numeric("payout_multiplier"), // manual demon/goblin payout boost/discount
   openedAt: timestamp("opened_at").notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   isActive: boolean("is_active").notNull().default(true),

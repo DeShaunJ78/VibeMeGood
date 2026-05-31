@@ -14,6 +14,7 @@ export interface FactoryLineupPick {
   imageUrl?: string | null;
   statType: string;
   ppLine: number;
+  payoutMultiplier?: number;
   direction: string;
   lineType: string;
   hitProbability: number;

@@ -113,6 +113,10 @@ export interface PpLine {
   lineValue: number;
   lineType: string;
   payoutModifier?: unknown;
+  /** @nullable */
+  lineValueOverride?: number | null;
+  /** @nullable */
+  payoutMultiplier?: number | null;
   openedAt: string;
   updatedAt: string;
   isActive: boolean;
@@ -137,6 +141,13 @@ export interface PpLineUpdate {
   lineType?: string;
   isActive?: boolean;
   payoutModifier?: unknown;
+}
+
+export interface PpLineOverrideInput {
+  /** @nullable */
+  lineValueOverride?: number | null;
+  /** @nullable */
+  payoutMultiplier?: number | null;
 }
 
 export interface PpLineHistory {
@@ -298,6 +309,13 @@ export interface SlateRow {
   startTime?: string | null;
   statType: string;
   lineValue: number;
+  /** @nullable */
+  lineValueOverride?: number | null;
+  effectiveLine?: number;
+  /** @nullable */
+  payoutMultiplier?: number | null;
+  /** @nullable */
+  effectivePayoutMultiplier?: number | null;
   lineType: string;
   directionalityType: string;
   /** @nullable */
@@ -893,6 +911,7 @@ export interface FactoryScoredProp {
   direction: FactoryScoredPropDirection;
   lineType: string;
   ppLine: number;
+  payoutMultiplier?: number;
   hitProbability: number;
   probabilitySource: string;
   confidence: string;
@@ -919,6 +938,7 @@ export interface FactoryLineupPick {
   imageUrl?: string | null;
   statType: string;
   ppLine: number;
+  payoutMultiplier?: number;
   direction: string;
   lineType: string;
   hitProbability: number;

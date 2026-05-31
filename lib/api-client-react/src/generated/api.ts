@@ -83,6 +83,7 @@ import type {
   PpLine,
   PpLineHistory,
   PpLineInput,
+  PpLineOverrideInput,
   PpLineUpdate,
   Projection,
   ProjectionInput,
@@ -1263,6 +1264,78 @@ export const useUpdatePpLine = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdatePpLineMutationOptions(options));
+    }
+
+export const getSetPpLineOverridesUrl = (id: number,) => {
+
+
+
+
+  return `/api/pp-lines/${id}/overrides`
+}
+
+/**
+ * @summary Set or clear manual hybrid overrides (corrected line value, payout multiplier) for one line
+ */
+export const setPpLineOverrides = async (id: number,
+    ppLineOverrideInput: PpLineOverrideInput, options?: RequestInit): Promise<PpLine> => {
+
+  return customFetch<PpLine>(getSetPpLineOverridesUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      ppLineOverrideInput,)
+  }
+);}
+
+
+
+
+export const getSetPpLineOverridesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setPpLineOverrides>>, TError,{id: number;data: BodyType<PpLineOverrideInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setPpLineOverrides>>, TError,{id: number;data: BodyType<PpLineOverrideInput>}, TContext> => {
+
+const mutationKey = ['setPpLineOverrides'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setPpLineOverrides>>, {id: number;data: BodyType<PpLineOverrideInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setPpLineOverrides(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetPpLineOverridesMutationResult = NonNullable<Awaited<ReturnType<typeof setPpLineOverrides>>>
+    export type SetPpLineOverridesMutationBody = BodyType<PpLineOverrideInput>
+    export type SetPpLineOverridesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Set or clear manual hybrid overrides (corrected line value, payout multiplier) for one line
+ */
+export const useSetPpLineOverrides = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setPpLineOverrides>>, TError,{id: number;data: BodyType<PpLineOverrideInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setPpLineOverrides>>,
+        TError,
+        {id: number;data: BodyType<PpLineOverrideInput>},
+        TContext
+      > => {
+      return useMutation(getSetPpLineOverridesMutationOptions(options));
     }
 
 export const getGetPpLineHistoryUrl = (id: number,) => {

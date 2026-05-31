@@ -295,6 +295,25 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PpLine" }
 
+  /pp-lines/{id}/overrides:
+    patch:
+      operationId: setPpLineOverrides
+      tags: [ppLines]
+      summary: Set or clear manual hybrid overrides (corrected line value, payout multiplier) for one line
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PpLineOverrideInput" }
+      responses:
+        "200":
+          description: Updated line
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PpLine" }
+
   /pp-lines/{id}/history:
     get:
       operationId: getPpLineHistory
@@ -1454,6 +1473,8 @@ components:
         lineValue: { type: number }
         lineType: { type: string }
         payoutModifier: {}
+        lineValueOverride: { type: ["number", "null"] }
+        payoutMultiplier: { type: ["number", "null"] }
         openedAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         isActive: { type: boolean }
@@ -1481,6 +1502,12 @@ components:
         lineType: { type: string }
         isActive: { type: boolean }
         payoutModifier: {}
+
+    PpLineOverrideInput:
+      type: object
+      properties:
+        lineValueOverride: { type: ["number", "null"] }
+        payoutMultiplier: { type: ["number", "null"] }
 
     PpLineHistory:
       type: object
@@ -1636,6 +1663,10 @@ components:
         startTime: { type: ["string", "null"] }
         statType: { type: string }
         lineValue: { type: number }
+        lineValueOverride: { type: ["number", "null"] }
+        effectiveLine: { type: number }
+        payoutMultiplier: { type: ["number", "null"] }
+        effectivePayoutMultiplier: { type: ["number", "null"] }
         lineType: { type: string }
         directionalityType: { type: string }
         yourProjection: { type: ["number", "null"] }
@@ -2188,6 +2219,7 @@ components:
         direction: { type: string, enum: [more, less] }
         lineType: { type: string }
         ppLine: { type: number }
+        payoutMultiplier: { type: number }
         hitProbability: { type: number }
         probabilitySource: { type: string }
         confidence: { type: string }
@@ -2211,6 +2243,7 @@ components:
         imageUrl: { type: ["string", "null"] }
         statType: { type: string }
         ppLine: { type: number }
+        payoutMultiplier: { type: number }
         direction: { type: string }
         lineType: { type: string }
         hitProbability: { type: number }

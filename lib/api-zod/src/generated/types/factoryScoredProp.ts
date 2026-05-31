@@ -23,6 +23,7 @@ export interface FactoryScoredProp {
   direction: FactoryScoredPropDirection;
   lineType: string;
   ppLine: number;
+  payoutMultiplier?: number;
   hitProbability: number;
   probabilitySource: string;
   confidence: string;

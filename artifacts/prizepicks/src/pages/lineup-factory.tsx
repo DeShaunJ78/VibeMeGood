@@ -432,6 +432,11 @@ function LineupCard({ lineup, index, onLoad }: { lineup: GeneratedLineup; index:
             <span className={cn("font-mono text-xs shrink-0 uppercase", pick.direction === "more" ? "text-emerald-400" : "text-red-400")}>
               {pick.direction === "more" ? "▲" : "▼"} {pct(pick.hitProbability)}
             </span>
+            {pick.lineType !== "standard" && pick.payoutMultiplier != null && pick.payoutMultiplier !== 1 && (
+              <span className={cn("font-mono text-[10px] shrink-0", pick.payoutMultiplier > 1 ? "text-rose-400" : "text-emerald-400")}>
+                ×{pick.payoutMultiplier.toFixed(2)}
+              </span>
+            )}
             <LineTypeBadge t={pick.lineType} />
           </div>
         ))}
@@ -503,6 +508,11 @@ function ScoredPropsTable({ props }: { props: FactoryScoredProp[] }) {
                 <TableCell className="py-1.5 text-xs font-mono">
                   {p.ppLine}
                   {p.lineType !== "standard" && <LineTypeBadge t={p.lineType} />}
+                  {p.lineType !== "standard" && p.payoutMultiplier != null && p.payoutMultiplier !== 1 && (
+                    <span className={cn("ml-1 text-[10px]", p.payoutMultiplier > 1 ? "text-rose-400" : "text-emerald-400")}>
+                      ×{p.payoutMultiplier.toFixed(2)}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell className="py-1.5 text-xs font-mono">
                   <div className="flex items-center gap-1">

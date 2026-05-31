@@ -246,6 +246,8 @@ export const ListPpLinesResponseItem = zod.object({
   "lineValue": zod.number(),
   "lineType": zod.string(),
   "payoutModifier": zod.unknown().optional(),
+  "lineValueOverride": zod.number().nullish(),
+  "payoutMultiplier": zod.number().nullish(),
   "openedAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
   "isActive": zod.boolean(),
@@ -286,6 +288,8 @@ export const GetPpLineResponse = zod.object({
   "lineValue": zod.number(),
   "lineType": zod.string(),
   "payoutModifier": zod.unknown().optional(),
+  "lineValueOverride": zod.number().nullish(),
+  "payoutMultiplier": zod.number().nullish(),
   "openedAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
   "isActive": zod.boolean(),
@@ -316,6 +320,38 @@ export const UpdatePpLineResponse = zod.object({
   "lineValue": zod.number(),
   "lineType": zod.string(),
   "payoutModifier": zod.unknown().optional(),
+  "lineValueOverride": zod.number().nullish(),
+  "payoutMultiplier": zod.number().nullish(),
+  "openedAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Set or clear manual hybrid overrides (corrected line value, payout multiplier) for one line
+ */
+export const SetPpLineOverridesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SetPpLineOverridesBody = zod.object({
+  "lineValueOverride": zod.number().nullish(),
+  "payoutMultiplier": zod.number().nullish()
+})
+
+export const SetPpLineOverridesResponse = zod.object({
+  "id": zod.number(),
+  "playerId": zod.number(),
+  "gameId": zod.number().nullish(),
+  "statType": zod.string(),
+  "directionalityType": zod.string(),
+  "lineValue": zod.number(),
+  "lineType": zod.string(),
+  "payoutModifier": zod.unknown().optional(),
+  "lineValueOverride": zod.number().nullish(),
+  "payoutMultiplier": zod.number().nullish(),
   "openedAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
   "isActive": zod.boolean(),
@@ -595,6 +631,10 @@ export const GetSlateResponseItem = zod.object({
   "startTime": zod.string().nullish(),
   "statType": zod.string(),
   "lineValue": zod.number(),
+  "lineValueOverride": zod.number().nullish(),
+  "effectiveLine": zod.number().optional(),
+  "payoutMultiplier": zod.number().nullish(),
+  "effectivePayoutMultiplier": zod.number().nullish(),
   "lineType": zod.string(),
   "directionalityType": zod.string(),
   "yourProjection": zod.number().nullish(),
@@ -641,6 +681,8 @@ export const GetSlateRowResponse = zod.object({
   "lineValue": zod.number(),
   "lineType": zod.string(),
   "payoutModifier": zod.unknown().optional(),
+  "lineValueOverride": zod.number().nullish(),
+  "payoutMultiplier": zod.number().nullish(),
   "openedAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
   "isActive": zod.boolean(),
@@ -1681,6 +1723,7 @@ export const GenerateLineupFactoryResponse = zod.object({
   "imageUrl": zod.string().nullish(),
   "statType": zod.string(),
   "ppLine": zod.number(),
+  "payoutMultiplier": zod.number().optional(),
   "direction": zod.string(),
   "lineType": zod.string(),
   "hitProbability": zod.number(),
@@ -1729,6 +1772,7 @@ export const GenerateLineupFactoryResponse = zod.object({
   "direction": zod.enum(['more', 'less']),
   "lineType": zod.string(),
   "ppLine": zod.number(),
+  "payoutMultiplier": zod.number().optional(),
   "hitProbability": zod.number(),
   "probabilitySource": zod.string(),
   "confidence": zod.string(),

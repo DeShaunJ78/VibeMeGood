@@ -8,6 +8,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, inArray, desc, gte, isNull, or } from "drizzle-orm";
 import { pOverLine, percentileAtLine } from "../lib/projection/normal-dist";
+import { effectivePayoutMultiplier } from "../lib/payout/multiplier";
 
 const router = Router();
 
@@ -76,6 +77,19 @@ router.get("/slate", async (req, res) => {
     const gameMap = Object.fromEntries(games.map(g => [g.id, g]));
     const watchlistSet = new Set(watchlistItems.map(w => `${w.playerId}:${w.statType}`));
 
+    // P(over) of each player/stat's STANDARD line — anchors the auto payout-multiplier
+    // estimate for its goblin/demon siblings (EV-preserving ratio). May be absent when
+    // the slate is filtered to a single tier, in which case the estimate falls back to
+    // a tier default.
+    const standardPOverMap: Record<string, number> = {};
+    for (const l of lines) {
+      if (l.lineType !== "standard") continue;
+      const p = projMap[`${l.playerId}:${l.statType}`];
+      if (!p?.projectedValue || !p?.stdDev) continue;
+      standardPOverMap[`${l.playerId}:${l.statType}`] =
+        pOverLine(Number(p.projectedValue), Number(p.stdDev), Number(l.lineValueOverride ?? l.lineValue)) / 100;
+    }
+
     const rows = lines.map(line => {
       const player = playerMap[line.playerId];
       const score = scoreMap[line.id];
@@ -87,6 +101,13 @@ router.get("/slate", async (req, res) => {
         const oppTeamId = game.homeTeamId === player.teamId ? game.awayTeamId : game.homeTeamId;
         opponentAbbr = teamMap[oppTeamId]?.abbreviation ?? null;
       }
+
+      // Effective line = manual correction if set, else the synced PP value. Drives
+      // probability/gap so a Slate Board correction flows through automatically.
+      const effectiveLine = line.lineValueOverride != null ? Number(line.lineValueOverride) : Number(line.lineValue);
+      const rawTierPOver: number | null = (proj?.projectedValue && proj?.stdDev)
+        ? pOverLine(Number(proj.projectedValue), Number(proj.stdDev), effectiveLine)
+        : null;
 
       return {
         ppLineId: line.id,
@@ -100,18 +121,28 @@ router.get("/slate", async (req, res) => {
         startTime: game?.startTime?.toISOString() ?? null,
         statType: line.statType,
         lineValue: Number(line.lineValue),
+        lineValueOverride: line.lineValueOverride != null ? Number(line.lineValueOverride) : null,
+        effectiveLine,
+        payoutMultiplier: line.payoutMultiplier != null ? Number(line.payoutMultiplier) : null,
+        effectivePayoutMultiplier: Math.round(
+          effectivePayoutMultiplier(
+            line.payoutMultiplier != null ? Number(line.payoutMultiplier) : null,
+            line.lineType,
+            rawTierPOver != null ? rawTierPOver / 100 : null,
+            standardPOverMap[`${line.playerId}:${line.statType}`],
+          ) * 100,
+        ) / 100,
         lineType: line.lineType,
         directionalityType: line.directionalityType,
         pickCategory: line.pickCategory,
         teamPickType: line.teamPickType ?? null,
         teamId: line.teamId ?? null,
         yourProjection: proj ? Number(proj.projectedValue) : null,
-        projectionGap: proj ? Number(proj.projectedValue) - Number(line.lineValue) : null,
-        // Tier-specific: compute P(over) against THIS line's value, not the single
-        // stored pOver (which is computed against one arbitrary tier of this stat).
-        pOver: (proj?.projectedValue && proj?.stdDev)
-          ? Math.round(pOverLine(Number(proj.projectedValue), Number(proj.stdDev), Number(line.lineValue)) * 10) / 10
-          : null,
+        projectionGap: proj ? Number(proj.projectedValue) - effectiveLine : null,
+        // Tier-specific: compute P(over) against THIS line's EFFECTIVE value (manual
+        // correction if set), not the single stored pOver (which is computed against
+        // one arbitrary tier of this stat).
+        pOver: rawTierPOver != null ? Math.round(rawTierPOver * 10) / 10 : null,
         edgeScore: score ? Number(score.edgeScore) : null,
         stabilityScore: score ? Number(score.stabilityScore) : null,
         marketSupportScore: score ? Number(score.marketSupportScore) : null,
@@ -212,6 +243,9 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
 
     const op = ourProj[0] ?? null;
     const isStale = op?.expiresAt ? new Date() > op.expiresAt : false;
+    // Use the corrected line (override) when evaluating projection stats, so the
+    // detail view stays consistent with the slate row after a manual correction.
+    const effLineNum = parseFloat((line.lineValueOverride ?? line.lineValue).toString());
 
     res.json({
       ppLine: line,
@@ -225,10 +259,10 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
         // Tier-specific: evaluate against this line's value rather than the stored
         // pOver/percentile (computed against one arbitrary tier of this stat).
         pOver: op.stdDev
-          ? Math.round(pOverLine(parseFloat(op.projectedValue.toString()), parseFloat(op.stdDev.toString()), parseFloat(line.lineValue.toString())) * 10) / 10
+          ? Math.round(pOverLine(parseFloat(op.projectedValue.toString()), parseFloat(op.stdDev.toString()), effLineNum) * 10) / 10
           : null,
         percentileAtLine: op.stdDev
-          ? Math.round(percentileAtLine(parseFloat(op.projectedValue.toString()), parseFloat(op.stdDev.toString()), parseFloat(line.lineValue.toString())) * 10) / 10
+          ? Math.round(percentileAtLine(parseFloat(op.projectedValue.toString()), parseFloat(op.stdDev.toString()), effLineNum) * 10) / 10
           : null,
         dataQualityScore: op.dataQualityScore,
         shrinkageFactor: op.shrinkageFactor ? parseFloat(op.shrinkageFactor.toString()) : null,
