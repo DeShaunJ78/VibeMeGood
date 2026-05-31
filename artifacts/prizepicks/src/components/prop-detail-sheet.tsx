@@ -83,7 +83,19 @@ interface OurProjection {
   calSampleSize: number;
 }
 
+interface TierRung {
+  ppLineId: number;
+  lineType: string;
+  lineValue: number;
+  lineValueOverride: number | null;
+  effectiveLine: number;
+  pOver: number | null;
+  breakevenMultiplier: number | null;
+  payoutMultiplier: number | null;
+}
+
 interface PropDetail {
+  siblingTiers?: TierRung[];
   ppLine: any;
   player: any;
   game: any;
@@ -356,6 +368,12 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
   }, [ppLineId, open]);
 
   const isPicked = ppLineId ? hasPick(ppLineId) : false;
+  const lineLocked = !!data?.ppLine && (data.ppLine.lineType === "demon" || data.ppLine.lineType === "goblin");
+
+  // Demon & goblin are More-only on PrizePicks — force it for the opened line.
+  useEffect(() => {
+    if (lineLocked && direction !== "more") setDirection("more");
+  }, [lineLocked, direction]);
 
   function handleAddRemove() {
     if (!ppLineId || !data) return;
@@ -371,7 +389,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
         statType: data.ppLine.statType,
         lineValue: Number(data.ppLine.lineValue),
         lineType: data.ppLine.lineType,
-        direction,
+        direction: lineLocked ? "more" : direction,
         yourProjection: data.ourProjection?.value ?? (data.projection ? Number(data.projection.projectedValue) : null),
         p99: data.ourProjection?.p99 ?? null,
         pOver: data.ourProjection?.pOver ?? null,
@@ -379,6 +397,27 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
         actionTag: data.propScore?.actionTag ?? null,
       });
     }
+  }
+
+  function addRung(rung: TierRung) {
+    if (!data) return;
+    const dir: "more" | "less" = (rung.lineType === "demon" || rung.lineType === "goblin") ? "more" : direction;
+    addPick({
+      ppLineId: rung.ppLineId,
+      playerId: data.player.id,
+      playerName: data.player.fullName,
+      imageUrl: data.player.imageUrl ?? null,
+      teamAbbr: null,
+      statType: data.ppLine.statType,
+      lineValue: rung.effectiveLine,
+      lineType: rung.lineType,
+      direction: dir,
+      yourProjection: data.ourProjection?.value ?? null,
+      p99: data.ourProjection?.p99 ?? null,
+      pOver: rung.pOver,
+      edgeScore: null,
+      actionTag: null,
+    });
   }
 
   async function handleExplain() {
@@ -512,12 +551,14 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                   >
                     <TrendingUp className="w-3.5 h-3.5" /> MORE
                   </button>
-                  <button
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-mono font-bold transition-colors ${direction === "less" ? "bg-rose-900/50 text-rose-300" : "text-muted-foreground hover:text-foreground"}`}
-                    onClick={() => { setDirection("less"); if (isPicked && ppLineId) updateDirection(ppLineId, "less"); }}
-                  >
-                    <TrendingDown className="w-3.5 h-3.5" /> LESS
-                  </button>
+                  {!lineLocked && (
+                    <button
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-mono font-bold transition-colors ${direction === "less" ? "bg-rose-900/50 text-rose-300" : "text-muted-foreground hover:text-foreground"}`}
+                      onClick={() => { setDirection("less"); if (isPicked && ppLineId) updateDirection(ppLineId, "less"); }}
+                    >
+                      <TrendingDown className="w-3.5 h-3.5" /> LESS
+                    </button>
+                  )}
                 </div>
                 <Button
                   onClick={handleAddRemove}
@@ -528,6 +569,53 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                   {isPicked ? <><Minus className="w-3.5 h-3.5 mr-1" /> REMOVE</> : <><Plus className="w-3.5 h-3.5 mr-1" /> ADD TO ENTRY</>}
                 </Button>
               </div>
+
+              {/* ── Tier Ladder (standard/demon/goblin rungs for this stat) ── */}
+              {data.siblingTiers && data.siblingTiers.length > 1 && (
+                <div className="px-5 py-4 border-b border-slate-800/50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Layers className="w-3 h-3 text-violet-400" />
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                      Risk Ladder · {data.siblingTiers.length} tiers
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    {data.siblingTiers.map(rung => {
+                      const isCurrent = rung.ppLineId === ppLineId;
+                      const picked = hasPick(rung.ppLineId);
+                      return (
+                        <div
+                          key={rung.ppLineId}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${isCurrent ? "border-violet-600/60 bg-violet-950/20" : "border-slate-800 bg-slate-900/50"}`}
+                        >
+                          <LineTypeBadge type={rung.lineType} />
+                          <span className="font-mono text-sm font-bold text-slate-200">{rung.effectiveLine}</span>
+                          <div className="flex-1 flex items-center gap-3 justify-end text-[10px] font-mono">
+                            <span className={pOverColor(rung.pOver)}>
+                              {rung.pOver != null ? `${rung.pOver.toFixed(1)}%` : "—"}
+                            </span>
+                            {(rung.lineType === "demon" || rung.lineType === "goblin") && rung.breakevenMultiplier != null && (
+                              <span className="text-violet-300" title="Break-even multiplier = 1 / hit probability">
+                                BE ×{rung.breakevenMultiplier.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => picked ? removePick(rung.ppLineId) : addRung(rung)}
+                            className={`text-[10px] font-mono px-2 py-1 rounded shrink-0 transition-colors ${picked ? "bg-rose-900/40 text-rose-300 hover:bg-rose-900/60" : "bg-primary/20 text-primary hover:bg-primary/30"}`}
+                          >
+                            {picked ? "✓ in entry" : "+ add"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[9px] font-mono text-slate-600 mt-2 leading-tight">
+                    Deeper demon = lower hit rate, higher payout. Goblin = safer, lower payout. Enter the real
+                    multiplier in the Entry Builder for exact payout &amp; EV.
+                  </p>
+                </div>
+              )}
 
               {/* ── Model Distribution Panel ── */}
               {op && (

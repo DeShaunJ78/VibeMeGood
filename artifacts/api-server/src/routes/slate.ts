@@ -247,7 +247,35 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
     // detail view stays consistent with the slate row after a manual correction.
     const effLineNum = parseFloat((line.lineValueOverride ?? line.lineValue).toString());
 
+    // Sibling tiers — every active line for this player+stat (the standard/demon/goblin
+    // ladder). Each carries its own per-line probability and break-even multiplier so the
+    // detail view can show the full risk ladder, not just the opened line.
+    const siblingRows = await db.select().from(ppLinesTable).where(and(
+      eq(ppLinesTable.playerId, line.playerId),
+      eq(ppLinesTable.statType, line.statType),
+      eq(ppLinesTable.isActive, true),
+    ));
+    const siblingTiers = siblingRows
+      .map(s => {
+        const sEff = Number(s.lineValueOverride ?? s.lineValue);
+        const sPOver = (op?.projectedValue && op?.stdDev)
+          ? pOverLine(Number(op.projectedValue), Number(op.stdDev), sEff)
+          : null;
+        return {
+          ppLineId: s.id,
+          lineType: s.lineType,
+          lineValue: Number(s.lineValue),
+          lineValueOverride: s.lineValueOverride != null ? Number(s.lineValueOverride) : null,
+          effectiveLine: sEff,
+          pOver: sPOver != null ? Math.round(sPOver * 10) / 10 : null,
+          breakevenMultiplier: sPOver != null && sPOver > 0 ? Math.round((100 / sPOver) * 100) / 100 : null,
+          payoutMultiplier: s.payoutMultiplier != null ? Number(s.payoutMultiplier) : null,
+        };
+      })
+      .sort((a, b) => a.effectiveLine - b.effectiveLine);
+
     res.json({
+      siblingTiers,
       ppLine: line,
       player,
       game,

@@ -40,3 +40,22 @@ market-intel projPOver/convergence. `pOverLine`/`percentileAtLine` live in
 **Why:** keeping a single stored pOver was masked while all lines were mislabeled
 "standard"; once tiers were split correctly, the shared pOver became visibly wrong
 on every screen showing demon/goblin lines.
+
+## Demon/goblin payouts are dynamic — never use the fixed Power/Flex table
+PrizePicks scales the entry multiplier at slip-build time (depends on pick count +
+mix of standard/demon/goblin), and only their app shows the exact number. So a slip
+that contains ANY demon/goblin pick must NOT derive payout/EV from the fixed
+Power/Flex multiplier table — that fabricates a wrong number and (worse) persists it
+to the journal. Entry Builder requires the user to type the real multiplier read off
+the PrizePicks app; until then payout/EV are blanked and LOG ENTRY is disabled.
+
+For model-honesty the Slate Board shows the **break-even multiplier** (`BE × = 100/pOver`,
+since demons/goblins are More-only so hit prob = pOver/100), not an estimated payout.
+
+**More-only:** demon & goblin are strictly "More" — enforce at every pick source
+(Prop Detail forces direction + hides LESS; Entry Builder has a useEffect safety net),
+not just at one screen.
+
+**How to apply:** any new surface that computes a demon/goblin payout must take a
+user-entered multiplier; gate payout/EV/logging on it. Don't reintroduce a
+per-line estimated multiplier.

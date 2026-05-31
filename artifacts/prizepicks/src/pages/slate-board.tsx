@@ -754,8 +754,10 @@ export default function SlateBoard() {
         (r.teamAbbr ?? "").toLowerCase().includes(q)
       );
     }
-    // Deduplicate — one row per (playerId, statType)
-    // Priority: 1) has external odds  2) standard tier  3) highest finalScore
+    // Deduplicate — one row per (playerId, statType) — ONLY in the "All" tier view, so the
+    // default board isn't flooded. When a specific tier (standard/demon/goblin) is selected
+    // from the dropdown, show EVERY rung of that tier (the full risk ladder).
+    if (lineTypeFilter === "all") {
     const dedupMap = new Map<string, typeof rows[0]>();
 
     for (const r of rows) {
@@ -799,6 +801,7 @@ export default function SlateBoard() {
       }
     }
     rows = Array.from(dedupMap.values());
+    }
 
     if (sharpOnly) {
       rows = rows.filter(r => r.sharpSignal === "sharp");
@@ -1460,42 +1463,57 @@ export default function SlateBoard() {
                           <div className="flex flex-col items-center gap-0.5">
                             <LineTypeBadge type={row.lineType} />
                             {(row.lineType === "demon" || row.lineType === "goblin") && (() => {
-                              const eff = row.effectivePayoutMultiplier
-                                ?? row.payoutMultiplier
-                                ?? (row.lineType === "demon" ? 1.5 : 0.75);
+                              // PrizePicks multipliers are dynamic (set at lineup-build time), so we
+                              // do NOT fabricate a per-line payout. Instead show the BREAK-EVEN
+                              // multiplier = 1 / hit-probability — the minimum payout that makes this
+                              // rung +EV. Compare it to the live PrizePicks number. The editable field
+                              // is an OPTIONAL record of the actual multiplier you saw.
+                              const be = row.pOver != null && row.pOver > 0 ? 100 / row.pOver : null;
                               const manual = row.payoutMultiplier != null;
                               const editKey = -row.ppLineId; // negative = multiplier editor for this row
-                              return editingLine === editKey ? (
-                                <input
-                                  type="number"
-                                  step="0.05"
-                                  value={editValue}
-                                  onChange={e => setEditValue(e.target.value)}
-                                  onKeyDown={e => {
-                                    if (e.key === "Enter") {
-                                      const v = parseFloat(editValue);
-                                      if (!isNaN(v) && v > 0) saveOverride(row.ppLineId, { payoutMultiplier: v });
-                                      setEditingLine(null);
-                                    }
-                                    if (e.key === "Escape") setEditingLine(null);
-                                    if (e.key === "Delete") { saveOverride(row.ppLineId, { payoutMultiplier: null }); setEditingLine(null); }
-                                  }}
-                                  onBlur={() => {
-                                    const v = parseFloat(editValue);
-                                    if (!isNaN(v) && v > 0 && v !== row.payoutMultiplier) saveOverride(row.ppLineId, { payoutMultiplier: v });
-                                    setEditingLine(null);
-                                  }}
-                                  autoFocus
-                                  className="w-12 bg-slate-800 border border-amber-500 rounded px-1 py-0.5 text-amber-300 text-[10px] font-mono text-center"
-                                />
-                              ) : (
-                                <button
-                                  onClick={e => { e.stopPropagation(); setEditingLine(editKey); setEditValue((row.payoutMultiplier ?? eff).toString()); }}
-                                  className={`text-[9px] font-mono rounded px-1 leading-none transition-colors ${manual ? "text-amber-300 hover:text-amber-200" : "text-slate-500 hover:text-slate-300"}`}
-                                  title={manual ? "Manual payout multiplier — click to edit, Delete to clear" : "Auto-estimated payout multiplier — click to override"}
-                                >
-                                  ×{eff.toFixed(2)}{manual ? "✓" : "≈"}
-                                </button>
+                              return (
+                                <>
+                                  {be != null && (
+                                    <span
+                                      className="text-[9px] font-mono text-violet-300 leading-none"
+                                      title="Break-even multiplier = 1 / hit probability. The live PrizePicks payout must beat this for the pick to be +EV."
+                                    >
+                                      BE ×{be.toFixed(2)}
+                                    </span>
+                                  )}
+                                  {editingLine === editKey ? (
+                                    <input
+                                      type="number"
+                                      step="0.05"
+                                      value={editValue}
+                                      onChange={e => setEditValue(e.target.value)}
+                                      onKeyDown={e => {
+                                        if (e.key === "Enter") {
+                                          const v = parseFloat(editValue);
+                                          if (!isNaN(v) && v > 0) saveOverride(row.ppLineId, { payoutMultiplier: v });
+                                          setEditingLine(null);
+                                        }
+                                        if (e.key === "Escape") setEditingLine(null);
+                                        if (e.key === "Delete") { saveOverride(row.ppLineId, { payoutMultiplier: null }); setEditingLine(null); }
+                                      }}
+                                      onBlur={() => {
+                                        const v = parseFloat(editValue);
+                                        if (!isNaN(v) && v > 0 && v !== row.payoutMultiplier) saveOverride(row.ppLineId, { payoutMultiplier: v });
+                                        setEditingLine(null);
+                                      }}
+                                      autoFocus
+                                      className="w-12 bg-slate-800 border border-amber-500 rounded px-1 py-0.5 text-amber-300 text-[10px] font-mono text-center"
+                                    />
+                                  ) : (
+                                    <button
+                                      onClick={e => { e.stopPropagation(); setEditingLine(editKey); setEditValue((row.payoutMultiplier ?? "").toString()); }}
+                                      className={`text-[9px] font-mono rounded px-1 leading-none transition-colors ${manual ? "text-amber-300 hover:text-amber-200" : "text-slate-600 hover:text-slate-400"}`}
+                                      title={manual ? "Actual PrizePicks multiplier you recorded — click to edit, Delete to clear" : "Record the actual PrizePicks multiplier (optional)"}
+                                    >
+                                      {manual ? `×${row.payoutMultiplier!.toFixed(2)}✓` : "+mult"}
+                                    </button>
+                                  )}
+                                </>
                               );
                             })()}
                           </div>

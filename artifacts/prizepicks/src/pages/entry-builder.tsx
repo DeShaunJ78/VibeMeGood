@@ -158,6 +158,7 @@ type SortDir = "asc" | "desc";
 export default function EntryBuilder() {
   const { toast } = useToast();
   const [stake, setStake] = useState<string>("25");
+  const [manualMult, setManualMult] = useState<string>("");
   const [playstyle, setPlaystyle] = useState<"power" | "flex">("power");
   const [notes, setNotes] = useState<string>("");
   const [pickSortCol, setPickSortCol] = useState<string>("pOver");
@@ -255,6 +256,15 @@ export default function EntryBuilder() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [simMode, picks, simRuns, playstyle]);
 
+  // Demon & goblin picks are strictly "More" on PrizePicks — force it.
+  useEffect(() => {
+    for (const p of picks) {
+      if ((p.lineType === "demon" || p.lineType === "goblin") && p.direction !== "more") {
+        updateDirection(p.ppLineId, "more");
+      }
+    }
+  }, [picks, updateDirection]);
+
   const stakeNum = parseFloat(stake) || 0;
   const n = picks.length;
 
@@ -300,16 +310,29 @@ export default function EntryBuilder() {
         ? "Some picks have fewer than 5 games of data"
         : null;
 
-  const multiplier = playstyle === "power" ? (POWER_MULTIPLIERS[n] ?? 0) : 0;
-  const powerPayout = playstyle === "power" ? stakeNum * multiplier : 0;
-  const flexPayouts = playstyle === "flex" && n >= 2 ? FLEX_PAYOUTS[n] ?? {} : {};
-  const evResultPower = playstyle === "power" && n >= 2
+  // PrizePicks scales the entry multiplier dynamically (number + mix of standard/demon/
+  // goblin picks), and only their app shows the exact number. So when the slip contains a
+  // demon/goblin the fixed table no longer applies — the user enters the real multiplier
+  // they read off PrizePicks, which overrides the table and drives both payout and EV.
+  const fixedMult = playstyle === "power" ? (POWER_MULTIPLIERS[n] ?? 0) : 0;
+  const manualMultNum = parseFloat(manualMult) || 0;
+  const usesManual = manualMultNum > 0;
+  const hasDemonGoblin = picks.some(p => p.lineType === "demon" || p.lineType === "goblin");
+  // Demon/goblin payouts are dynamic — the fixed Power/Flex table does NOT apply. Until the
+  // user enters the real PrizePicks multiplier we refuse to fabricate any payout or EV, and
+  // we block logging so the journal never stores a wrong number.
+  const multiplierUnknown = hasDemonGoblin && !usesManual;
+  const multiplier = usesManual ? manualMultNum : (multiplierUnknown ? 0 : fixedMult);
+  const singlePayoutMode = !multiplierUnknown && (playstyle === "power" || usesManual);
+  const powerPayout = singlePayoutMode ? stakeNum * multiplier : 0;
+  const flexPayouts = playstyle === "flex" && !usesManual && !multiplierUnknown && n >= 2 ? FLEX_PAYOUTS[n] ?? {} : {};
+  const evResultPower = singlePayoutMode && n >= 2
     ? computeEV(picks, "power", powerPayout, stakeNum, {})
     : null;
-  const evResultFlex = playstyle === "flex" && n >= 2
+  const evResultFlex = playstyle === "flex" && !usesManual && !multiplierUnknown && n >= 2
     ? computeEV(picks, "flex", 0, stakeNum, flexPayouts)
     : null;
-  const activeEV = playstyle === "power" ? evResultPower : evResultFlex;
+  const activeEV = singlePayoutMode ? evResultPower : evResultFlex;
 
   // ── Pick'em Math (Enhancement 1 + 3) ──────────────────────────────────────
   const entryTypeKey = `${n}-pick-${playstyle}`;
@@ -404,6 +427,10 @@ export default function EntryBuilder() {
   }, [createEntry, stakeNum, toast]);
 
   const doSave = useCallback(async () => {
+    if (multiplierUnknown) {
+      toast({ title: "Enter the PrizePicks multiplier", description: "Demon/goblin slips need the real multiplier before logging.", variant: "destructive" });
+      return;
+    }
     try {
       await createEntry.mutateAsync({
         data: {
@@ -422,7 +449,7 @@ export default function EntryBuilder() {
     } catch {
       toast({ title: "Failed to save", description: "Could not log entry.", variant: "destructive" });
     }
-  }, [createEntry, playstyle, picks.length, stakeNum, multiplier, powerPayout, notes, toast, clearPicks]);
+  }, [createEntry, playstyle, picks.length, stakeNum, multiplier, powerPayout, notes, toast, clearPicks, multiplierUnknown]);
 
   async function handleSave() {
     if (picks.length < 2) {
@@ -457,7 +484,8 @@ export default function EntryBuilder() {
           )}
           <Button
             onClick={handleSave}
-            disabled={createEntry.isPending || picks.length < 2}
+            disabled={createEntry.isPending || picks.length < 2 || multiplierUnknown}
+            title={multiplierUnknown ? "Enter the PrizePicks multiplier first (demon/goblin slip)" : undefined}
             className="font-mono text-xs bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Save className="w-4 h-4 mr-2" /> LOG ENTRY
@@ -780,20 +808,29 @@ export default function EntryBuilder() {
                       )}
                     </div>
                     <LineTypePill type={pick.lineType} />
-                    <div className="flex bg-slate-800 border border-slate-700 rounded overflow-hidden shrink-0">
-                      <button
-                        className={`flex items-center gap-1 px-2 py-1 text-[11px] font-mono font-bold transition-colors ${pick.direction === "more" ? "bg-emerald-900/60 text-emerald-300" : "text-muted-foreground hover:text-foreground"}`}
-                        onClick={() => updateDirection(pick.ppLineId, "more")}
+                    {(pick.lineType === "demon" || pick.lineType === "goblin") ? (
+                      <div
+                        className="flex items-center gap-1 px-2 py-1 text-[11px] font-mono font-bold bg-emerald-900/60 text-emerald-300 border border-slate-700 rounded shrink-0"
+                        title="Demon & Goblin picks are More-only on PrizePicks"
                       >
                         <TrendingUp className="w-3 h-3" /> MORE
-                      </button>
-                      <button
-                        className={`flex items-center gap-1 px-2 py-1 text-[11px] font-mono font-bold transition-colors ${pick.direction === "less" ? "bg-rose-900/60 text-rose-300" : "text-muted-foreground hover:text-foreground"}`}
-                        onClick={() => updateDirection(pick.ppLineId, "less")}
-                      >
-                        <TrendingDown className="w-3 h-3" /> LESS
-                      </button>
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="flex bg-slate-800 border border-slate-700 rounded overflow-hidden shrink-0">
+                        <button
+                          className={`flex items-center gap-1 px-2 py-1 text-[11px] font-mono font-bold transition-colors ${pick.direction === "more" ? "bg-emerald-900/60 text-emerald-300" : "text-muted-foreground hover:text-foreground"}`}
+                          onClick={() => updateDirection(pick.ppLineId, "more")}
+                        >
+                          <TrendingUp className="w-3 h-3" /> MORE
+                        </button>
+                        <button
+                          className={`flex items-center gap-1 px-2 py-1 text-[11px] font-mono font-bold transition-colors ${pick.direction === "less" ? "bg-rose-900/60 text-rose-300" : "text-muted-foreground hover:text-foreground"}`}
+                          onClick={() => updateDirection(pick.ppLineId, "less")}
+                        >
+                          <TrendingDown className="w-3 h-3" /> LESS
+                        </button>
+                      </div>
+                    )}
                     {pick.edgeScore != null && (
                       <span className="text-xs font-mono text-primary font-bold w-10 text-right shrink-0">{pick.edgeScore.toFixed(0)}</span>
                     )}
@@ -865,6 +902,25 @@ export default function EntryBuilder() {
                 />
               </div>
               <div className="space-y-1.5">
+                <label className="text-[10px] font-mono text-muted-foreground uppercase flex items-center justify-between gap-2">
+                  <span>PrizePicks Multiplier</span>
+                  {hasDemonGoblin && !usesManual && (
+                    <span className="text-amber-400 normal-case text-[9px]">enter — slip has demon/goblin</span>
+                  )}
+                </label>
+                <Input
+                  type="number"
+                  step="0.05"
+                  value={manualMult}
+                  onChange={e => setManualMult(e.target.value)}
+                  placeholder={fixedMult > 0 ? `auto ${fixedMult}×` : "enter ×"}
+                  className="bg-slate-950 border-slate-800 font-mono text-lg h-10"
+                />
+                <p className="text-[9px] font-mono text-slate-600 leading-tight">
+                  Read the exact multiplier from the PrizePicks app before locking. Overrides the fixed table.
+                </p>
+              </div>
+              <div className="space-y-1.5">
                 <label className="text-[10px] font-mono text-muted-foreground uppercase">Notes</label>
                 <Input
                   value={notes}
@@ -886,10 +942,21 @@ export default function EntryBuilder() {
             <CardContent>
               {n < 2 ? (
                 <div className="text-center py-6 text-xs text-muted-foreground font-mono">Add 2+ picks to see payouts</div>
-              ) : playstyle === "power" ? (
+              ) : multiplierUnknown ? (
+                <div className="text-center py-6 px-2 space-y-2">
+                  <div className="text-xs font-mono font-bold text-amber-400">Enter the PrizePicks multiplier</div>
+                  <div className="text-[11px] font-mono text-muted-foreground leading-relaxed">
+                    This slip has demon/goblin picks. PrizePicks sets those multipliers dynamically, so the fixed
+                    table doesn't apply — enter the multiplier shown in the app above to see payout &amp; EV.
+                  </div>
+                </div>
+              ) : singlePayoutMode ? (
                 <div className="space-y-3">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                    <span className="text-xs font-mono text-muted-foreground">{n}-pick Power multiplier</span>
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {usesManual ? "Entry multiplier" : `${n}-pick ${playstyle === "power" ? "Power" : "Flex"} multiplier`}
+                      {usesManual && <span className="ml-1 text-amber-400">(entered)</span>}
+                    </span>
                     <span className="text-lg font-bold font-mono text-primary">{multiplier}×</span>
                   </div>
                   <div className="flex justify-between items-center">
