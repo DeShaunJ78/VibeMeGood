@@ -73,6 +73,7 @@ export async function syncPpLines(): Promise<number> {
       const playerName = (pAttr.name as string) || "Unknown";
       const teamAbbr = ((pAttr.team as string) || "").toUpperCase();
       const imageUrl = (pAttr.image_url as string | undefined) ?? null;
+      const position = ((pAttr.position as string | undefined) ?? "").trim() || null;
 
       // Upsert team
       let teamId: number | null = null;
@@ -103,6 +104,7 @@ export async function syncPpLines(): Promise<number> {
           lastName: parts.slice(1).join(" ") || "",
           teamId,
           imageUrl,
+          position,
           status: "active",
           externalIds: { pp_id: proj.relationships?.new_player?.data?.id },
         }).returning();
@@ -110,6 +112,7 @@ export async function syncPpLines(): Promise<number> {
         const updates: Record<string, unknown> = { updatedAt: new Date() };
         if (teamId && player.teamId !== teamId) updates.teamId = teamId;
         if (imageUrl && player.imageUrl !== imageUrl) updates.imageUrl = imageUrl;
+        if (position && player.position !== position) updates.position = position;
         if (Object.keys(updates).length > 1) {
           await db.update(playersTable).set(updates).where(eq(playersTable.id, player.id));
         }
