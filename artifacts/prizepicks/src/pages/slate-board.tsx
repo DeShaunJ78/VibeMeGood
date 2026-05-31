@@ -16,7 +16,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge } from "@/components/ui/badges";
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
 import { TeamPicksBoard } from "@/components/team-picks-board";
-import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight, Filter, ChevronDown, ChevronRight } from "lucide-react";
+import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight, Filter, ChevronDown, ChevronRight, X } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ReferenceLine, Cell, ResponsiveContainer, AreaChart, Area } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { useEntry, type EntryPick } from "@/lib/entry-context";
@@ -1169,22 +1169,46 @@ export default function SlateBoard() {
 
             {/* Mobile search */}
             <div className="md:hidden">
-              <Input
-                placeholder="Search player…"
-                value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-                className="w-full bg-slate-900 border-slate-700 font-mono text-sm h-9"
-              />
+              <div className="relative">
+                <Input
+                  placeholder="Search player…"
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  className="w-full bg-slate-900 border-slate-700 font-mono text-sm h-9 pr-8"
+                />
+                {searchInput && (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => setSearchInput("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Desktop: search + filters + actions — single wrapping row */}
             <div className="hidden md:flex items-center gap-2 flex-wrap">
-              <Input
-                placeholder="Search player…"
-                value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-                className="flex-1 min-w-[200px] bg-slate-900 border-slate-700 font-mono text-sm h-9"
-              />
+              <div className="relative flex-1 min-w-[200px]">
+                <Input
+                  placeholder="Search player…"
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  className="w-full bg-slate-900 border-slate-700 font-mono text-sm h-9 pr-8"
+                />
+                {searchInput && (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => setSearchInput("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
               <Select value={sport} onValueChange={setSport}>
                 <SelectTrigger className="w-28 bg-slate-900 border-slate-800 font-mono text-sm">
                   <SelectValue placeholder="Sport" />
