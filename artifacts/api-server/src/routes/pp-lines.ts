@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { ppLinesTable, ppLineHistoryTable } from "@workspace/db/schema";
+import { ppLinesTable, ppLineHistoryTable, insertPpLineSchema, updatePpLineSchema } from "@workspace/db/schema";
 import { eq, and, type SQL } from "drizzle-orm";
 import { z } from "zod";
 
@@ -37,7 +37,11 @@ router.get("/pp-lines", async (req, res) => {
 
 router.post("/pp-lines", async (req, res) => {
   try {
-    const [line] = await db.insert(ppLinesTable).values(req.body).returning();
+    const parsed = insertPpLineSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return void res.status(400).json({ error: "Invalid pp_line", details: parsed.error.flatten() });
+    }
+    const [line] = await db.insert(ppLinesTable).values(parsed.data).returning();
     // Record history on creation
     await db.insert(ppLineHistoryTable).values({
       ppLineId: line.id,
@@ -65,16 +69,20 @@ router.get("/pp-lines/:id", async (req, res) => {
 
 router.patch("/pp-lines/:id", async (req, res) => {
   try {
+    const parsed = updatePpLineSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return void res.status(400).json({ error: "Invalid pp_line", details: parsed.error.flatten() });
+    }
     const [existing] = await db.select().from(ppLinesTable).where(eq(ppLinesTable.id, Number(req.params.id)));
     if (!existing) return void res.status(404).json({ error: "PP Line not found" });
 
     const [line] = await db.update(ppLinesTable)
-      .set({ ...req.body, updatedAt: new Date() })
+      .set({ ...parsed.data, updatedAt: new Date() })
       .where(eq(ppLinesTable.id, Number(req.params.id)))
       .returning();
 
     // Record history if line value changed
-    if (req.body.lineValue && String(req.body.lineValue) !== String(existing.lineValue)) {
+    if (parsed.data.lineValue && String(parsed.data.lineValue) !== String(existing.lineValue)) {
       await db.insert(ppLineHistoryTable).values({
         ppLineId: line.id,
         lineValue: line.lineValue,
