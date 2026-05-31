@@ -31,17 +31,38 @@ const STAT_MARKETS: Record<string, string> = {
   Strikeouts: "pitcher_strikeouts",
 };
 
-/** Minimum milliseconds between successful external-odds syncs to protect API credits. */
+/** Minimum ms between successful external-odds syncs (normal cron path). */
 const MIN_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
+/**
+ * Floor for FORCED (pre-lock) syncs. force still skips the normal 20-min guard
+ * for urgency, but never refetches faster than this — protects paid Odds API
+ * credits if /sync/pre-lock is hit repeatedly. 5 min is well inside any
+ * pre-lock window so freshness is unaffected.
+ */
+const FORCE_FLOOR_MS = 5 * 60 * 1000; // 5 minutes
+
+/** In-flight guard: concurrent callers join the same run instead of double-fetching. */
+let inFlight: Promise<number> | null = null;
 
 /**
- * @param force - bypass the 20-min cooldown guard (use for pre-lock syncs only)
+ * @param force - skip the 20-min cooldown for urgency (pre-lock only). Still
+ *   subject to FORCE_FLOOR_MS and the in-flight guard so it cannot be abused.
  */
 export async function syncExternalOdds(force = false): Promise<number> {
-  // --- Credit guard: skip if last success was < 20 minutes ago ---
-  // The cron runs every 30 min so this only blocks manual rapid-fire triggers.
-  // Pass force=true to bypass (pre-lock route only).
-  if (!force) {
+  if (inFlight) {
+    logger.info("external-odds: sync already in flight — joining existing run");
+    return inFlight;
+  }
+  inFlight = runSyncExternalOdds(force).finally(() => { inFlight = null; });
+  return inFlight;
+}
+
+async function runSyncExternalOdds(force = false): Promise<number> {
+  // --- Credit guard: skip the API calls if we synced too recently ---
+  // Normal path: 20 min. Forced (pre-lock) path: 5 min floor. Either way a
+  // skip falls back to recalcing scores from existing data (no API spend).
+  const floorMs = force ? FORCE_FLOOR_MS : MIN_INTERVAL_MS;
+  {
     const [lastSuccess] = await db
       .select({ finishedAt: dataPullLogsTable.finishedAt })
       .from(dataPullLogsTable)
@@ -53,8 +74,8 @@ export async function syncExternalOdds(force = false): Promise<number> {
       .limit(1);
 
     if (lastSuccess?.finishedAt &&
-        Date.now() - lastSuccess.finishedAt.getTime() < MIN_INTERVAL_MS) {
-      logger.info("external-odds: last sync was < 20 min ago — skipping API calls, recalcing scores only");
+        Date.now() - lastSuccess.finishedAt.getTime() < floorMs) {
+      logger.info({ force, floorMs }, "external-odds: within min interval — skipping API calls, recalcing scores only");
       await recalcPropScores();
       return 0;
     }

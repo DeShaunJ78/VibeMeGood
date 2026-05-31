@@ -625,12 +625,19 @@ export default function SlateBoard() {
 
   // Active-line counts per sport — used to auto-pick the most-populated sport
   // so the board is never empty (off-season) nor overloaded (all sports).
-  const { data: sportCounts } = useGetSlateSports();
+  const { data: sportCounts, isSuccess: sportsLoaded, isError: sportsError } = useGetSlateSports();
   const sportResolved = sport !== "";
   useEffect(() => {
-    if (sportResolved) return;
-    if (sportCounts && sportCounts.length > 0) setSport(sportCounts[0].sport);
-  }, [sportCounts, sportResolved]);
+    if (sport !== "") return;
+    if (sportCounts && sportCounts.length > 0) {
+      setSport(sportCounts[0].sport);
+    } else if (sportsLoaded || sportsError) {
+      // Counts query finished but returned nothing (off-season / no active lines
+      // / fetch error). Fall back to a concrete sport so the query stays
+      // sport-scoped (never all-sports) and the skeleton stops loading.
+      setSport("MLB");
+    }
+  }, [sportCounts, sport, sportsLoaded, sportsError]);
 
   // Persist the user's resolved sport choice across sessions.
   useEffect(() => {

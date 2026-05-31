@@ -10,6 +10,23 @@ import { eq, and, inArray, desc, gte, isNull, or } from "drizzle-orm";
 
 const router = Router();
 
+// Canonical sport grouping — collapses variant leagues into one bucket.
+// Used by BOTH /slate (filtering) and /slate-sports (counts) so the counts
+// shown always match the rows /slate returns for that canonical sport.
+const SPORT_GROUP: Record<string, string> = {
+  NFL: "NFL", NFLSZN: "NFL",
+  NBA: "NBA", NBA1Q: "NBA", NBA1H: "NBA", NBA1P: "NBA", NBASZN: "NBA",
+  MLB: "MLB", MLBLIVE: "MLB",
+  NHL: "NHL", NHL1P: "NHL",
+  WNBA: "WNBA", WNBA1H: "WNBA", WNBA1Q: "WNBA",
+};
+
+/** Variant leagues that roll up into the given canonical sport. */
+function variantsForSport(canonical: string): string[] {
+  const variants = Object.keys(SPORT_GROUP).filter(k => SPORT_GROUP[k] === canonical);
+  return variants.length > 0 ? variants : [canonical];
+}
+
 router.get("/slate", async (req, res) => {
   try {
     const { sport, statType, actionTag, lineType, teamId, gameId, minEdgeScore, maxRiskScore, watchlistOnly } =
@@ -103,13 +120,7 @@ router.get("/slate", async (req, res) => {
 
     let filtered = rows;
     if (sport) {
-      const sportsToMatch =
-        sport === "NFL"  ? ["NFL", "NFLSZN"] :
-        sport === "NBA"  ? ["NBA", "NBA1Q", "NBA1H", "NBA1P"] :
-        sport === "MLB"  ? ["MLB", "MLBLIVE"] :
-        sport === "NHL"  ? ["NHL", "NHL1P"] :
-        sport === "WNBA" ? ["WNBA", "WNBA1H"] :
-        [sport];
+      const sportsToMatch = variantsForSport(sport);
       filtered = filtered.filter(r => sportsToMatch.includes(r.sport));
     }
     if (actionTag) filtered = filtered.filter(r => r.actionTag === actionTag);
@@ -127,15 +138,6 @@ router.get("/slate", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
-// Canonical sport grouping — collapses variant leagues into one bucket.
-const SPORT_GROUP: Record<string, string> = {
-  NFL: "NFL", NFLSZN: "NFL",
-  NBA: "NBA", NBA1Q: "NBA", NBA1H: "NBA", NBA1P: "NBA", NBASZN: "NBA",
-  MLB: "MLB", MLBLIVE: "MLB",
-  NHL: "NHL", NHL1P: "NHL",
-  WNBA: "WNBA", WNBA1H: "WNBA", WNBA1Q: "WNBA",
-};
 
 router.get("/slate-sports", async (req, res) => {
   try {
