@@ -2,11 +2,16 @@ import { db } from "@workspace/db";
 import {
   ppLinesTable, ppLineHistoryTable, playersTable, teamsTable, gamesTable,
 } from "@workspace/db/schema";
-import { eq, and, or, isNull, lt, gte, lte } from "drizzle-orm";
+import { eq, and, or, isNull, lt, gte, lte, count, inArray } from "drizzle-orm";
 import { broadcastNewGoblin } from "../sse";
 import { logger } from "../logger";
 
 const PP_BASE = process.env.PP_API_BASE || "https://api.prizepicks.com";
+
+// Single-page fetch cap. If a response ever returns this many rows we must assume it
+// was truncated (PP handed us a full page with more behind it) and refuse to run
+// deactivation, since the missing tail would otherwise be mass-deactivated.
+const PER_PAGE = 25000;
 
 async function fetchPP(url: string): Promise<Response> {
   const delays = [0, 1000, 3000];
@@ -23,7 +28,7 @@ async function fetchPP(url: string): Promise<Response> {
 
 export async function syncPpLines(): Promise<number> {
   const res = await fetchPP(
-    `${PP_BASE}/projections?per_page=25000&single_stat=true&include=new_player,league`,
+    `${PP_BASE}/projections?per_page=${PER_PAGE}&single_stat=true&include=new_player,league`,
   );
   if (!res.ok) throw new Error(`PrizePicks API error: ${res.status}`);
   const data = await res.json() as {
@@ -37,6 +42,16 @@ export async function syncPpLines(): Promise<number> {
     if (inc.type === "new_player") playerMap[inc.id] = inc.attributes;
     if (inc.type === "league") leagueMap[inc.id] = inc.attributes;
   }
+
+  // How many lines are live BEFORE this run — used as a sanity floor so a partial
+  // response can't wipe the board.
+  const [{ value: activeBefore }] = await db
+    .select({ value: count() })
+    .from(ppLinesTable)
+    .where(eq(ppLinesTable.isActive, true));
+
+  // Sports that actually appeared in THIS response — deactivation is scoped to these.
+  const seenSports = new Set<string>();
 
   let processed = 0;
 
@@ -54,6 +69,7 @@ export async function syncPpLines(): Promise<number> {
       const lineType = ((proj.attributes.odds_type as string) || "standard").toLowerCase();
       const statType = proj.attributes.stat_type as string;
       const sport = (lAttr.name as string) || (pAttr.sport as string) || "Unknown";
+      seenSports.add(sport);
       const playerName = (pAttr.name as string) || "Unknown";
       const teamAbbr = ((pAttr.team as string) || "").toUpperCase();
       const imageUrl = (pAttr.image_url as string | undefined) ?? null;
@@ -182,10 +198,33 @@ export async function syncPpLines(): Promise<number> {
     }
   }
 
-  // Deactivate lines that weren't seen in this sync (use timestamp, not ID list)
-  // Any active line whose lastSyncedAt is more than 1 hour old wasn't in this run
+  // ── Deactivation guard ──────────────────────────────────────────────────────
+  // Deactivation removes any active line not refreshed in the last hour. That is only
+  // safe on a COMPLETE response — a partial / empty / truncated PP payload would
+  // otherwise mass-deactivate live lines across every sport. So we refuse to run it
+  // unless the response looks trustworthy, AND we scope it to the sports we actually
+  // saw this run (a transient drop of one sport can't deactivate another's lines).
+  const totalReturned = (data.data || []).length;
+  let skipReason = "";
+  if (totalReturned === 0) {
+    skipReason = "empty PP response";
+  } else if (totalReturned >= PER_PAGE) {
+    skipReason = `hit per_page cap (${PER_PAGE}) — response may be truncated`;
+  } else if (activeBefore > 0 && processed < Math.floor(activeBefore * 0.25)) {
+    skipReason = `processed ${processed} is under 25% of ${activeBefore} active lines — treating as partial`;
+  }
+
+  if (skipReason) {
+    logger.warn(
+      { processed, activeBefore, totalReturned, reason: skipReason },
+      "PP sync: skipping deactivation to avoid mass-wiping active lines",
+    );
+    return processed;
+  }
+
   const deactivationCutoff = new Date(Date.now() - 60 * 60 * 1000);
-  const deactivated = await db
+  const seenSportList = [...seenSports];
+  const deactivated = seenSportList.length === 0 ? [] : await db
     .update(ppLinesTable)
     .set({ isActive: false, updatedAt: new Date() })
     .where(and(
@@ -194,10 +233,16 @@ export async function syncPpLines(): Promise<number> {
         isNull(ppLinesTable.lastSyncedAt),
         lt(ppLinesTable.lastSyncedAt, deactivationCutoff),
       ),
+      inArray(
+        ppLinesTable.playerId,
+        db.select({ id: playersTable.id })
+          .from(playersTable)
+          .where(inArray(playersTable.sport, seenSportList)),
+      ),
     ))
     .returning({ id: ppLinesTable.id });
   if (deactivated.length > 0) {
-    logger.info({ count: deactivated.length }, "Deactivated stale PP lines");
+    logger.info({ count: deactivated.length, sports: seenSportList }, "Deactivated stale PP lines");
   }
 
   return processed;
