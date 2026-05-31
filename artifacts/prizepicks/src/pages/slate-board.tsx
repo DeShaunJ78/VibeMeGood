@@ -497,18 +497,7 @@ function normalCDF(mean: number, std: number, line: number): number {
 export default function SlateBoard() {
   const qc = useQueryClient();
   const { data: userSettings } = useUserSettings();
-  const { data: allEntriesForCount } = useQuery<{ length: number }>({
-    queryKey: ["entries-total-count"],
-    queryFn: async () => {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-      const r = await fetch(`${base}/api/entries`);
-      const arr = (await r.json()) as unknown[];
-      return { length: Array.isArray(arr) ? arr.length : 0 };
-    },
-    staleTime: 60_000,
-  });
-  const totalEntries = allEntriesForCount?.length ?? 0;
-  const presetsUnlocked = totalEntries >= 30;
+  const presetsUnlocked = true;
   const varianceEnabled = userSettings?.varianceIntelEnabled ?? false;
   const [tab, setTab] = useState<"player" | "team">("player");
   // "" = unresolved; auto-defaults to the most-populated sport once counts load.
