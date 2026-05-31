@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useCreateEntry } from "@workspace/api-client-react";
+import type { EntryPickInput } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -408,6 +409,7 @@ export default function EntryBuilder() {
 
   const logPortfolioEntry = useCallback(async (entry: PortfolioEntryResult, idx: number) => {
     try {
+      // Entry + legs persist atomically in one transaction — no orphan entries.
       await createEntry.mutateAsync({
         data: {
           entryDate: new Date().toISOString().split("T")[0],
@@ -417,6 +419,15 @@ export default function EntryBuilder() {
           displayedPayoutMultiplier: entry.multiplier,
           potentialPayout: (stakeNum || 25) * entry.multiplier,
           notes: `Portfolio optimizer — score ${entry.portfolioScore.toFixed(1)}`,
+          picks: entry.legs.map<EntryPickInput>(leg => ({
+            playerId:       leg.playerId,
+            statType:       leg.statType,
+            direction:      leg.direction,
+            lineValue:      leg.lineValue,
+            lineType:       leg.lineType,
+            yourProjection: leg.mean ?? null,
+            projectionGap:  leg.mean != null ? Math.round((leg.mean - leg.lineValue) * 100) / 100 : null,
+          })),
         },
       });
       setPortfolioLoggedSet(prev => new Set([...prev, idx]));
@@ -432,6 +443,8 @@ export default function EntryBuilder() {
       return;
     }
     try {
+      // Entry + all legs persist atomically in one transaction, so the Journal
+      // never gets an entry with zero gradeable picks (all-or-nothing).
       await createEntry.mutateAsync({
         data: {
           entryDate: new Date().toISOString().split("T")[0],
@@ -441,6 +454,16 @@ export default function EntryBuilder() {
           displayedPayoutMultiplier: multiplier || null,
           potentialPayout: powerPayout || null,
           notes: notes || null,
+          picks: picks.map<EntryPickInput>(p => ({
+            ppLineId:       p.ppLineId,
+            playerId:       p.playerId,
+            statType:       p.statType,
+            direction:      p.direction,
+            lineValue:      p.lineValue,
+            lineType:       p.lineType,
+            yourProjection: p.yourProjection ?? null,
+            projectionGap:  p.yourProjection != null ? Math.round((p.yourProjection - p.lineValue) * 100) / 100 : null,
+          })),
         },
       });
       toast({ title: "Entry logged", description: `${picks.length}-pick ${playstyle} — $${stakeNum} stake saved to journal.` });
@@ -449,7 +472,7 @@ export default function EntryBuilder() {
     } catch {
       toast({ title: "Failed to save", description: "Could not log entry.", variant: "destructive" });
     }
-  }, [createEntry, playstyle, picks.length, stakeNum, multiplier, powerPayout, notes, toast, clearPicks, multiplierUnknown]);
+  }, [createEntry, playstyle, picks, stakeNum, multiplier, powerPayout, notes, toast, clearPicks, multiplierUnknown]);
 
   async function handleSave() {
     if (picks.length < 2) {

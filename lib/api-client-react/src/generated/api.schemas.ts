@@ -396,6 +396,22 @@ export interface Entry {
   closedAt?: string | null;
 }
 
+export interface EntryPickInput {
+  /** @nullable */
+  ppLineId?: number | null;
+  playerId: number;
+  /** @nullable */
+  gameId?: number | null;
+  statType: string;
+  direction: string;
+  lineValue: number;
+  lineType: string;
+  /** @nullable */
+  yourProjection?: number | null;
+  /** @nullable */
+  projectionGap?: number | null;
+}
+
 export interface EntryInput {
   entryDate: string;
   entryType: string;
@@ -411,6 +427,8 @@ export interface EntryInput {
   emotionalState?: string | null;
   /** @nullable */
   submittedAt?: string | null;
+  /** Optional legs persisted atomically with the entry in a single transaction. */
+  picks?: EntryPickInput[];
 }
 
 export interface EntryUpdate {
@@ -456,22 +474,6 @@ export interface EntryPick {
 export interface EntryWithPicks {
   entry: Entry;
   picks: EntryPick[];
-}
-
-export interface EntryPickInput {
-  /** @nullable */
-  ppLineId?: number | null;
-  playerId: number;
-  /** @nullable */
-  gameId?: number | null;
-  statType: string;
-  direction: string;
-  lineValue: number;
-  lineType: string;
-  /** @nullable */
-  yourProjection?: number | null;
-  /** @nullable */
-  projectionGap?: number | null;
 }
 
 export interface EntryPickUpdate {

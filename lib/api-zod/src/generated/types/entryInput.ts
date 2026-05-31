@@ -5,6 +5,7 @@
  * PrizePicks Analytics API
  * OpenAPI spec version: 0.1.0
  */
+import type { EntryPickInput } from './entryPickInput';
 
 export interface EntryInput {
   entryDate: Date;
@@ -21,4 +22,6 @@ export interface EntryInput {
   emotionalState?: string | null;
   /** @nullable */
   submittedAt?: string | null;
+  /** Optional legs persisted atomically with the entry in a single transaction. */
+  picks?: EntryPickInput[];
 }

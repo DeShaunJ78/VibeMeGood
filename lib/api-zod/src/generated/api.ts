@@ -798,7 +798,18 @@ export const CreateEntryBody = zod.object({
   "potentialPayout": zod.number().nullish(),
   "notes": zod.string().nullish(),
   "emotionalState": zod.string().nullish(),
-  "submittedAt": zod.string().nullish()
+  "submittedAt": zod.string().nullish(),
+  "picks": zod.array(zod.object({
+  "ppLineId": zod.number().nullish(),
+  "playerId": zod.number(),
+  "gameId": zod.number().nullish(),
+  "statType": zod.string(),
+  "direction": zod.string(),
+  "lineValue": zod.number(),
+  "lineType": zod.string(),
+  "yourProjection": zod.number().nullish(),
+  "projectionGap": zod.number().nullish()
+})).optional().describe('Optional legs persisted atomically with the entry in a single transaction.')
 })
 
 

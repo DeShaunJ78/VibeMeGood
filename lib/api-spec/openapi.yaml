@@ -1740,6 +1740,10 @@ components:
         notes: { type: ["string", "null"] }
         emotionalState: { type: ["string", "null"] }
         submittedAt: { type: ["string", "null"] }
+        picks:
+          type: array
+          description: Optional legs persisted atomically with the entry in a single transaction.
+          items: { $ref: "#/components/schemas/EntryPickInput" }
       required: [entryDate, entryType, pickCount, stake]
 
     EntryUpdate:

@@ -5,3 +5,5 @@
 - [pOver units](pover-units.md) — pOverLine() & stored pOver are 0..100 percentages, NOT fractions; divide by 100 before multiplier math, never x100 on display.
 - [Line overrides](line-overrides.md) — pp_lines lineValueOverride/payoutMultiplier keyed per-ppLineId (fixes bleed); survive resync; always eval against `lineValueOverride ?? lineValue`.
 - [Data-quality gate](data-quality-gate.md) — `data-quality` script asserts 5 DQ categories w/ soft/hard tiers; dataset quirks (teams free-form, negative spread lines, audit-table orphans) invalidate naive rules.
+- [Atomic entry+picks](entry-creation-atomic.md) — createEntry takes inline `picks[]`, inserts entry+legs in one txn; never create-then-loop addEntryPick (orphan ungradeable entries). Drizzle numeric needs String().
+- [Single-sport lineups](single-sport-lineups.md) — lineup factory must lock each lineup to the first accepted pick's sport in BOTH main loop and relaxed fallback; pool is global cross-sport.

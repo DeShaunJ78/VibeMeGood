@@ -486,11 +486,15 @@ router.post("/lineup-factory/generate", async (req, res) => {
       }
 
       const picks: ScoredProp[] = [];
+      // A single lineup must stay within one sport — the first accepted pick fixes the
+      // sport and all later picks must match it (PrizePicks entries are single-sport).
+      let lineupSport: string | null = null;
       const totalFuture = cfg.numEntries;
 
       for (const candidate of pool) {
         if (picks.length >= n) break;
         if (picks.some(p => p.ppLineId === candidate.ppLineId)) continue;
+        if (lineupSport && candidate.sport !== lineupSport) continue;
 
         const afterPlayer = (playerCounts[candidate.playerId] ?? 0) + 1;
         if (afterPlayer / totalFuture > cfg.maxPlayerExposure + 0.001) continue;
@@ -518,15 +522,18 @@ router.post("/lineup-factory/generate", async (req, res) => {
         if (tooMuchOverlap) continue;
 
         picks.push(candidate);
+        if (!lineupSport) lineupSport = candidate.sport;
       }
 
-      // Relaxed fallback: drop overlap constraint to fill lineup
+      // Relaxed fallback: drop overlap constraint to fill lineup (same sport only)
       if (picks.length < n) {
         for (const candidate of pool) {
           if (picks.length >= n) break;
           if (picks.some(p => p.ppLineId === candidate.ppLineId)) continue;
           if (picks.some(p => p.playerId === candidate.playerId && p.statType === candidate.statType)) continue;
+          if (lineupSport && candidate.sport !== lineupSport) continue;
           picks.push(candidate);
+          if (!lineupSport) lineupSport = candidate.sport;
         }
       }
 

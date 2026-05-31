@@ -66,6 +66,8 @@ Private full-stack analytics workstation for evaluating PrizePicks props. Dark t
 - Review stats API is at `/api/dashboard/review` — called via `useGetReviewStats`.
 - `useGetDataHealth` takes a single `options?` arg.
 - Do not call `createEntry.mutateAsync` with flat data — always wrap in `{ data: {...} }`.
+- Log entries via the single atomic `createEntry` call with an inline `picks: EntryPickInput[]` array — the server inserts the entry + all legs in one transaction. Never create the entry then loop `addEntryPick` (partial failure = ungradeable orphan entry).
+- Lineup Factory locks each lineup to one sport; preserve the `lineupSport` constraint in both the main and relaxed-fallback loops or lineups go mixed-sport.
 - Port conflicts on restart: if EADDRINUSE, restart both workflows via the workflow manager.
 - `WatchlistItemInput` requires `playerId` + `statType`, not `ppLineId`.
 - `EntryInput` does not include `result` — set result via `EntryUpdate` (PATCH) after creation.

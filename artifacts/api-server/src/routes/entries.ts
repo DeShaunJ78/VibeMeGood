@@ -86,6 +86,18 @@ const CreateEntrySchema = z.object({
   potentialPayout: z.number().nullable().optional(),
 });
 
+const InlinePickSchema = z.object({
+  ppLineId:       z.number().int().nullable().optional(),
+  playerId:       z.number().int(),
+  gameId:         z.number().int().nullable().optional(),
+  statType:       z.string(),
+  direction:      z.enum(["more", "less"]),
+  lineValue:      z.number(),
+  lineType:       z.string(),
+  yourProjection: z.number().nullable().optional(),
+  projectionGap:  z.number().nullable().optional(),
+});
+
 const PickResultSchema = z.object({
   result: z.enum(["hit", "miss", "dnp"]),
   closingLine: z.number().positive().optional(),
@@ -193,16 +205,47 @@ router.post("/entries", async (req, res): Promise<void> => {
     const body = req.body as Record<string, unknown>;
     const userId = (body.userId as string) ?? "default";
 
-    // Strip non-schema keys before validation
-    const { userId: _u, overrideLossLimit: _o, ...entryBody } = body;
+    // Strip non-schema keys before validation. `picks` (optional) are persisted
+    // atomically with the entry below, never inserted onto the entries row.
+    const { userId: _u, overrideLossLimit: _o, picks: rawPicks, ...entryBody } = body;
     const parsed = CreateEntrySchema.safeParse(entryBody);
     if (!parsed.success) {
       res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
       return;
     }
 
-    const entryData = entryBody;
-    const [entry] = await db.insert(entriesTable).values(entryData as InsertEntry).returning();
+    let picksToInsert: z.infer<typeof InlinePickSchema>[] = [];
+    if (rawPicks !== undefined) {
+      const picksParsed = z.array(InlinePickSchema).safeParse(rawPicks);
+      if (!picksParsed.success) {
+        res.status(400).json({ error: "Invalid picks", issues: picksParsed.error.issues });
+        return;
+      }
+      picksToInsert = picksParsed.data;
+    }
+
+    // Entry + legs are created in a single transaction so a leg failure rolls back
+    // the whole entry — never leaves an ungradeable entry with zero picks.
+    const entry = await db.transaction(async (tx) => {
+      const [created] = await tx.insert(entriesTable).values(entryBody as InsertEntry).returning();
+      if (picksToInsert.length > 0) {
+        await tx.insert(entryPicksTable).values(
+          picksToInsert.map(p => ({
+            entryId:        created.id,
+            ppLineId:       p.ppLineId ?? null,
+            playerId:       p.playerId,
+            gameId:         p.gameId ?? null,
+            statType:       p.statType,
+            direction:      p.direction,
+            lineValue:      String(p.lineValue),
+            lineType:       p.lineType,
+            yourProjection: p.yourProjection != null ? String(p.yourProjection) : null,
+            projectionGap:  p.projectionGap != null ? String(p.projectionGap) : null,
+          })),
+        );
+      }
+      return created;
+    });
 
     // Async behavioral logging — non-fatal
     void (async () => {
