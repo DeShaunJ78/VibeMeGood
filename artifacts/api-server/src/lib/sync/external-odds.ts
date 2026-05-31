@@ -26,6 +26,8 @@ const STAT_MARKETS: Record<string, string> = {
   Assists: "player_assists",
   "3-Pointers Made": "player_threes",
   "Pts+Reb+Ast": "player_points_rebounds_assists",
+  "Pts+Rebs": "player_points_rebounds",
+  "Pts+Asts": "player_points_assists",
   "Total Bases": "player_total_bases",
   Hits: "player_hits",
   Strikeouts: "pitcher_strikeouts",

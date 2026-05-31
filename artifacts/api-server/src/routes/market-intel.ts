@@ -56,6 +56,22 @@ function getComboProjection(
   return null;
 }
 
+/**
+ * Normalize stat type strings for cross-platform matching.
+ * Underdog uses "Pts+Ast" / "Pts+Reb"; PP uses "Pts+Asts" / "Pts+Rebs".
+ * Reduces each component to its canonical abbreviation so lookups match
+ * regardless of plural/spelling variation.
+ */
+function normalizeStatType(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/\bpoints\b/g, "pts")
+    .replace(/\brebounds\b/g, "reb")
+    .replace(/\bassists\b/g, "ast")
+    .replace(/\brebs\b/g, "reb")
+    .replace(/\basts\b/g, "ast");
+}
+
 const router = Router();
 
 router.get("/market-intel", async (req, res) => {
@@ -289,10 +305,11 @@ router.get("/market-intel", async (req, res) => {
       allMovesByPpLineId.get(m.ppLineId)!.push(m);
     }
 
-    // Platform lines map: lowercase(playerName):lowercase(statType) → {platform → lineValue}
+    // Platform lines map: normalize(playerName):normalize(statType) → {platform → lineValue}
+    // normalizeStatType ensures "Pts+Ast" (Underdog) matches "Pts+Asts" (PP), etc.
     const platformLinesByKey = new Map<string, Map<string, number>>();
     for (const pl of allPlatformLines) {
-      const key = `${pl.playerName.toLowerCase()}:${pl.statType.toLowerCase()}`;
+      const key = `${pl.playerName.toLowerCase()}:${normalizeStatType(pl.statType)}`;
       if (!platformLinesByKey.has(key)) platformLinesByKey.set(key, new Map());
       platformLinesByKey.get(key)!.set(pl.platform, Number(pl.lineValue));
     }
@@ -334,7 +351,8 @@ router.get("/market-intel", async (req, res) => {
         if (val) bookLines[l.bookName] = parseFloat(val.toString());
       }
       // Also include pick'em platform lines (Underdog, etc.) in the book comparison
-      const platKey = `${row.player.fullName.toLowerCase()}:${row.line.statType.toLowerCase()}`;
+      // Use normalizeStatType so "Pts+Asts" (PP) matches "Pts+Ast" (Underdog)
+      const platKey = `${row.player.fullName.toLowerCase()}:${normalizeStatType(row.line.statType)}`;
       const platLines = platformLinesByKey.get(platKey);
       if (platLines) {
         for (const [platform, lineVal] of platLines) {
@@ -351,8 +369,7 @@ router.get("/market-intel", async (req, res) => {
         .map(l => new Decimal(l.noVigOverProb!.toString()));
       const fairProbDecimal = consensusFairProb(noVigDecimalProbs);
 
-      // ROOT ISSUE 1 — projPOver uses fallback pOver when exact join misses
-      // (playerProjMap / fallback not yet computed here; use row.proj directly — fallback handled below)
+      // projPOver: use row.proj directly; combo fallback pOver is computed below
       const projPOver = row.proj?.pOver ? parseFloat(row.proj.pOver.toString()) : null;
       const modelProbDecimal = projPOver != null ? new Decimal(projPOver).div(100) : null;
 
@@ -404,16 +421,15 @@ router.get("/market-intel", async (req, res) => {
 
       const proj = row.proj;
 
-      // ROOT ISSUE 1 — override for combo/base stat types with real calculated values
-      // DB `ourProjections` has prior_only rows (value=20) for every statType including combos.
-      // For combo stat types (e.g. "Pts+Rebs"), prefer the sum of base stat projections.
-      // For base-stat mismatches, use the matching base type when the exact join missed.
+      // COMBO PROJECTION FALLBACK
+      // For combo stat types (e.g. "Pts+Rebs"), sum the individual base stat projections.
+      // For base-stat mismatches where the exact join missed, fall back to base type lookup.
       const playerProjMap = playerProjectionMaps.get(row.line.playerId);
       const isComboType = row.line.statType.includes("+");
       let fallback: FallbackProj | null = null;
       if (playerProjMap) {
         if (isComboType) {
-          // Always prefer computed sum for combos — it beats a 20.0 prior
+          // Prefer computed component sum for combos (more accurate than any single prior)
           const comboVal = getComboProjection(row.line.statType, playerProjMap);
           if (comboVal != null) fallback = { projectedValue: comboVal, pOver: null, stdDev: null };
         }

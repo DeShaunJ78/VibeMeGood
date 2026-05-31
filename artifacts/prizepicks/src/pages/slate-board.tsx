@@ -480,6 +480,13 @@ function erf(x: number): number {
   return sign * y;
 }
 
+function classifyTier(lineVal: number, proj: number): "goblin" | "standard" | "demon" {
+  const ratio = lineVal / proj;
+  if (ratio < 0.6) return "goblin";
+  if (ratio > 1.2) return "demon";
+  return "standard";
+}
+
 function normalCDF(mean: number, std: number, line: number): number {
   if (std <= 0) return line < mean ? 1 : 0;
   const z = (line - mean) / (std * Math.sqrt(2));
@@ -725,22 +732,22 @@ export default function SlateBoard() {
       const key = `${r.playerId}:${r.statType}`;
       const prev = dedupMap.get(key);
 
-      const projVal = r.ourProjection?.value ?? null;
-
-      const classifyTier = (lineVal: number, proj: number): "goblin" | "standard" | "demon" => {
-        const ratio = lineVal / proj;
-        if (ratio < 0.6) return "goblin";
-        if (ratio > 1.2) return "demon";
-        return "standard";
-      };
-
       const getTierScore = (row: typeof r): number => {
         const line = row.lineValue ?? 0;
         const proj = row.ourProjection?.value ?? null;
 
-        // Priority 1: has external odds
-        if ((row.bookCount ?? 0) > 0)
-          return 1000 + (row.finalScore ?? 0);
+        // Priority 1: any book/platform anchor exists — prefer tier closest to
+        // the market consensus line (marketAvg = avg of sportsbooks + Underdog).
+        // This correctly anchors combo stats via Underdog even when no sharp-book
+        // odds exist, since all tiers share the same bookCount from platform data.
+        if ((row.bookCount ?? 0) > 0) {
+          if (row.marketAvg != null) {
+            const distance = Math.abs(line - row.marketAvg);
+            // Score: 2000 minus distance in half-points; exact match = 2000.
+            return 2000 - Math.round(distance * 2);
+          }
+          return 1500 + (row.finalScore ?? 0);
+        }
 
         // Priority 2: standard tier (within 60–120% of projection)
         if (proj && proj > 0) {
