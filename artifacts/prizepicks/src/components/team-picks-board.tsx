@@ -71,7 +71,7 @@ export function TeamPicksBoard({ rows, isLoading, onSelectProp }: Props) {
         </div>
       ) : rows.length === 0 ? (
         <div className="flex items-center justify-center h-64 text-muted-foreground text-sm font-mono">
-          No team picks available. Run seed to populate.
+          No team picks available yet — they'll appear here once synced.
         </div>
       ) : (
         Object.entries(gameGroups).map(([gameKey, gameRows]) => (
