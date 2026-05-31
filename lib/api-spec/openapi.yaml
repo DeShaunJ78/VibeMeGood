@@ -510,6 +510,20 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/SlateRow" }
 
+  /slate-sports:
+    get:
+      operationId: getSlateSports
+      tags: [propScores]
+      summary: Active-line counts grouped by canonical sport, ordered by count desc
+      responses:
+        "200":
+          description: Sports with active line counts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SlateSportCount" }
+
   /slate/{ppLineId}:
     get:
       operationId: getSlateRow
