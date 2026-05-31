@@ -7,6 +7,7 @@ import {
   ourProjectionsTable, playerGameLogsTable,
 } from "@workspace/db/schema";
 import { eq, and, inArray, desc, gte, isNull, or } from "drizzle-orm";
+import { pOverLine, percentileAtLine } from "../lib/projection/normal-dist";
 
 const router = Router();
 
@@ -106,7 +107,11 @@ router.get("/slate", async (req, res) => {
         teamId: line.teamId ?? null,
         yourProjection: proj ? Number(proj.projectedValue) : null,
         projectionGap: proj ? Number(proj.projectedValue) - Number(line.lineValue) : null,
-        pOver: proj?.pOver ? Number(proj.pOver) : null,
+        // Tier-specific: compute P(over) against THIS line's value, not the single
+        // stored pOver (which is computed against one arbitrary tier of this stat).
+        pOver: (proj?.projectedValue && proj?.stdDev)
+          ? Math.round(pOverLine(Number(proj.projectedValue), Number(proj.stdDev), Number(line.lineValue)) * 10) / 10
+          : null,
         edgeScore: score ? Number(score.edgeScore) : null,
         stabilityScore: score ? Number(score.stabilityScore) : null,
         marketSupportScore: score ? Number(score.marketSupportScore) : null,
@@ -217,8 +222,14 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
       ourProjection: op ? {
         value: parseFloat(op.projectedValue.toString()),
         stdDev: op.stdDev ? parseFloat(op.stdDev.toString()) : null,
-        pOver: op.pOver ? parseFloat(op.pOver.toString()) : null,
-        percentileAtLine: op.percentileAtLine ? parseFloat(op.percentileAtLine.toString()) : null,
+        // Tier-specific: evaluate against this line's value rather than the stored
+        // pOver/percentile (computed against one arbitrary tier of this stat).
+        pOver: op.stdDev
+          ? Math.round(pOverLine(parseFloat(op.projectedValue.toString()), parseFloat(op.stdDev.toString()), parseFloat(line.lineValue.toString())) * 10) / 10
+          : null,
+        percentileAtLine: op.stdDev
+          ? Math.round(percentileAtLine(parseFloat(op.projectedValue.toString()), parseFloat(op.stdDev.toString()), parseFloat(line.lineValue.toString())) * 10) / 10
+          : null,
         dataQualityScore: op.dataQualityScore,
         shrinkageFactor: op.shrinkageFactor ? parseFloat(op.shrinkageFactor.toString()) : null,
         noPlayReason: op.noPlayReason ?? null,

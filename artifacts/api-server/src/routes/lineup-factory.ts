@@ -6,6 +6,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, inArray, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
+import { pOverLine } from "../lib/projection/normal-dist";
 import { z } from "zod";
 
 const router = Router();
@@ -284,7 +285,13 @@ router.post("/lineup-factory/generate", async (req, res) => {
       }
 
       // ── Hit probability ──
-      const pOver = row.proj?.pOver ? parseFloat(row.proj.pOver.toString()) / 100 : null;
+      // Tier-specific: P(over) for THIS line's value, not the single stored pOver
+      // (which was computed against one arbitrary tier of this player/stat).
+      const pMean = row.proj?.projectedValue ? parseFloat(row.proj.projectedValue.toString()) : null;
+      const pStd = row.proj?.stdDev ? parseFloat(row.proj.stdDev.toString()) : null;
+      const pOver = (pMean !== null && pStd !== null)
+        ? pOverLine(pMean, pStd, parseFloat(row.line.lineValue.toString())) / 100
+        : null;
       let hitProbability: number;
       let probabilitySource: string;
       let confidence: string;

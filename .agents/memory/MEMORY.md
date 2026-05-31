@@ -1,3 +1,4 @@
 - [Scoring PLAY thresholds](scoring-thresholds.md) — PLAY = overallScore≥70 && edgeScore≥55 && riskScore≤45 (original 75/60 was too strict without market data)
 - [Slate list route fix](slate-route-fix.md) — slate list must JOIN ourProjectionsTable (not projectionsTable); projectionsTable has only 18 seeded legacy rows
 - [Data sources & Odds API credits](data-sources-and-credits.md) — provider→data mapping (don't collapse onto FantasyPros) + odds credit guards + shared SPORT_GROUP.
+- [PrizePicks tier & per-line pOver](prizepicks-tier-and-pover.md) — tier comes from `odds_type` not `line_type`; probability must be recomputed per line, never the single stored proj.pOver.

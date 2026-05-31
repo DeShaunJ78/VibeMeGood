@@ -10,6 +10,7 @@ import {
 import { eq, and, or, isNull, isNotNull, desc, gte, asc, inArray, ilike, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { consensusFairProb, edgePct, holdWarning } from "../lib/analytics/odds-math";
+import { pOverLine } from "../lib/projection/normal-dist";
 import { detectSharpMoney } from "../lib/propedge/sharp-detector";
 
 // ROOT ISSUE 1 — helpers for base-stat and combo projection fallback
@@ -369,8 +370,11 @@ router.get("/market-intel", async (req, res) => {
         .map(l => new Decimal(l.noVigOverProb!.toString()));
       const fairProbDecimal = consensusFairProb(noVigDecimalProbs);
 
-      // projPOver: use row.proj directly; combo fallback pOver is computed below
-      const projPOver = row.proj?.pOver ? parseFloat(row.proj.pOver.toString()) : null;
+      // projPOver: tier-specific — evaluate against THIS line's value rather than the
+      // single stored pOver (computed against one arbitrary tier of this player/stat).
+      const projPOver = (row.proj?.projectedValue && row.proj?.stdDev)
+        ? pOverLine(parseFloat(row.proj.projectedValue.toString()), parseFloat(row.proj.stdDev.toString()), ppLine)
+        : (row.proj?.pOver ? parseFloat(row.proj.pOver.toString()) : null);
       const modelProbDecimal = projPOver != null ? new Decimal(projPOver).div(100) : null;
 
       let trueEdge: number | null = null;
@@ -444,9 +448,9 @@ router.get("/market-intel", async (req, res) => {
       const effectiveProj = (isComboType && fallback) ? null : proj;
 
       const noPlayReason = effectiveProj?.noPlayReason ?? null;
-      const pOver = effectiveProj?.pOver
-        ? parseFloat(effectiveProj.pOver.toString())
-        : (fallback?.pOver ?? null);
+      const pOver = (effectiveProj?.projectedValue && effectiveProj?.stdDev)
+        ? pOverLine(parseFloat(effectiveProj.projectedValue.toString()), parseFloat(effectiveProj.stdDev.toString()), ppLine)
+        : (effectiveProj?.pOver ? parseFloat(effectiveProj.pOver.toString()) : (fallback?.pOver ?? null));
       const dqScore = effectiveProj?.dataQualityScore ?? null;
       const isStale = effectiveProj?.expiresAt ? new Date() > effectiveProj.expiresAt : false;
       const effectiveNoPlay = noPlayReason ?? (isStale ? "stale_projection" : null);

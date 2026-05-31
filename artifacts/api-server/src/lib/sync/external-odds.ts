@@ -6,6 +6,7 @@ import {
 import { eq, and, notInArray, desc, inArray } from "drizzle-orm";
 import { logger } from "../logger";
 import { twoWayHold, noVigProbs } from "../analytics/odds-math";
+import { pOverLine } from "../projection/normal-dist";
 
 const ODDS_BASE = process.env.ODDS_API_BASE || "https://api.the-odds-api.com/v4";
 const ODDS_KEY = process.env.ODDS_API_KEY || "";
@@ -405,7 +406,14 @@ export async function recalcPropScores(): Promise<void> {
       const proj = projByPlayerStat.get(`${line.playerId}:${line.statType}`) ?? null;
 
       const noPlayReason = proj?.noPlayReason ?? null;
-      const pOver = proj?.pOver ? parseFloat(proj.pOver.toString()) : null;
+      // Probability is tier-specific: evaluate the projection distribution against
+      // THIS line's value. The stored proj.pOver was computed against one arbitrary
+      // active line (.limit(1)) and is wrong for the other goblin/demon/standard tiers.
+      const projMean = proj?.projectedValue ? parseFloat(proj.projectedValue.toString()) : null;
+      const projStdDev = proj?.stdDev ? parseFloat(proj.stdDev.toString()) : null;
+      const pOver = (projMean !== null && projStdDev !== null)
+        ? pOverLine(projMean, projStdDev, parseFloat(line.lineValue.toString()))
+        : null;
       const dataQualityScore = proj?.dataQualityScore ?? null;
       const confidence = proj?.confidence ?? null;
       const sourceLabel = proj?.sourceLabel ?? "prior_only";

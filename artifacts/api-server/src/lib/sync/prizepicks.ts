@@ -47,7 +47,11 @@ export async function syncPpLines(): Promise<number> {
       const lineValue = parseFloat(proj.attributes.line_score as string);
       if (isNaN(lineValue)) continue;
 
-      const lineType = ((proj.attributes.line_type as string) || "standard").toLowerCase();
+      // PrizePicks exposes the tier as `odds_type` (standard | goblin | demon).
+      // There is NO `line_type` field on the API — reading it left every row
+      // labelled "standard", which collapsed goblin/demon tiers and made same-value
+      // standard+demon pairs collide on the upsert key (lines stopped matching PP).
+      const lineType = ((proj.attributes.odds_type as string) || "standard").toLowerCase();
       const statType = proj.attributes.stat_type as string;
       const sport = (lAttr.name as string) || (pAttr.sport as string) || "Unknown";
       const playerName = (pAttr.name as string) || "Unknown";
