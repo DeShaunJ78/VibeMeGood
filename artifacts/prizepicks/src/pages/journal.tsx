@@ -446,6 +446,7 @@ function NewEntryModal({ open, onClose }: { open: boolean; onClose: () => void }
   const { toast } = useToast();
   const qc = useQueryClient();
   const { mutateAsync, isPending } = useCreateEntry();
+  const patchEntry = useUpdateEntry();
   const [form, setForm] = useState({
     entryDate: new Date().toISOString().split("T")[0],
     entryType: "power",
@@ -463,8 +464,19 @@ function NewEntryModal({ open, onClose }: { open: boolean; onClose: () => void }
   }
 
   async function handleSave() {
+    const decided = form.result !== "pending";
+
+    // Partial entries settle to a specific payout — require it explicitly so we
+    // never silently record a partial win as a full loss ($0).
+    if (form.result === "partial" && !form.actualPayout) {
+      toast({ title: "Enter the actual payout for a partial result", variant: "destructive" });
+      return;
+    }
+
+    // Phase 1: create the entry.
+    let created: Awaited<ReturnType<typeof mutateAsync>>;
     try {
-      await mutateAsync({
+      created = await mutateAsync({
         data: {
           entryDate: form.entryDate,
           entryType: form.entryType as any,
@@ -475,12 +487,44 @@ function NewEntryModal({ open, onClose }: { open: boolean; onClose: () => void }
           notes: form.notes || null,
         },
       });
-      await qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
-      toast({ title: "Entry logged", description: `${form.pickCount}-pick ${form.entryType} saved to journal.` });
-      onClose();
     } catch {
       toast({ title: "Save failed", variant: "destructive" });
+      return;
     }
+
+    // Phase 2 (only when logging an already-decided slate, e.g. backdating a
+    // night you missed): persist the result + actual payout. The entry already
+    // exists at this point, so a failure here is a partial success — don't
+    // report a total failure or the user may re-submit and create a duplicate.
+    if (decided && created?.id) {
+      const stakeNum = parseFloat(form.stake) || 0;
+      const potential = form.potentialPayout ? parseFloat(form.potentialPayout) : 0;
+      const actualPayout =
+        form.actualPayout ? parseFloat(form.actualPayout) :
+        form.result === "win"    ? potential :
+        form.result === "refund" ? stakeNum :
+        0; // loss
+      try {
+        await patchEntry.mutateAsync({
+          id: created.id,
+          data: { result: form.result as any, actualPayout },
+        });
+      } catch {
+        await qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
+        toast({
+          title: "Entry saved, but result not applied",
+          description: "The entry was logged as pending — set its result from the journal.",
+          variant: "destructive",
+        });
+        onClose();
+        return;
+      }
+    }
+
+    await qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
+    const resultNote = decided ? ` (${form.result.toUpperCase()})` : "";
+    toast({ title: "Entry logged", description: `${form.pickCount}-pick ${form.entryType}${resultNote} saved to journal.` });
+    onClose();
   }
 
   return (
@@ -574,8 +618,8 @@ function NewEntryModal({ open, onClose }: { open: boolean; onClose: () => void }
 
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={onClose} className="font-mono text-xs border-slate-700 h-8">Cancel</Button>
-            <Button onClick={handleSave} disabled={isPending} className="font-mono text-xs h-8">
-              {isPending ? "Saving…" : "Log Entry"}
+            <Button onClick={handleSave} disabled={isPending || patchEntry.isPending} className="font-mono text-xs h-8">
+              {isPending || patchEntry.isPending ? "Saving…" : "Log Entry"}
             </Button>
           </div>
         </div>
