@@ -10,8 +10,8 @@ collapsing everything onto FantasyPros — keep them separate:
 
 - **PrizePicks API** (`prizepicks`) → `pp_lines`, the actual prop lines, ALL sports.
 - **The Odds API** (`the-odds-api`) → sportsbook lines → market-gap signal. Only
-  sports in `SPORT_KEYS` (NBA/MLB/NHL/NFL/WNBA) AND only stat markets in
-  `STAT_MARKETS` (basketball + baseball). NHL/NFL have no markets → zero calls.
+  sports in `SPORT_KEYS` AND only stat markets in the sport-nested
+  `SPORT_STAT_MARKETS` (see "Odds API player-props endpoint" below).
 - **FantasyPros scraper** (`fantasypros`, `fpProjectionsJob`) → projections for
   NBA (game logs) + NHL only. NBA projections coming from here is expected.
 - **Internal compute** (`nba-stats`) → `our_projections` (normalCDF P(Over)) for
@@ -20,16 +20,38 @@ collapsing everything onto FantasyPros — keep them separate:
 **Why:** live PrizePicks API has NBA league active but 0 projections; NBA props
 in this app are reconstructed from game logs + FantasyPros + Odds API, not live PP.
 
-# Odds API cost (the only metered external source worth guarding)
+# Odds API player-props endpoint (the live root cause, May 2026)
 
-- Cost ≈ markets × regions per batched call; one batched call per sport.
-- Usage is tiny in practice (well under 1k credits/month on a 100k plan).
-- Guards in `external-odds.ts`: normal path 20-min cooldown; FORCED (pre-lock)
-  path has a 5-min `FORCE_FLOOR_MS` + an in-flight mutex so `/sync/pre-lock`
-  can't be spammed into draining credits. A skipped sync still recalcs scores
-  from existing data (no API spend).
-- **How to apply:** to tighten spend, widen the cooldown — never drop sports or
-  markets (that hurts signal integrity for no real credit benefit).
+- Player props are NOT on the FEATURED `/v4/sports/{key}/odds` endpoint anymore —
+  it returns **422 INVALID_MARKET**. They live ONLY on the per-EVENT endpoint
+  `/v4/sports/{key}/events/{id}/odds`. The events-LIST call
+  (`/v4/sports/{key}/events`) is **FREE** (no quota cost); only the per-event
+  odds calls are metered.
+- Market keys are **sport-specific**: MLB uses `batter_*`/`pitcher_*` (NOT
+  `player_*`); basketball (NBA/WNBA) and NHL use `player_*`. A single unsupported
+  market key 422s the WHOLE event request, so `SPORT_STAT_MARKETS` must contain
+  only verified keys per sport.
+- **Why:** old code used the featured endpoint + a flat `player_*` map → captured
+  0 rows silently (run still logged "success" with 0 processed). Watch for that
+  failure shape — 0 rows is not proof of "no games".
+
+# Odds API credit guards (user is highly credit-sensitive)
+
+- Target ≈ 20–30k credits/mo. Strategy: pull each game ~hourly, but ONLY when
+  within ~6h of lock. `external-odds.ts`: `ODDS_WINDOW_MS=6h` filters the free
+  events list (`commenceTimeFrom=now`, `commenceTimeTo=now+6h`); games further
+  out cost nothing. Hourly cron (`0 * * * *`).
+- Cadence gate uses `MIN_INTERVAL_MS` (50 min) compared against the last success
+  **`startedAt`** — NOT `finishedAt`. finishedAt drifts with run duration and a
+  >Δmin run would make the next hourly tick fall inside the window and skip,
+  degrading to every 2h. Gate on startedAt so :00→:00 is always a clean 60min.
+  Keep MIN_INTERVAL below the cron interval (50<60).
+- FORCED (pre-lock) path: 5-min `FORCE_FLOOR_MS` + in-flight mutex. The pre-lock
+  cron force MUST go through `logPull` so it records a success row — the gate
+  reads `dataPullLogs`, so an unlogged force lets repeated triggers double-spend.
+- A skipped sync still recalcs scores from existing data (no API spend).
+- **How to apply:** to tighten spend, narrow `ODDS_WINDOW_MS` or widen
+  `MIN_INTERVAL_MS` — never drop sports or markets (hurts signal integrity).
 
 # Slate sport grouping
 

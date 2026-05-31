@@ -62,8 +62,9 @@ export function startCronJobs() {
     logPull("injury-news", "injuries", syncInjuries)
   );
 
-  // External odds every 30 minutes
-  cron.schedule("*/30 * * * *", () =>
+  // External odds hourly (player props are pulled per-event near lock; the
+  // in-function gate + 6h window keep credit spend tight)
+  cron.schedule("0 * * * *", () =>
     logPull("the-odds-api", "external-odds", syncExternalOdds)
   );
 
@@ -150,10 +151,13 @@ export function startCronJobs() {
         logger.info("Pre-lock window detected — triggering urgent sync (lines + injuries + odds)");
         await syncPpLines();
         // Also refresh injuries and odds so lineup decisions have fresh data.
-        // syncExternalOdds(true) bypasses the 20-min cooldown for this urgent case.
+        // syncExternalOdds(true) bypasses the hourly cooldown for this urgent case.
+        // Route the forced odds pull through logPull so it records a success row —
+        // the FORCE_FLOOR / cadence gate reads dataPullLogs, so an unlogged force
+        // would let repeated triggers double-spend credits.
         await Promise.all([
           syncInjuries(),
-          syncExternalOdds(true),
+          logPull("the-odds-api", "external-odds", () => syncExternalOdds(true)),
         ]);
       }
     } catch (err) {

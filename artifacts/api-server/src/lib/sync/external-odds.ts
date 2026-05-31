@@ -18,23 +18,69 @@ const SPORT_KEYS: Record<string, string> = {
   WNBA: "basketball_wnba",
 };
 
-const STAT_MARKETS: Record<string, string> = {
-  Points: "player_points",
-  Rebounds: "player_rebounds",
-  Assists: "player_assists",
-  "3-Pointers Made": "player_threes",
-  "Pts+Reb+Ast": "player_points_rebounds_assists",
+// Basketball player-prop markets (shared by NBA + WNBA on the Odds API).
+const BASKETBALL_MARKETS: Record<string, string> = {
+  "Points": "player_points",
+  "Rebounds": "player_rebounds",
+  "Assists": "player_assists",
+  "3-PT Made": "player_threes",
+  "Pts+Rebs+Asts": "player_points_rebounds_assists",
   "Pts+Rebs": "player_points_rebounds",
   "Pts+Asts": "player_points_assists",
-  "Total Bases": "player_total_bases",
-  Hits: "player_hits",
-  Strikeouts: "pitcher_strikeouts",
+  "Rebs+Asts": "player_rebounds_assists",
+  "Double-Double": "player_double_double",
+  "Triple-Double": "player_triple_double",
 };
 
-/** Minimum ms between successful external-odds syncs (normal cron path). */
-const MIN_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
 /**
- * Floor for FORCED (pre-lock) syncs. force still skips the normal 20-min guard
+ * PrizePicks stat_type -> Odds API market key, nested by sport. Sport-aware
+ * because the same Odds market key is invalid across sports (e.g. baseball uses
+ * "batter_"/"pitcher_" prefixes, basketball and hockey use "player_"). Every key
+ * below is verified valid on the per-EVENT odds endpoint. Only include verified keys: a
+ * single unsupported market makes the Odds API reject the whole event request.
+ */
+const SPORT_STAT_MARKETS: Record<string, Record<string, string>> = {
+  MLB: {
+    "Hits": "batter_hits",
+    "Total Bases": "batter_total_bases",
+    "Home Runs": "batter_home_runs",
+    "RBIs": "batter_rbis",
+    "Runs": "batter_runs_scored",
+    "Singles": "batter_singles",
+    "Doubles": "batter_doubles",
+    "Walks": "batter_walks",
+    "Stolen Bases": "batter_stolen_bases",
+    "Hitter Strikeouts": "batter_strikeouts",
+    "Hits+Runs+RBIs": "batter_hits_runs_rbis",
+    "Pitcher Strikeouts": "pitcher_strikeouts",
+    "Pitching Outs": "pitcher_outs",
+    "Hits Allowed": "pitcher_hits_allowed",
+    "Walks Allowed": "pitcher_walks",
+    "Earned Runs Allowed": "pitcher_earned_runs",
+  },
+  NBA: BASKETBALL_MARKETS,
+  WNBA: BASKETBALL_MARKETS,
+  NHL: {
+    "Points": "player_points",
+    "Assists": "player_assists",
+    "Goals": "player_goals",
+    "Shots On Goal": "player_shots_on_goal",
+    "Blocked Shots": "player_blocked_shots",
+    "Power Play Points": "player_power_play_points",
+    "Goalie Saves": "player_total_saves",
+  },
+};
+
+/** Minimum ms between successful external-odds syncs (normal cron path).
+ *  Sits just under the hourly cron so each hour produces exactly one fetch,
+ *  while rapid/overlapping triggers are coalesced into a score recalc only. */
+const MIN_INTERVAL_MS = 50 * 60 * 1000; // 50 minutes
+/** Only pull player props for games starting within this window of "lock"
+ *  (game start). Keeps credit spend proportional to the imminent slate — games
+ *  further out are skipped entirely (the events list call itself is free). */
+const ODDS_WINDOW_MS = 6 * 60 * 60 * 1000; // 6 hours
+/**
+ * Floor for FORCED (pre-lock) syncs. force still skips the normal hourly guard
  * for urgency, but never refetches faster than this — protects paid Odds API
  * credits if /sync/pre-lock is hit repeatedly. 5 min is well inside any
  * pre-lock window so freshness is unaffected.
@@ -45,7 +91,7 @@ const FORCE_FLOOR_MS = 5 * 60 * 1000; // 5 minutes
 let inFlight: Promise<number> | null = null;
 
 /**
- * @param force - skip the 20-min cooldown for urgency (pre-lock only). Still
+ * @param force - skip the normal hourly cooldown for urgency (pre-lock only). Still
  *   subject to FORCE_FLOOR_MS and the in-flight guard so it cannot be abused.
  */
 export async function syncExternalOdds(force = false): Promise<number> {
@@ -59,12 +105,17 @@ export async function syncExternalOdds(force = false): Promise<number> {
 
 async function runSyncExternalOdds(force = false): Promise<number> {
   // --- Credit guard: skip the API calls if we synced too recently ---
-  // Normal path: 20 min. Forced (pre-lock) path: 5 min floor. Either way a
+  // Normal path: 50 min. Forced (pre-lock) path: 5 min floor. Either way a
   // skip falls back to recalcing scores from existing data (no API spend).
   const floorMs = force ? FORCE_FLOOR_MS : MIN_INTERVAL_MS;
   {
+    // Gate on startedAt, NOT finishedAt: the hourly cron fires at :00, so a run
+    // that takes >Δ minutes would push finishedAt past :00+Δ and make the next
+    // hourly tick fall inside the window and skip — silently degrading to every
+    // 2h near lock. startedAt is duration-independent, so :00 vs next :00 is
+    // always a clean 60min ≥ floor.
     const [lastSuccess] = await db
-      .select({ finishedAt: dataPullLogsTable.finishedAt })
+      .select({ startedAt: dataPullLogsTable.startedAt })
       .from(dataPullLogsTable)
       .where(and(
         eq(dataPullLogsTable.jobName, "external-odds"),
@@ -73,8 +124,8 @@ async function runSyncExternalOdds(force = false): Promise<number> {
       .orderBy(desc(dataPullLogsTable.startedAt))
       .limit(1);
 
-    if (lastSuccess?.finishedAt &&
-        Date.now() - lastSuccess.finishedAt.getTime() < floorMs) {
+    if (lastSuccess?.startedAt &&
+        Date.now() - lastSuccess.startedAt.getTime() < floorMs) {
       logger.info({ force, floorMs }, "external-odds: within min interval — skipping API calls, recalcing scores only");
       await recalcPropScores();
       return 0;
@@ -106,35 +157,58 @@ async function runSyncExternalOdds(force = false): Promise<number> {
     const sportKey = SPORT_KEYS[sport];
     if (!sportKey) continue;
 
+    const statToMarket = SPORT_STAT_MARKETS[sport];
+    if (!statToMarket) continue;
+
     const neededMarkets = new Set(
-      lines.map(l => STAT_MARKETS[l.line.statType]).filter(Boolean),
+      lines.map(l => statToMarket[l.line.statType]).filter(Boolean) as string[],
     );
     if (!neededMarkets.size) continue;
 
-    try {
-      // --- BATCH: one call returns all events with odds (vs one call per event) ---
-      // This is the key credit saver: 1 API request vs up to 15.
-      const marketsParam = [...neededMarkets].join(",");
-      const batchRes = await fetch(
-        `${ODDS_BASE}/sports/${sportKey}/odds?` +
-        `apiKey=${ODDS_KEY}&regions=us&markets=${marketsParam}&oddsFormat=american`,
-      );
+    // Reverse map (Odds API market key -> PrizePicks stat_type) for this sport.
+    const marketToStat = new Map<string, string>();
+    for (const [stat, mkt] of Object.entries(statToMarket)) marketToStat.set(mkt, stat);
+    const marketsParam = [...neededMarkets].join(",");
 
-      if (!batchRes.ok) {
-        logger.warn({ sport, status: batchRes.status }, "external-odds batch fetch failed");
+    try {
+      // 1) List upcoming events inside the credit window. The events endpoint is
+      //    FREE (does not count against the Odds API quota), so this costs
+      //    nothing and lets us pay only for games that are about to lock.
+      const fromIso = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+      const toIso = new Date(Date.now() + ODDS_WINDOW_MS).toISOString().replace(/\.\d{3}Z$/, "Z");
+      const evRes = await fetch(
+        `${ODDS_BASE}/sports/${sportKey}/events?` +
+        `apiKey=${ODDS_KEY}&commenceTimeFrom=${fromIso}&commenceTimeTo=${toIso}&dateFormat=iso`,
+      );
+      if (!evRes.ok) {
+        logger.warn({ sport, status: evRes.status }, "external-odds events list failed");
+        continue;
+      }
+      const eventList = await evRes.json() as Array<{ id: string }>;
+      if (!eventList.length) {
+        logger.info({ sport }, "external-odds: no games within window — no credits spent");
         continue;
       }
 
-      // Log remaining credits from response headers
-      const remaining = batchRes.headers.get("x-requests-remaining");
-      const used = batchRes.headers.get("x-requests-used");
-      if (remaining !== null) {
-        logger.info({ sport, remaining, used }, "Odds API credits");
-      }
-
-      const events = await batchRes.json() as any[];
-
-      for (const event of events) {
+      // 2) Player props live ONLY on the per-EVENT odds endpoint. Each call
+      //    costs (markets x regions) credits, which is why the window above is
+      //    kept tight. A single bad market key would 422 the whole event, so
+      //    SPORT_STAT_MARKETS only contains verified keys.
+      for (const evMeta of eventList) {
+        const oddsRes = await fetch(
+          `${ODDS_BASE}/sports/${sportKey}/events/${evMeta.id}/odds?` +
+          `apiKey=${ODDS_KEY}&regions=us&markets=${marketsParam}&oddsFormat=american`,
+        );
+        if (!oddsRes.ok) {
+          logger.warn({ sport, eventId: evMeta.id, status: oddsRes.status }, "external-odds event odds failed");
+          continue;
+        }
+        const remaining = oddsRes.headers.get("x-requests-remaining");
+        const used = oddsRes.headers.get("x-requests-used");
+        if (remaining !== null) {
+          logger.info({ sport, remaining, used }, "Odds API credits");
+        }
+        const event = await oddsRes.json() as any;
         for (const bookmaker of (event.bookmakers || [])) {
           for (const market of (bookmaker.markets || [])) {
             // Group outcomes by player description so we can pair over+under
@@ -151,9 +225,7 @@ async function runSyncExternalOdds(force = false): Promise<number> {
               const underOutcome = playerOutcomes.find((o: any) => o.name?.toLowerCase() === "under");
               if (!overOutcome?.point) continue;
 
-              const statType = Object.entries(STAT_MARKETS).find(
-                ([, v]) => v === market.key
-              )?.[0];
+              const statType = marketToStat.get(market.key);
 
               const playerMatches = lines.filter(l => {
                 const ppLast  = l.player.fullName.split(" ").pop()?.toLowerCase() || "";
