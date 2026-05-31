@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import {
-  ppLinesTable, propScoresTable, projectionsTable, playersTable,
+  ppLinesTable, propScoresTable, playersTable,
   teamsTable, gamesTable, watchlistItemsTable, externalLinesTable,
   ppLineHistoryTable, injuriesTable, lineupConfirmationsTable,
   ourProjectionsTable, playerGameLogsTable,
@@ -33,10 +33,10 @@ router.get("/slate", async (req, res) => {
     const playerIds = [...new Set(lines.map(l => l.playerId))];
     const gameIds = [...new Set(lines.filter(l => l.gameId).map(l => l.gameId as number))];
 
-    const [players, scores, projections, watchlistItems, games] = await Promise.all([
+    const [players, scores, ourProjections, watchlistItems, games] = await Promise.all([
       db.select().from(playersTable).where(inArray(playersTable.id, playerIds)),
       db.select().from(propScoresTable).where(inArray(propScoresTable.ppLineId, lineIds)),
-      db.select().from(projectionsTable).where(inArray(projectionsTable.playerId, playerIds)),
+      db.select().from(ourProjectionsTable).where(inArray(ourProjectionsTable.playerId, playerIds)),
       db.select().from(watchlistItemsTable).where(inArray(watchlistItemsTable.playerId, playerIds)),
       gameIds.length ? db.select().from(gamesTable).where(inArray(gamesTable.id, gameIds)) : [],
     ]);
@@ -50,8 +50,8 @@ router.get("/slate", async (req, res) => {
 
     const playerMap = Object.fromEntries(players.map(p => [p.id, p]));
     const scoreMap = Object.fromEntries(scores.map(s => [s.ppLineId, s]));
-    const projMap: Record<string, typeof projections[0]> = {};
-    for (const p of projections) {
+    const projMap: Record<string, typeof ourProjections[0]> = {};
+    for (const p of ourProjections) {
       projMap[`${p.playerId}:${p.statType}`] = p;
     }
     const teamMap = Object.fromEntries(teams.map(t => [t.id, t]));
@@ -89,6 +89,7 @@ router.get("/slate", async (req, res) => {
         teamId: line.teamId ?? null,
         yourProjection: proj ? Number(proj.projectedValue) : null,
         projectionGap: proj ? Number(proj.projectedValue) - Number(line.lineValue) : null,
+        pOver: proj?.pOver ? Number(proj.pOver) : null,
         edgeScore: score ? Number(score.edgeScore) : null,
         stabilityScore: score ? Number(score.stabilityScore) : null,
         marketSupportScore: score ? Number(score.marketSupportScore) : null,
@@ -139,10 +140,8 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
     const [player] = await db.select().from(playersTable).where(eq(playersTable.id, line.playerId));
     const [score] = await db.select().from(propScoresTable).where(eq(propScoresTable.ppLineId, lineId));
 
-    const [lineHistory, projection, externalLines, injuries, lineupConfs, ourProj, recentGames] = await Promise.all([
+    const [lineHistory, externalLines, injuries, lineupConfs, ourProj, recentGames] = await Promise.all([
       db.select().from(ppLineHistoryTable).where(eq(ppLineHistoryTable.ppLineId, lineId)).orderBy(ppLineHistoryTable.capturedAt),
-      db.select().from(projectionsTable)
-        .where(and(eq(projectionsTable.playerId, line.playerId), eq(projectionsTable.statType, line.statType))),
       db.select().from(externalLinesTable)
         .where(and(eq(externalLinesTable.playerId, line.playerId), eq(externalLinesTable.statType, line.statType))),
       db.select().from(injuriesTable).where(eq(injuriesTable.playerId, line.playerId)),
@@ -174,7 +173,7 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
       player,
       game,
       lineHistory,
-      projection: projection[0] ?? null,
+      projection: null,
       ourProjection: op ? {
         value: parseFloat(op.projectedValue.toString()),
         stdDev: op.stdDev ? parseFloat(op.stdDev.toString()) : null,

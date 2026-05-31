@@ -509,7 +509,7 @@ export default function SlateBoard() {
   const presetsUnlocked = totalEntries >= 30;
   const varianceEnabled = userSettings?.varianceIntelEnabled ?? false;
   const [tab, setTab] = useState<"player" | "team">("player");
-  const [sport, setSport] = useState<string>("NBA");
+  const [sport, setSport] = useState<string>("MLB");
   const [lineTypeFilter, setLineTypeFilter] = useState<string>("all");
   const [minEdge, setMinEdge] = useState<string>("");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -711,7 +711,7 @@ export default function SlateBoard() {
 
   const allRows = [...mergedRows, ...miOnlyRows];
   const teamRows = allRows.filter((r) => r.pickCategory === "team");
-  const notSynced = allMiRows.length === 0 && !miLoading;
+  const notSynced = allMiRows.length === 0 && !miLoading && sport === "all";
 
   const playerRows = useMemo(() => {
     let rows = allRows.filter((r) => r.pickCategory !== "team");
@@ -1298,7 +1298,7 @@ export default function SlateBoard() {
                 ) : playerRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={(varianceEnabled ? 20 : 18) - (oddsStale ? 1 : 0)} className="h-48 text-center text-muted-foreground font-mono">
-                      No props — click Force Sync to load live slate
+                      {sport !== "all" ? `No ${sport} props on the board — try All Sports` : "No props — click Force Sync to load live slate"}
                     </TableCell>
                   </TableRow>
                 ) : (

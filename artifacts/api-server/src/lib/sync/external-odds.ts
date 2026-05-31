@@ -349,7 +349,7 @@ export async function recalcPropScores(): Promise<void> {
       let actionTag: string;
       if (hardNoPlay) {
         actionTag = "NO-PLAY";
-      } else if (overallScore >= 75 && edgeScore >= 60 && riskScore <= 45) {
+      } else if (overallScore >= 70 && edgeScore >= 55 && riskScore <= 45) {
         actionTag = "PLAY";
       } else if (overallScore >= 55 && edgeScore >= 40) {
         actionTag = "WATCH";
