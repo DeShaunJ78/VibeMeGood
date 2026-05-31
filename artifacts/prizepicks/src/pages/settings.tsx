@@ -12,7 +12,7 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical } from "lucide-react";
+import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical, Lock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useUserSettings, useUpdateUserSettings, type UserSettings } from "@/hooks/use-user-settings";
 
@@ -183,6 +183,7 @@ export default function Settings() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [syncingAll, setSyncingAll] = useState(false);
+  const [syncingPreLock, setSyncingPreLock] = useState(false);
   const [syncingJob, setSyncingJob] = useState<string | null>(null);
   const { data: userSettings } = useUserSettings();
   const updateSettings = useUpdateUserSettings();
@@ -224,6 +225,22 @@ export default function Settings() {
     setSyncingAll(false);
   }
 
+  async function preLockSync() {
+    setSyncingPreLock(true);
+    try {
+      await fetch("/api/sync/pre-lock", { method: "POST" });
+      toast({ title: "Pre-lock sync started", description: "Lines, injuries, and odds refreshing now." });
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
+        refetch();
+      }, 2000);
+    } catch {
+      toast({ title: "Pre-lock sync failed", variant: "destructive" });
+    } finally {
+      setSyncingPreLock(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-border pb-4">
@@ -242,8 +259,17 @@ export default function Settings() {
           )}
           <Button
             size="sm"
+            onClick={preLockSync}
+            disabled={syncingPreLock || syncingAll}
+            className="font-mono text-xs h-8 bg-amber-600 hover:bg-amber-500 text-white border-0"
+          >
+            <Lock className={`w-3 h-3 mr-1.5 ${syncingPreLock ? "animate-pulse" : ""}`} />
+            {syncingPreLock ? "Syncing…" : "Pre-Lock Sync"}
+          </Button>
+          <Button
+            size="sm"
             onClick={syncAll}
-            disabled={syncingAll}
+            disabled={syncingAll || syncingPreLock}
             className="font-mono text-xs h-8 bg-primary hover:bg-primary/90"
           >
             <RefreshCw className={`w-3 h-3 mr-1.5 ${syncingAll ? "animate-spin" : ""}`} />

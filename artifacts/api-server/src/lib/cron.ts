@@ -147,8 +147,14 @@ export function startCronJobs() {
       const wasActive = preLockActive;
       preLockActive = upcoming.length > 0;
       if (preLockActive && !wasActive) {
-        logger.info("Pre-lock window detected — triggering urgent PP line sync");
+        logger.info("Pre-lock window detected — triggering urgent sync (lines + injuries + odds)");
         await syncPpLines();
+        // Also refresh injuries and odds so lineup decisions have fresh data.
+        // syncExternalOdds(true) bypasses the 20-min cooldown for this urgent case.
+        await Promise.all([
+          syncInjuries(),
+          syncExternalOdds(true),
+        ]);
       }
     } catch (err) {
       logger.error({ err }, "Pre-lock scraper error");

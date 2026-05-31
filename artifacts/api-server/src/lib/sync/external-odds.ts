@@ -34,24 +34,30 @@ const STAT_MARKETS: Record<string, string> = {
 /** Minimum milliseconds between successful external-odds syncs to protect API credits. */
 const MIN_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
 
-export async function syncExternalOdds(): Promise<number> {
+/**
+ * @param force - bypass the 20-min cooldown guard (use for pre-lock syncs only)
+ */
+export async function syncExternalOdds(force = false): Promise<number> {
   // --- Credit guard: skip if last success was < 20 minutes ago ---
   // The cron runs every 30 min so this only blocks manual rapid-fire triggers.
-  const [lastSuccess] = await db
-    .select({ finishedAt: dataPullLogsTable.finishedAt })
-    .from(dataPullLogsTable)
-    .where(and(
-      eq(dataPullLogsTable.jobName, "external-odds"),
-      eq(dataPullLogsTable.status, "success"),
-    ))
-    .orderBy(desc(dataPullLogsTable.startedAt))
-    .limit(1);
+  // Pass force=true to bypass (pre-lock route only).
+  if (!force) {
+    const [lastSuccess] = await db
+      .select({ finishedAt: dataPullLogsTable.finishedAt })
+      .from(dataPullLogsTable)
+      .where(and(
+        eq(dataPullLogsTable.jobName, "external-odds"),
+        eq(dataPullLogsTable.status, "success"),
+      ))
+      .orderBy(desc(dataPullLogsTable.startedAt))
+      .limit(1);
 
-  if (lastSuccess?.finishedAt &&
-      Date.now() - lastSuccess.finishedAt.getTime() < MIN_INTERVAL_MS) {
-    logger.info("external-odds: last sync was < 20 min ago — skipping API calls, recalcing scores only");
-    await recalcPropScores();
-    return 0;
+    if (lastSuccess?.finishedAt &&
+        Date.now() - lastSuccess.finishedAt.getTime() < MIN_INTERVAL_MS) {
+      logger.info("external-odds: last sync was < 20 min ago — skipping API calls, recalcing scores only");
+      await recalcPropScores();
+      return 0;
+    }
   }
 
   if (!ODDS_KEY) {

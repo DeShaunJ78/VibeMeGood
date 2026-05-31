@@ -247,6 +247,46 @@ router.post("/sync/external-odds", async (req, res) => {
   await runSync("the-odds-api", "external-odds", syncExternalOdds, res);
 });
 
+// Pre-lock sync — fast sequential refresh of the 4 data types that matter before
+// game lock: lines → injuries → odds (cooldown bypassed) → prop score recalc.
+// Safe to hit repeatedly; odds cooldown is bypassed intentionally here.
+router.post("/sync/pre-lock", async (req, res) => {
+  res.json({ status: "started", message: "Pre-lock sync initiated" });
+  broadcastSyncStatus("pre-lock", "running");
+
+  const jobs: Array<{ name: string; provider: string; fn: () => Promise<number> }> = [
+    { name: "pp-lines",      provider: "prizepicks",   fn: syncPpLines },
+    { name: "sync-injuries", provider: "injury-news",  fn: syncInjuriesImpl },
+    { name: "external-odds", provider: "the-odds-api", fn: () => syncExternalOdds(true) },
+  ];
+
+  for (const job of jobs) {
+    const [log] = await db.insert(dataPullLogsTable).values({
+      provider: job.provider,
+      jobName:  job.name,
+      status:   "running",
+      startedAt: new Date(),
+    }).returning();
+
+    broadcastSyncStatus(job.name, "running");
+    try {
+      const n = await job.fn();
+      await db.update(dataPullLogsTable)
+        .set({ status: "success", recordsProcessed: n, finishedAt: new Date() })
+        .where(eq(dataPullLogsTable.id, log.id));
+      broadcastSyncStatus(job.name, "success", `${n} records`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unknown";
+      await db.update(dataPullLogsTable)
+        .set({ status: "error", errorMessage: msg, finishedAt: new Date() })
+        .where(eq(dataPullLogsTable.id, log.id));
+      broadcastSyncStatus(job.name, "error", msg);
+    }
+  }
+
+  broadcastSyncStatus("pre-lock", "success", "Pre-lock sync complete");
+});
+
 router.post("/sync/projections", async (req, res) => {
   await runSync("nba-stats", "projections", syncProjectionsImpl, res);
 });
