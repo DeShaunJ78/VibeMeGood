@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { dataPullLogsTable } from "@workspace/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 
 const router = Router();
 
-const PROVIDERS = ["prizepicks", "external-odds", "projections", "injury-news"];
+// Keys must match the `provider` column written to data_pull_logs (not the jobName).
+// Check cron.ts / sync.ts for the provider string used in each logPull/runSync call.
+const PROVIDERS = ["prizepicks", "the-odds-api", "nba-stats", "injury-news"];
 
 router.get("/dashboard/data-health", async (req, res) => {
   try {

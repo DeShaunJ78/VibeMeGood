@@ -233,7 +233,9 @@ router.post("/sync/game-schedule-history", async (req, res) => {
 
 router.post("/sync/pp-lines", async (req, res) => {
   await runSync("prizepicks", "pp-lines", syncPpLines, res);
-  await computeAllProjections();
+  // Recalc prop scores after new lines arrive so edges/action tags stay current.
+  // computeAllProjections is NOT called here — projections are built from nightly
+  // game logs and don't change when PP rotates line values.
   await recalcPropScores();
 });
 

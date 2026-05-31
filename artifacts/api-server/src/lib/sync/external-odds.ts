@@ -1,13 +1,11 @@
 import { db } from "@workspace/db";
 import {
   externalLinesTable, ppLinesTable, playersTable, propScoresTable,
-  lineMoveEventsTable, ourProjectionsTable,
+  lineMoveEventsTable, ourProjectionsTable, dataPullLogsTable,
 } from "@workspace/db/schema";
-import { eq, and, notInArray } from "drizzle-orm";
+import { eq, and, notInArray, desc, inArray } from "drizzle-orm";
 import { logger } from "../logger";
 import { twoWayHold, noVigProbs } from "../analytics/odds-math";
-import { computeAllProjections } from "../projection/compute";
-import { computeStreaks } from "./streaks";
 
 const ODDS_BASE = process.env.ODDS_API_BASE || "https://api.the-odds-api.com/v4";
 const ODDS_KEY = process.env.ODDS_API_KEY || "";
@@ -33,12 +31,32 @@ const STAT_MARKETS: Record<string, string> = {
   Strikeouts: "pitcher_strikeouts",
 };
 
+/** Minimum milliseconds between successful external-odds syncs to protect API credits. */
+const MIN_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
+
 export async function syncExternalOdds(): Promise<number> {
-  if (!ODDS_KEY) {
-    logger.warn("ODDS_API_KEY not set — running projection engine only");
-    await computeAllProjections();
+  // --- Credit guard: skip if last success was < 20 minutes ago ---
+  // The cron runs every 30 min so this only blocks manual rapid-fire triggers.
+  const [lastSuccess] = await db
+    .select({ finishedAt: dataPullLogsTable.finishedAt })
+    .from(dataPullLogsTable)
+    .where(and(
+      eq(dataPullLogsTable.jobName, "external-odds"),
+      eq(dataPullLogsTable.status, "success"),
+    ))
+    .orderBy(desc(dataPullLogsTable.startedAt))
+    .limit(1);
+
+  if (lastSuccess?.finishedAt &&
+      Date.now() - lastSuccess.finishedAt.getTime() < MIN_INTERVAL_MS) {
+    logger.info("external-odds: last sync was < 20 min ago — skipping API calls, recalcing scores only");
     await recalcPropScores();
-    await computeStreaks();
+    return 0;
+  }
+
+  if (!ODDS_KEY) {
+    logger.warn("ODDS_API_KEY not set — skipping external odds fetch");
+    await recalcPropScores();
     return 0;
   }
 
@@ -61,27 +79,36 @@ export async function syncExternalOdds(): Promise<number> {
     const sportKey = SPORT_KEYS[sport];
     if (!sportKey) continue;
 
+    const neededMarkets = new Set(
+      lines.map(l => STAT_MARKETS[l.line.statType]).filter(Boolean),
+    );
+    if (!neededMarkets.size) continue;
+
     try {
-      const eventsRes = await fetch(
-        `${ODDS_BASE}/sports/${sportKey}/events?apiKey=${ODDS_KEY}`,
+      // --- BATCH: one call returns all events with odds (vs one call per event) ---
+      // This is the key credit saver: 1 API request vs up to 15.
+      const marketsParam = [...neededMarkets].join(",");
+      const batchRes = await fetch(
+        `${ODDS_BASE}/sports/${sportKey}/odds?` +
+        `apiKey=${ODDS_KEY}&regions=us&markets=${marketsParam}&oddsFormat=american`,
       );
-      if (!eventsRes.ok) continue;
-      const events = await eventsRes.json() as any[];
 
-      const neededMarkets = new Set(
-        lines.map(l => STAT_MARKETS[l.line.statType]).filter(Boolean),
-      );
-      if (!neededMarkets.size) continue;
+      if (!batchRes.ok) {
+        logger.warn({ sport, status: batchRes.status }, "external-odds batch fetch failed");
+        continue;
+      }
 
-      for (const event of (events as any[]).slice(0, 15)) {
-        const oddsRes = await fetch(
-          `${ODDS_BASE}/sports/${sportKey}/events/${event.id}/odds?` +
-          `apiKey=${ODDS_KEY}&regions=us&markets=${[...neededMarkets].join(",")}&oddsFormat=american`,
-        );
-        if (!oddsRes.ok) continue;
-        const oddsData = await oddsRes.json() as any;
+      // Log remaining credits from response headers
+      const remaining = batchRes.headers.get("x-requests-remaining");
+      const used = batchRes.headers.get("x-requests-used");
+      if (remaining !== null) {
+        logger.info({ sport, remaining, used }, "Odds API credits");
+      }
 
-        for (const bookmaker of (oddsData.bookmakers || [])) {
+      const events = await batchRes.json() as any[];
+
+      for (const event of events) {
+        for (const bookmaker of (event.bookmakers || [])) {
           for (const market of (bookmaker.markets || [])) {
             // Group outcomes by player description so we can pair over+under
             const byPlayer = new Map<string, any[]>();
@@ -97,7 +124,6 @@ export async function syncExternalOdds(): Promise<number> {
               const underOutcome = playerOutcomes.find((o: any) => o.name?.toLowerCase() === "under");
               if (!overOutcome?.point) continue;
 
-              // Find all PP lines for this player and stat type
               const statType = Object.entries(STAT_MARKETS).find(
                 ([, v]) => v === market.key
               )?.[0];
@@ -124,14 +150,12 @@ export async function syncExternalOdds(): Promise<number> {
               const overPrice  = overOutcome.price  != null ? Number(overOutcome.price)  : null;
               const underPrice = underOutcome?.price != null ? Number(underOutcome.price) : null;
 
-              // Compute hold and no-vig when both prices available
-              let holdPctStr:       string | null = null;
-              let noVigOverProbStr: string | null = null;
+              let holdPctStr:        string | null = null;
+              let noVigOverProbStr:  string | null = null;
               let noVigUnderProbStr: string | null = null;
               if (overPrice && underPrice) {
                 const hold = twoWayHold(overPrice, underPrice);
                 if (hold) holdPctStr = hold.toFixed(6);
-
                 const nvProbs = noVigProbs(overPrice, underPrice);
                 if (nvProbs) {
                   noVigOverProbStr  = nvProbs.overFair.toFixed(6);
@@ -163,16 +187,16 @@ export async function syncExternalOdds(): Promise<number> {
               }
 
               await db.insert(externalLinesTable).values({
-                playerId:       match.player.id,
-                ppLineId:       match.line.id,
-                statType:       match.line.statType,
-                bookName:       bookmaker.key,
-                lineValue:      lineVal,
-                overLine:       lineVal,
-                underLine:      underOutcome?.point?.toString() ?? lineVal,
-                overOdds:       overPrice,
-                underOdds:      underPrice,
-                holdPct:        holdPctStr,
+                playerId:      match.player.id,
+                ppLineId:      match.line.id,
+                statType:      match.line.statType,
+                bookName:      bookmaker.key,
+                lineValue:     lineVal,
+                overLine:      lineVal,
+                underLine:     underOutcome?.point?.toString() ?? lineVal,
+                overOdds:      overPrice,
+                underOdds:     underPrice,
+                holdPct:       holdPctStr,
                 noVigOverProb:  noVigOverProbStr,
                 noVigUnderProb: noVigUnderProbStr,
                 pulledAt: new Date(),
@@ -194,15 +218,16 @@ export async function syncExternalOdds(): Promise<number> {
             }
           }
         }
-        await new Promise(r => setTimeout(r, 150));
       }
     } catch (e) {
       logger.error({ err: e, sport }, "External odds sync error");
     }
   }
 
-  // Run projection engine first so prop scores can factor in pOver + noPlayReason
-  await computeAllProjections();
+  // Recalc prop scores so edge/action tags reflect new odds data.
+  // Note: computeAllProjections is NOT called here — projections are derived from
+  // game logs (updated nightly at 2am) and are unaffected by new odds data.
+  // The projections cron (6am/11am/2pm) handles full projection refreshes.
   await recalcPropScores();
   return processed;
 }
@@ -215,24 +240,48 @@ export async function recalcPropScores(): Promise<void> {
     .where(eq(ppLinesTable.isActive, true));
 
   // Remove stale prop_scores for lines that are no longer active.
-  // Without this, deactivated lines keep their old action tags (e.g. PLAY)
-  // indefinitely because the scoring loop only processes isActive=true lines.
   const activeIds = lines.map(r => r.line.id);
   if (activeIds.length > 0) {
     await db.delete(propScoresTable)
       .where(notInArray(propScoresTable.ppLineId, activeIds));
   } else {
-    // No active lines — wipe everything
     await db.delete(propScoresTable);
+    return;
+  }
+
+  // --- Batch-load all related data upfront (eliminates N+1 queries) ---
+  const [allExtLines, allProjections, allExistingScores] = await Promise.all([
+    db.select().from(externalLinesTable).where(inArray(externalLinesTable.ppLineId, activeIds)),
+    db.select().from(ourProjectionsTable).where(
+      inArray(ourProjectionsTable.playerId, [...new Set(lines.map(r => r.line.playerId))]),
+    ),
+    db.select({ id: propScoresTable.id, ppLineId: propScoresTable.ppLineId })
+      .from(propScoresTable)
+      .where(inArray(propScoresTable.ppLineId, activeIds)),
+  ]);
+
+  // Index for O(1) lookups
+  const extLinesByPpLineId = new Map<number, typeof allExtLines>();
+  for (const el of allExtLines) {
+    if (el.ppLineId == null) continue;
+    if (!extLinesByPpLineId.has(el.ppLineId)) extLinesByPpLineId.set(el.ppLineId, []);
+    extLinesByPpLineId.get(el.ppLineId)!.push(el);
+  }
+
+  const projByPlayerStat = new Map<string, typeof allProjections[0]>();
+  for (const p of allProjections) {
+    projByPlayerStat.set(`${p.playerId}:${p.statType}`, p);
+  }
+
+  const existingScoreByLineId = new Map<number, number>();
+  for (const s of allExistingScores) {
+    existingScoreByLineId.set(s.ppLineId, s.id);
   }
 
   for (const { line, player } of lines) {
     try {
       // --- Market edge ---
-      const extLines = await db.select()
-        .from(externalLinesTable)
-        .where(eq(externalLinesTable.ppLineId, line.id));
-
+      const extLines = extLinesByPpLineId.get(line.id) ?? [];
       let marketEdge = 0;
       let marketSupportScore = 50;
       let marketAvg: number | null = null;
@@ -245,8 +294,6 @@ export async function recalcPropScores(): Promise<void> {
         if (vals.length >= 1) {
           bookCount = vals.length;
           marketAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
-          // Fix 9: require ≥ 2 books before letting market data influence the score.
-          // A single book could be stale or an outlier — keep marketSupportScore neutral (50).
           if (bookCount >= 2) {
             const ppLine = parseFloat(line.lineValue.toString());
             marketEdge = (-(ppLine - marketAvg) / marketAvg) * 100;
@@ -256,13 +303,7 @@ export async function recalcPropScores(): Promise<void> {
       }
 
       // --- Projection data ---
-      const [proj] = await db.select()
-        .from(ourProjectionsTable)
-        .where(and(
-          eq(ourProjectionsTable.playerId, line.playerId),
-          eq(ourProjectionsTable.statType, line.statType),
-        ))
-        .limit(1);
+      const proj = projByPlayerStat.get(`${line.playerId}:${line.statType}`) ?? null;
 
       const noPlayReason = proj?.noPlayReason ?? null;
       const pOver = proj?.pOver ? parseFloat(proj.pOver.toString()) : null;
@@ -271,21 +312,19 @@ export async function recalcPropScores(): Promise<void> {
       const sourceLabel = proj?.sourceLabel ?? "prior_only";
       const ppLine = parseFloat(line.lineValue.toString());
 
-      // --- Gate 1: Edge Score (pOver + market gap) ---
+      // --- Gate 1: Edge Score ---
       const edgeScore = Math.min(100,
         Math.max(0, (pOver !== null ? (pOver - 50) * 2 : 0)) * 0.6 +
         Math.max(0, (marketEdge / Math.max(ppLine, 0.1)) * 150) * 0.4,
       );
 
-      // --- Gate 2: Stability Score (data quality + confidence bonus) ---
+      // --- Gate 2: Stability Score ---
       const confidenceBonus =
         confidence === "high"   ? 20 :
         confidence === "medium" ? 10 : 0;
       const stabilityScore = Math.min(100, (dataQualityScore ?? 50) + confidenceBonus);
 
-      // marketSupportScore unchanged from above
-
-      // --- Gate 4: Risk Score (GTD flag + volatility from stdDev) ---
+      // --- Gate 4: Risk Score ---
       const isGTD = noPlayReason === "game_time_decision";
       const stdDevNum = proj?.stdDev ? parseFloat(proj.stdDev.toString()) : 6;
       const volatilityRisk = Math.min(100, stdDevNum * 8);
@@ -300,8 +339,6 @@ export async function recalcPropScores(): Promise<void> {
       );
 
       // --- Action tag ---
-      // Fix 1: insufficient_data (prior-only, 0 game logs) is now a hard NO-PLAY.
-      // Prior-only projections must never receive PLAY or WATCH tags.
       const hardNoPlay = noPlayReason != null;
       let actionTag: string;
       if (hardNoPlay) {
@@ -344,36 +381,32 @@ export async function recalcPropScores(): Promise<void> {
       };
 
       const scorePayload = {
-        ppLineId: line.id,
-        playerId: line.playerId,
-        statType: line.statType,
+        ppLineId:           line.id,
+        playerId:           line.playerId,
+        statType:           line.statType,
         marketSupportScore: marketSupportScore.toString(),
-        edgeScore: edgeScore.toString(),
-        stabilityScore: stabilityScore.toString(),
-        riskScore: riskScore.toString(),
-        finalScore: overallScore.toString(),
+        edgeScore:          edgeScore.toString(),
+        stabilityScore:     stabilityScore.toString(),
+        riskScore:          riskScore.toString(),
+        finalScore:         overallScore.toString(),
         actionTag,
         reasoning,
-        scoredAt: new Date(),
+        scoredAt:           new Date(),
       };
 
-      const [existingScore] = await db.select()
-        .from(propScoresTable)
-        .where(eq(propScoresTable.ppLineId, line.id))
-        .limit(1);
-
-      if (existingScore) {
+      const existingId = existingScoreByLineId.get(line.id);
+      if (existingId) {
         await db.update(propScoresTable)
           .set({
             marketSupportScore: scorePayload.marketSupportScore,
-            edgeScore: scorePayload.edgeScore,
-            stabilityScore: scorePayload.stabilityScore,
-            finalScore: scorePayload.finalScore,
+            edgeScore:          scorePayload.edgeScore,
+            stabilityScore:     scorePayload.stabilityScore,
+            finalScore:         scorePayload.finalScore,
             actionTag,
             reasoning,
             scoredAt: new Date(),
           })
-          .where(eq(propScoresTable.id, existingScore.id));
+          .where(eq(propScoresTable.id, existingId));
       } else {
         await db.insert(propScoresTable).values(scorePayload);
       }
