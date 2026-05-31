@@ -497,7 +497,18 @@ function normalCDF(mean: number, std: number, line: number): number {
 export default function SlateBoard() {
   const qc = useQueryClient();
   const { data: userSettings } = useUserSettings();
-  const presetsUnlocked = true;
+  const { data: allEntriesForCount } = useQuery<{ length: number }>({
+    queryKey: ["entries-total-count"],
+    queryFn: async () => {
+      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+      const r = await fetch(`${base}/api/entries`);
+      const arr = (await r.json()) as unknown[];
+      return { length: Array.isArray(arr) ? arr.length : 0 };
+    },
+    staleTime: 60_000,
+  });
+  const totalEntries = allEntriesForCount?.length ?? 0;
+  const presetsUnlocked = totalEntries >= 30;
   const varianceEnabled = userSettings?.varianceIntelEnabled ?? false;
   const [tab, setTab] = useState<"player" | "team">("player");
   // "" = unresolved; auto-defaults to the most-populated sport once counts load.
@@ -1038,39 +1049,65 @@ export default function SlateBoard() {
     <div className="space-y-4 h-full flex flex-col">
       {/* Header */}
       <div className="space-y-3 border-b border-border pb-4 shrink-0">
-        <div className="flex items-center gap-1">
-          <h1 className="text-2xl font-bold tracking-tight mr-4">Slate Board</h1>
-          <button
-            onClick={() => setTab("player")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-mono transition-colors ${tab === "player" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground bg-slate-800/50"}`}
-          >
-            <User className="w-3.5 h-3.5" /> Player Picks
-            {tab === "player" && playerRows.length > 0 && (
-              <span className="ml-1 bg-primary-foreground/20 text-xs px-1.5 rounded-full font-mono">{playerRows.length}</span>
-            )}
-          </button>
-          <button
-            onClick={() => setTab("team")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-mono transition-colors ${tab === "team" ? "bg-violet-600 text-white" : "text-muted-foreground hover:text-foreground bg-slate-800/50"}`}
-          >
-            <Users className="w-3.5 h-3.5" /> Team Picks
-            <Badge className="ml-1 bg-violet-700 text-white text-[10px] px-1 py-0 font-mono">NEW</Badge>
-          </button>
+        {/* Row 1: title + tabs (left) · status badges / mobile controls (right) */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1">
+            <h1 className="text-2xl font-bold tracking-tight mr-4">Slates</h1>
+            <button
+              onClick={() => setTab("player")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-mono transition-colors ${tab === "player" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground bg-slate-800/50"}`}
+            >
+              <User className="w-3.5 h-3.5" /> Player Picks
+              {tab === "player" && playerRows.length > 0 && (
+                <span className="ml-1 bg-primary-foreground/20 text-xs px-1.5 rounded-full font-mono">{playerRows.length}</span>
+              )}
+            </button>
+            <button
+              onClick={() => setTab("team")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-mono transition-colors ${tab === "team" ? "bg-violet-600 text-white" : "text-muted-foreground hover:text-foreground bg-slate-800/50"}`}
+            >
+              <Users className="w-3.5 h-3.5" /> Team Picks
+              <Badge className="ml-1 bg-violet-700 text-white text-[10px] px-1 py-0 font-mono">NEW</Badge>
+            </button>
+          </div>
+
+          {tab === "player" && (
+            <div className="flex items-center gap-2 shrink-0">
+              {/* desktop status badges */}
+              <div className="hidden md:flex items-center gap-2">
+                {watchCount > 0 && (
+                  <Badge className="font-mono text-xs bg-amber-900/40 text-amber-300 border border-amber-700/40 px-2 py-0.5">
+                    <Eye className="w-3 h-3 mr-1 inline" />{watchCount} watched
+                  </Badge>
+                )}
+                {playCount > 0 && (
+                  <Badge className="font-mono text-xs bg-emerald-900/40 text-emerald-300 border border-emerald-700/40 px-2 py-0.5">
+                    {playCount} PLAY
+                  </Badge>
+                )}
+                {noPlayCount > 0 && (
+                  <Badge className="font-mono text-xs bg-rose-900/40 text-rose-300 border border-rose-700/40 px-2 py-0.5">
+                    {noPlayCount} gated
+                  </Badge>
+                )}
+              </div>
+              {/* mobile filter toggle + sync */}
+              <div className="md:hidden flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => setFilterOpen(true)} className="gap-1.5 font-mono text-xs border-slate-700 text-muted-foreground">
+                  <Filter className="w-3.5 h-3.5" />
+                  Filters
+                  {activeFilterCount > 0 && (
+                    <span className="bg-primary text-primary-foreground rounded-full w-4 h-4 text-[10px] flex items-center justify-center font-bold">{activeFilterCount}</span>
+                  )}
+                </Button>
+                <ForceSyncButton />
+              </div>
+            </div>
+          )}
         </div>
 
         {tab === "player" && (
           <>
-            {/* Mobile: filter toggle + sync button */}
-            <div className="md:hidden flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setFilterOpen(true)} className="gap-1.5 font-mono text-xs border-slate-700 text-muted-foreground">
-                <Filter className="w-3.5 h-3.5" />
-                Filters
-                {activeFilterCount > 0 && (
-                  <span className="bg-primary text-primary-foreground rounded-full w-4 h-4 text-[10px] flex items-center justify-center font-bold">{activeFilterCount}</span>
-                )}
-              </Button>
-              <ForceSyncButton />
-            </div>
 
             {/* Quick-filter preset toolbar — only once unlocked (no locked-state noise) */}
             {presetsUnlocked && (
@@ -1117,8 +1154,8 @@ export default function SlateBoard() {
             </div>
             )}
 
-            {/* Full-width search bar */}
-            <div className="w-full">
+            {/* Mobile search */}
+            <div className="md:hidden">
               <Input
                 placeholder="Search player…"
                 value={searchInput}
@@ -1127,23 +1164,14 @@ export default function SlateBoard() {
               />
             </div>
 
-            {/* Desktop: full filter row */}
+            {/* Desktop: search + filters + actions — single wrapping row */}
             <div className="hidden md:flex items-center gap-2 flex-wrap">
-              {watchCount > 0 && (
-                <Badge className="font-mono text-xs bg-amber-900/40 text-amber-300 border border-amber-700/40 px-2 py-0.5">
-                  <Eye className="w-3 h-3 mr-1 inline" />{watchCount} watched
-                </Badge>
-              )}
-              {playCount > 0 && (
-                <Badge className="font-mono text-xs bg-emerald-900/40 text-emerald-300 border border-emerald-700/40 px-2 py-0.5">
-                  {playCount} PLAY
-                </Badge>
-              )}
-              {noPlayCount > 0 && (
-                <Badge className="font-mono text-xs bg-rose-900/40 text-rose-300 border border-rose-700/40 px-2 py-0.5">
-                  {noPlayCount} gated
-                </Badge>
-              )}
+              <Input
+                placeholder="Search player…"
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                className="flex-1 min-w-[200px] bg-slate-900 border-slate-700 font-mono text-sm h-9"
+              />
               <Select value={sport} onValueChange={setSport}>
                 <SelectTrigger className="w-28 bg-slate-900 border-slate-800 font-mono text-sm">
                   <SelectValue placeholder="Sport" />

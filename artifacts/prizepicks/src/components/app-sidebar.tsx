@@ -38,7 +38,7 @@ import { useUserSettings } from "@/hooks/use-user-settings";
 
 const NAV_ITEMS = [
   { title: "Command Center", url: "/", icon: LayoutDashboard },
-  { title: "Slate Board", url: "/slate", icon: TableProperties },
+  { title: "Slates", url: "/slate", icon: TableProperties },
   { title: "Injuries & News", url: "/injuries", icon: Activity },
   { title: "Entry Builder", url: "/entry-builder", icon: ListPlus },
   { title: "Journal", url: "/journal", icon: BookOpen },
