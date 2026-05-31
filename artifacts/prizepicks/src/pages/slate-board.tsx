@@ -698,6 +698,19 @@ export default function SlateBoard() {
     };
   });
 
+  // Watch state is authoritative on the slate rows (the API computes isWatched +
+  // watchlistId per playerId:statType). Build a lookup so market-intel-only rows
+  // — and any row chosen by the dedup below — reflect the real watch state instead
+  // of defaulting to unwatched. Without this, the dedup can collapse a watched
+  // slate row onto an unwatched MI-only row, leaving the toggle stuck in "add"
+  // mode so the player can never be un-watched.
+  const watchStateByKey = new Map<string, { isWatched: boolean; watchlistId: number | null }>();
+  for (const r of (slate ?? []) as any[]) {
+    if (r.isWatched && r.watchlistId != null) {
+      watchStateByKey.set(`${r.playerId}:${r.statType}`, { isWatched: true, watchlistId: r.watchlistId });
+    }
+  }
+
   // Market-intel rows not in slate (new from live sync)
   const slateIds = new Set((slate ?? []).map((r: any) => r.ppLineId));
   const miOnlyRows: any[] = (allMiRows ?? [])
@@ -713,8 +726,8 @@ export default function SlateBoard() {
       lineValue: mi.lineValue,
       lineType: mi.lineType,
       pickCategory: "player",
-      isWatched: false,
-      watchlistId: null,
+      isWatched: watchStateByKey.get(`${mi.playerId}:${mi.statType}`)?.isWatched ?? false,
+      watchlistId: watchStateByKey.get(`${mi.playerId}:${mi.statType}`)?.watchlistId ?? null,
       marketAvg: mi.marketAvg,
       trueEdge: mi.trueEdge,
       bookLines: mi.bookLines,
