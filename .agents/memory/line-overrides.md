@@ -12,3 +12,5 @@ description: How corrected lines + demon/goblin payout multipliers are stored an
 **Effective-line rule:** anywhere you evaluate a projection against a line (pOver, percentile, projectionGap, optimizer probability, charts) use `lineValueOverride ?? lineValue`, not raw `lineValue`. This applies to both the slate list route AND the `/slate/:ppLineId` detail route and the frontend slate-board cells/sorts.
 
 **Effective multiplier rule:** `effectivePayoutMultiplier` = manual `payoutMultiplier` if set, else EV-preserving estimate `standardPOver/tierPOver` clamped (demon 1.1–3.0 default 1.5, goblin 0.4–0.95 default 0.75). The optimizer threads this through single-prop EV, calcPowerEV, calcFlexEV (payoutFactor param), and grossPayout.
+
+**Boundary guards:** the manual override path is NOT clamped like the auto-estimate, so the override endpoint enforces its own data-quality bounds (lineValueOverride 0<x≤10000, payoutMultiplier 0.1–10) in BOTH the zod schema (pp-lines route) and OpenAPI `PpLineOverrideInput`. Keep the two in sync — a manual multiplier feeds optimizer EV directly with no downstream clamp.

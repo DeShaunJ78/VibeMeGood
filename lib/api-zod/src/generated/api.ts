@@ -336,9 +336,17 @@ export const SetPpLineOverridesParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const setPpLineOverridesBodyLineValueOverrideExclusiveMin = 0;
+export const setPpLineOverridesBodyLineValueOverrideMax = 10000;
+
+export const setPpLineOverridesBodyPayoutMultiplierMin = 0.1;
+export const setPpLineOverridesBodyPayoutMultiplierMax = 10;
+
+
+
 export const SetPpLineOverridesBody = zod.object({
-  "lineValueOverride": zod.number().nullish(),
-  "payoutMultiplier": zod.number().nullish()
+  "lineValueOverride": zod.number().gt(setPpLineOverridesBodyLineValueOverrideExclusiveMin).max(setPpLineOverridesBodyLineValueOverrideMax).nullish(),
+  "payoutMultiplier": zod.number().min(setPpLineOverridesBodyPayoutMultiplierMin).max(setPpLineOverridesBodyPayoutMultiplierMax).nullish()
 })
 
 export const SetPpLineOverridesResponse = zod.object({

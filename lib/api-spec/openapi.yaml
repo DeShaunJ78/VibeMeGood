@@ -1506,8 +1506,8 @@ components:
     PpLineOverrideInput:
       type: object
       properties:
-        lineValueOverride: { type: ["number", "null"] }
-        payoutMultiplier: { type: ["number", "null"] }
+        lineValueOverride: { type: ["number", "null"], exclusiveMinimum: 0, maximum: 10000 }
+        payoutMultiplier: { type: ["number", "null"], minimum: 0.1, maximum: 10 }
 
     PpLineHistory:
       type: object

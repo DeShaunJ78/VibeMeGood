@@ -7,8 +7,16 @@
  */
 
 export interface PpLineOverrideInput {
-  /** @nullable */
+  /**
+     * @maximum 10000
+     * @exclusiveMinimum 0
+     * @nullable
+     */
   lineValueOverride?: number | null;
-  /** @nullable */
+  /**
+     * @minimum 0.1
+     * @maximum 10
+     * @nullable
+     */
   payoutMultiplier?: number | null;
 }
