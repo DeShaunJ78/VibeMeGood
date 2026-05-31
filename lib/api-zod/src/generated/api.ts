@@ -654,6 +654,7 @@ export const GetSlateResponseItem = zod.object({
   "finalScore": zod.number().nullish(),
   "actionTag": zod.string().nullish(),
   "isWatched": zod.boolean(),
+  "watchlistId": zod.number().nullish(),
   "updatedAt": zod.coerce.date(),
   "pickCategory": zod.string().optional(),
   "teamPickType": zod.string().nullish(),

@@ -1048,7 +1048,7 @@ export default function SlateBoard() {
   return (
     <div className="space-y-4 h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border pb-4 shrink-0">
+      <div className="space-y-3 border-b border-border pb-4 shrink-0">
         <div className="flex items-center gap-1">
           <h1 className="text-2xl font-bold tracking-tight mr-4">Slate Board</h1>
           <button
@@ -1083,22 +1083,11 @@ export default function SlateBoard() {
               <ForceSyncButton />
             </div>
 
-            {/* Quick-filter preset toolbar */}
+            {/* Quick-filter preset toolbar — only once unlocked (no locked-state noise) */}
+            {presetsUnlocked && (
             <div className="hidden md:flex items-center gap-1.5 flex-wrap py-0.5">
               <span className="text-[10px] font-mono text-slate-600 uppercase tracking-wider">Quick:</span>
-              {!presetsUnlocked && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-[10px] font-mono text-slate-600 cursor-help italic">
-                      Presets unlock at 30 entries — {totalEntries}/30
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="font-mono text-xs max-w-xs">
-                    Available after 30 paper trades logged. Log entries in the Entry Builder to unlock.
-                  </TooltipContent>
-                </Tooltip>
-              )}
-              {presetsUnlocked && DEFAULT_PRESETS.map(p => {
+              {DEFAULT_PRESETS.map(p => {
                 const isActive = activePreset === p.label;
                 const getSaved = () => { try { return (JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>)[p.label] ?? null; } catch { return null; } };
                 return (
@@ -1137,9 +1126,10 @@ export default function SlateBoard() {
                 </button>
               )}
             </div>
+            )}
 
             {/* Full-width search bar */}
-            <div className="w-full mb-3">
+            <div className="w-full">
               <Input
                 placeholder="Search player…"
                 value={searchInput}
@@ -1149,7 +1139,7 @@ export default function SlateBoard() {
             </div>
 
             {/* Desktop: full filter row */}
-            <div className="hidden md:flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2 flex-wrap">
               {watchCount > 0 && (
                 <Badge className="font-mono text-xs bg-amber-900/40 text-amber-300 border border-amber-700/40 px-2 py-0.5">
                   <Eye className="w-3 h-3 mr-1 inline" />{watchCount} watched

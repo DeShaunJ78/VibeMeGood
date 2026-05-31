@@ -1678,6 +1678,7 @@ components:
         finalScore: { type: ["number", "null"] }
         actionTag: { type: ["string", "null"] }
         isWatched: { type: boolean }
+        watchlistId: { type: ["integer", "null"] }
         updatedAt: { type: string, format: date-time }
         pickCategory: { type: string }
         teamPickType: { type: ["string", "null"] }

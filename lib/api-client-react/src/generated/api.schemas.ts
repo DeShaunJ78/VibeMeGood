@@ -343,6 +343,8 @@ export interface SlateRow {
   /** @nullable */
   actionTag?: string | null;
   isWatched: boolean;
+  /** @nullable */
+  watchlistId?: number | null;
   updatedAt: string;
   pickCategory?: string;
   /** @nullable */

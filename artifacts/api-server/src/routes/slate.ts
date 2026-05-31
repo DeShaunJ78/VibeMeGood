@@ -76,6 +76,9 @@ router.get("/slate", async (req, res) => {
     const teamMap = Object.fromEntries(teams.map(t => [t.id, t]));
     const gameMap = Object.fromEntries(games.map(g => [g.id, g]));
     const watchlistSet = new Set(watchlistItems.map(w => `${w.playerId}:${w.statType}`));
+    // Map back to the watchlist row id so the board can REMOVE (not just add). Without this
+    // every toggle fell through to "add" because the client requires a watchlistId to delete.
+    const watchlistIdMap = new Map(watchlistItems.map(w => [`${w.playerId}:${w.statType}`, w.id]));
 
     // P(over) of each player/stat's STANDARD line — anchors the auto payout-multiplier
     // estimate for its goblin/demon siblings (EV-preserving ratio). May be absent when
@@ -150,6 +153,7 @@ router.get("/slate", async (req, res) => {
         finalScore: score ? Number(score.finalScore) : null,
         actionTag: score?.actionTag ?? null,
         isWatched: watchlistSet.has(`${line.playerId}:${line.statType}`),
+        watchlistId: watchlistIdMap.get(`${line.playerId}:${line.statType}`) ?? null,
         updatedAt: line.updatedAt.toISOString(),
       };
     });
