@@ -230,8 +230,9 @@ export default function Settings() {
   const importUrl = `${serverOrigin}/api/sync/pp-lines-import`;
   const ppApiUrl = "https://api.prizepicks.com/projections?per_page=25000&single_stat=true&include=new_player,league";
 
-  // Desktop bookmarklet — must run on app.prizepicks.com so session cookies are sent (credentials:'include')
-  const bookmarkletCode = `javascript:(async()=>{try{const r=await fetch('${ppApiUrl}',{credentials:'include'});if(!r.ok){throw new Error('PP API '+r.status);}const d=await r.json();const s=await fetch('${importUrl}',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:d.data,included:d.included})});const j=await s.json();alert('\u2713 '+j.recordsProcessed+' lines synced!');}catch(e){alert('\u274c Sync failed: '+e.message);}})();`;
+  // Desktop bookmarklet — runs on app.prizepicks.com. Reads response as text first so a
+  // non-JSON response (login redirect / bot-block page) is reported instead of crashing.
+  const bookmarkletCode = `javascript:(async()=>{try{const r=await fetch('${ppApiUrl}',{credentials:'include',headers:{'Accept':'application/json'}});const t=await r.text();let d;try{d=JSON.parse(t);}catch(_){alert('\u274c PP returned status '+r.status+' (not JSON).\\nURL: '+r.url+'\\n\\nFirst 300 chars:\\n'+t.slice(0,300));return;}const s=await fetch('${importUrl}',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:d.data,included:d.included})});const j=await s.json();alert('\u2713 '+j.recordsProcessed+' lines synced!');}catch(e){alert('\u274c Sync failed: '+e.message);}})();`;
 
   function copyBookmarklet() {
     navigator.clipboard.writeText(bookmarkletCode).then(() => {
