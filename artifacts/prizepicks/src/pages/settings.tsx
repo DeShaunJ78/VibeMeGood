@@ -330,36 +330,38 @@ export default function Settings() {
                 🔖 PrizePicks Sync — Bookmarklet
               </p>
               <p className="text-[10px] text-muted-foreground leading-relaxed">
-                PP blocks fetches from this app's domain (CORS). Drag the link below to your bookmarks bar,
-                go to <span className="font-mono text-slate-300">app.prizepicks.com</span>, click it — done.
-                It runs inside PP's tab so there's no block.
+                PP blocks fetches from this app's domain (CORS). Save the code below as a browser bookmark,
+                click it on <span className="font-mono text-slate-300">app.prizepicks.com</span> — it runs inside PP's tab where there's no block.
               </p>
-              <div className="flex items-center gap-2">
-                <div
-                  draggable
-                  onDragStart={e => {
-                    e.dataTransfer.setData("text/uri-list", bookmarkletCode);
-                    e.dataTransfer.setData("text/plain", bookmarkletCode);
-                  }}
-                  className="flex-1 flex items-center gap-2 px-3 py-2 rounded border border-amber-500/40 bg-slate-950 text-amber-300 font-mono text-xs hover:border-amber-400 cursor-grab active:cursor-grabbing select-none"
-                  title="Drag to bookmarks bar, then click it on app.prizepicks.com"
-                >
-                  🔖 <span className="truncate">Sync PP Lines — drag me to bookmarks bar</span>
-                </div>
+
+              {/* Code display + copy */}
+              <div className="relative">
+                <pre className="text-[9px] font-mono text-slate-400 bg-slate-950 border border-slate-700 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
+                  {bookmarkletCode}
+                </pre>
                 <Button
                   size="sm"
-                  variant="outline"
                   onClick={copyBookmarklet}
-                  className="shrink-0 h-8 font-mono text-xs border-slate-700 bg-slate-800 hover:bg-slate-700"
+                  className="absolute top-1.5 right-1.5 h-6 px-2 font-mono text-[10px] bg-amber-600 hover:bg-amber-500 text-white border-0"
                 >
                   {bookmarkletCopied ? "Copied ✓" : "Copy"}
                 </Button>
               </div>
-              <ol className="text-[10px] text-muted-foreground space-y-1 list-none">
-                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">1.</span><span>Drag the button above to your browser's bookmarks bar.</span></li>
-                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">2.</span><span>Go to <span className="font-mono text-slate-300">app.prizepicks.com</span>.</span></li>
-                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">3.</span><span>Click the bookmark — an alert will confirm the line count synced.</span></li>
-              </ol>
+
+              {/* Steps */}
+              <div className="space-y-1">
+                <p className="text-[10px] font-semibold text-slate-300">One-time setup:</p>
+                <ol className="text-[10px] text-muted-foreground space-y-1 list-none">
+                  <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">1.</span><span>Click <strong>Copy</strong> above.</span></li>
+                  <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">2.</span><span>Open Bookmark Manager — <span className="font-mono text-slate-300">Ctrl+Shift+O</span> (Chrome/Edge) or <span className="font-mono text-slate-300">⌘+Shift+O</span> (Mac).</span></li>
+                  <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">3.</span><span>Click <strong>Add new bookmark</strong>, name it "Sync PP Lines", paste the copied code as the URL. Save.</span></li>
+                </ol>
+                <p className="text-[10px] font-semibold text-slate-300 pt-1">Every sync:</p>
+                <ol className="text-[10px] text-muted-foreground space-y-1 list-none">
+                  <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">4.</span><span>Go to <span className="font-mono text-slate-300">app.prizepicks.com</span>.</span></li>
+                  <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">5.</span><span>Click the "Sync PP Lines" bookmark — an alert confirms lines synced.</span></li>
+                </ol>
+              </div>
             </div>
 
             {SYNC_JOBS.map(job => (
