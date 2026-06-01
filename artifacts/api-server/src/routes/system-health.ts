@@ -62,7 +62,8 @@ async function checkDataFreshness(): Promise<CheckResult[]> {
         .then(r => r[0]?.t ?? null);
 
   const [ppLast, oddsLast, projLast, injuryLast] = await Promise.all([
-    getLastSync("pp-lines"),
+    // PP freshness comes from the browser copy-paste import, not a server cron.
+    getLastSync("pp-lines-browser-import"),
     getLastSync("external-odds"),
     getLastSync("projections"),
     getLastSync("injuries"),
@@ -93,7 +94,8 @@ async function checkDataFreshness(): Promise<CheckResult[]> {
       status: ppMins < 120 ? "green" : ppMins < 360 ? "amber" : "red",
       detail: ppMins === Infinity ? "Never synced" : `Last sync ${fmtAge(ppMins)}`,
       lastUpdated: fmt(ppLast),
-      fixAction: "pp-lines",
+      // No automatable fix — PP lines come from the browser copy-paste import.
+      fixAction: null,
     },
     {
       name: "External Odds",
@@ -212,7 +214,8 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
       status: pp > 1000 ? "green" : pp >= 100 ? "amber" : "red",
       detail: `${pp.toLocaleString()} active lines`,
       lastUpdated: null,
-      fixAction: pp < 100 ? "pp-lines" : null,
+      // No automatable fix — PP lines come from the browser copy-paste import.
+      fixAction: null,
     },
     {
       name: "Game Schedule",
@@ -461,7 +464,9 @@ async function checkFeatureStatus(): Promise<CheckResult[]> {
 
   const registeredJobs = new Set(cronJobs.map(r => r.jobName));
   // Daily-only jobs (variance, fatigue) only appear after 6:30am — check their data instead
-  const frequentJobs = ["pp-lines", "external-odds", "projections", "injuries"];
+  // pp-lines intentionally excluded — there is no scheduled PP cron (PerimeterX);
+  // lines come from the browser import.
+  const frequentJobs = ["external-odds", "projections", "injuries"];
   const missingJobs = frequentJobs.filter(j => !registeredJobs.has(j));
 
   return [
@@ -475,9 +480,10 @@ async function checkFeatureStatus(): Promise<CheckResult[]> {
     {
       name: "Market Intel",
       status: miN > 0 ? "green" : "red",
-      detail: miN === 0 ? "No active lines — check PP sync" : `${miN} active lines in index`,
+      detail: miN === 0 ? "No active lines — run the PrizePicks import in Settings" : `${miN} active lines in index`,
       lastUpdated: null,
-      fixAction: miN === 0 ? "pp-lines" : null,
+      // No automatable fix — PP lines come from the browser copy-paste import.
+      fixAction: null,
     },
     {
       name: "AI Analyst",

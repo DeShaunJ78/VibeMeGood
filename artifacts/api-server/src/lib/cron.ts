@@ -6,7 +6,6 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, lt, gte, lte, desc } from "drizzle-orm";
 import { logger } from "./logger";
-import { syncPpLines } from "./sync/prizepicks";
 import { syncExternalOdds, recalcPropScores } from "./sync/external-odds";
 import { computeAllProjections } from "./projection/compute";
 import { computeStreaks } from "./sync/streaks";
@@ -123,11 +122,10 @@ async function logPull(provider: string, jobName: string, fn: () => Promise<numb
 }
 
 export function startCronJobs() {
-  // PP lines every 30 minutes — lines reprice infrequently; 48 pulls/day keeps
-  // proxy bandwidth at ~6GB/month vs 17GB at 10min intervals.
-  cron.schedule("*/30 * * * *", () =>
-    logPull("prizepicks", "pp-lines", syncPpLines)
-  );
+  // NOTE: There is intentionally no scheduled PrizePicks sync. api.prizepicks.com
+  // is behind PerimeterX and every server-side pull returns 403, so an automatic
+  // cron only spams error logs and keeps the data-health dot red. The browser
+  // copy-paste import (POST /api/sync/pp-lines-import) is the sole working path.
 
   // Injuries every 20 minutes
   cron.schedule("*/20 * * * *", () =>
@@ -233,9 +231,9 @@ export function startCronJobs() {
       const wasActive = preLockActive;
       preLockActive = upcoming.length > 0;
       if (preLockActive && !wasActive) {
-        logger.info("Pre-lock window detected — triggering urgent sync (lines + injuries + odds)");
-        // Pre-lock bypasses circuit breaker — these are time-critical.
-        await syncPpLines();
+        logger.info("Pre-lock window detected — triggering urgent sync (injuries + odds)");
+        // Pre-lock bypasses circuit breaker — these are time-critical. PP lines are
+        // not pulled here: server-side PP fetches always 403 (PerimeterX).
         await Promise.all([
           syncInjuries(),
           logPull("the-odds-api", "external-odds", () => syncExternalOdds(true)),

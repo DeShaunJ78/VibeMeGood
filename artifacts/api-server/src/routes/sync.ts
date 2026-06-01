@@ -295,8 +295,9 @@ router.post("/sync/pre-lock", async (req, res) => {
   res.json({ status: "started", message: "Pre-lock sync initiated" });
   broadcastSyncStatus("pre-lock", "running");
 
+  // PP lines omitted: server-side PP fetches always 403 (PerimeterX). Lines come
+  // from the browser copy-paste import.
   const jobs: Array<{ name: string; provider: string; fn: () => Promise<number> }> = [
-    { name: "pp-lines",      provider: "prizepicks",   fn: syncPpLines },
     { name: "sync-injuries", provider: "injury-news",  fn: syncInjuriesImpl },
     { name: "external-odds", provider: "the-odds-api", fn: () => syncExternalOdds(true) },
   ];
@@ -333,7 +334,9 @@ router.post("/sync/projections", async (req, res) => {
 });
 
 router.post("/sync/scores", async (req, res) => {
-  await runSync("prizepicks", "sync-scores", syncScoresImpl, res);
+  // Logs under "espn" (ESPN game logs), NOT "prizepicks" — PP's data-health dot
+  // must reflect only the browser import, never a server-side scores pull.
+  await runSync("espn", "sync-scores", syncScoresImpl, res);
 });
 
 router.post("/sync/fatigue", async (req, res) => {
@@ -406,8 +409,9 @@ router.post("/sync/all", async (req, res) => {
   res.json({ status: "started", message: "All syncs initiated" });
   broadcastSyncStatus("all", "running");
 
+  // PP lines omitted: server-side PP fetches always 403 (PerimeterX). Lines come
+  // from the browser copy-paste import.
   const jobs: Array<{ name: string; provider: string; fn: () => Promise<number> }> = [
-    { name: "pp-lines",    provider: "prizepicks",    fn: syncPpLines },
     { name: "injuries",    provider: "injury-news",   fn: syncInjuriesImpl },
     { name: "external-odds", provider: "the-odds-api", fn: syncExternalOdds },
     { name: "projections", provider: "nba-stats",     fn: syncProjectionsImpl },

@@ -21,6 +21,8 @@ PrizePicks API (`api.prizepicks.com/projections`) is protected by **PerimeterX**
 - Uses `undici`'s `ProxyAgent` + `undiciFetch` (must use same undici instance — mixing with Node's built-in fetch causes `invalid onRequestStart method` error)
 - Proxy gets through to PP but PerimeterX CAPTCHA fires anyway
 
-**PP cron:** Every 30 min (`*/30 * * * *`) — reduced from 10 min; server syncs will always fail without PerimeterX bypass but circuit breaker (3 fails → 30 min backoff) prevents alert spam.
+**No automatic PP cron — by design.** There is intentionally NO scheduled/server-side PP sync, and PP is excluded from the `/sync/all` and `/sync/pre-lock` batches and from the frontend `SYNC_JOBS` list. Earlier there was a 30-min cron with a circuit breaker; it was removed because every tick 403s and overwrites the import's success in `data_pull_logs`, flipping the Settings data-health dot back to red ~30 min after each import. The data-health dot reads the *latest* log per provider, so any doomed server pull poisons it. The browser copy-paste import is the ONLY thing that should ever write a `provider='prizepicks'` log.
 
-**How to apply:** Don't attempt to fix server-side PP sync with proxies or headers alone. Browser sync is the correct long-term approach. If full automation is needed, Puppeteer with stealth plugin is the only option (not implemented).
+**Why:** user repeatedly saw the PP status go red on its own; root cause was the doomed cron, not the import.
+
+**How to apply:** Never re-add a server-side PP fetch to cron or to any "sync all"/"pre-lock"/per-provider button. PP lines come only from the paste import. If full automation is ever needed, Puppeteer with a stealth plugin is the only option (not implemented). After a republish, the dot stays red until the user does one fresh import (no cron error left to overwrite it).
