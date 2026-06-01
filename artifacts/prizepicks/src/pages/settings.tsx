@@ -226,13 +226,22 @@ export default function Settings() {
     setSyncingAll(false);
   }
 
-  // Bookmarklet that runs inside app.prizepicks.com (same-origin — no CORS block).
-  // The server URL is baked in at render time so it points to whichever domain is active.
   const serverOrigin = window.location.origin;
-  const bookmarkletCode = `javascript:(async()=>{try{const r=await fetch('https://api.prizepicks.com/projections?per_page=25000&single_stat=true&include=new_player,league');const d=await r.json();const s=await fetch('${serverOrigin}/api/sync/pp-lines-import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:d.data,included:d.included})});const j=await s.json();alert('\u2713 '+j.recordsProcessed+' lines synced!');}catch(e){alert('\u274c Sync failed: '+e.message);}})();`;
+  const importUrl = `${serverOrigin}/api/sync/pp-lines-import`;
+  const ppApiUrl = "https://api.prizepicks.com/projections?per_page=25000&single_stat=true&include=new_player,league";
+
+  // Desktop bookmarklet (drag to bookmarks bar — works on Chrome/Firefox/Safari desktop)
+  const bookmarkletCode = `javascript:(async()=>{try{const r=await fetch('${ppApiUrl}');const d=await r.json();const s=await fetch('${importUrl}',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:d.data,included:d.included})});const j=await s.json();alert('\u2713 '+j.recordsProcessed+' lines synced!');}catch(e){alert('\u274c Sync failed: '+e.message);}})();`;
 
   function copyBookmarklet() {
     navigator.clipboard.writeText(bookmarkletCode).then(() => {
+      setBookmarkletCopied(true);
+      setTimeout(() => setBookmarkletCopied(false), 3000);
+    });
+  }
+
+  function copyImportUrl() {
+    navigator.clipboard.writeText(importUrl).then(() => {
       setBookmarkletCopied(true);
       setTimeout(() => setBookmarkletCopied(false), 3000);
     });
@@ -321,47 +330,15 @@ export default function Settings() {
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            {/* PrizePicks bookmarklet sync */}
-            <div className="p-3 rounded border border-amber-500/30 bg-amber-500/5 space-y-3">
-              <div>
-                <p className="font-mono text-xs font-bold text-amber-400 mb-1">
-                  🔖 PrizePicks Sync — Bookmarklet Method
-                </p>
-                <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  PP blocks direct fetches from this app (CORS). Instead: save the bookmarklet below, go to{" "}
-                  <span className="font-mono text-slate-300">app.prizepicks.com</span>, tap it — done.
-                  It runs inside PP's own tab so there's no block.
-                </p>
-              </div>
-
-              {/* Draggable bookmarklet link (desktop) */}
-              <div className="flex items-center gap-2">
-                <a
-                  href={bookmarkletCode}
-                  onClick={e => e.preventDefault()}
-                  draggable
-                  className="flex-1 flex items-center gap-2 px-3 py-2 rounded border border-amber-500/40 bg-slate-950 text-amber-300 font-mono text-xs hover:border-amber-400 cursor-grab active:cursor-grabbing select-none"
-                  title="Drag this to your bookmarks bar"
-                >
-                  🔖 <span className="truncate">Sync PP Lines → {serverOrigin}</span>
-                </a>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={copyBookmarklet}
-                  className="shrink-0 h-8 font-mono text-xs border-slate-700 bg-slate-800 hover:bg-slate-700"
-                >
-                  {bookmarkletCopied ? "Copied ✓" : "Copy URL"}
-                </Button>
-              </div>
-
-              {/* Step-by-step */}
-              <ol className="text-[10px] text-muted-foreground space-y-1 list-none">
-                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">1.</span><span><strong>Desktop:</strong> drag the button above to your bookmarks bar. <strong>Mobile:</strong> tap "Copy URL", create a new bookmark, paste as the URL.</span></li>
-                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">2.</span><span>Go to <span className="font-mono text-slate-300">app.prizepicks.com</span> in any tab.</span></li>
-                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">3.</span><span>Click / tap the bookmark. An alert will confirm how many lines were synced.</span></li>
-              </ol>
-            </div>
+            {/* PrizePicks manual sync — tabbed: iOS Shortcut / Desktop bookmarklet */}
+            <PpSyncPanel
+              bookmarkletCode={bookmarkletCode}
+              importUrl={importUrl}
+              ppApiUrl={ppApiUrl}
+              bookmarkletCopied={bookmarkletCopied}
+              onCopyBookmarklet={copyBookmarklet}
+              onCopyImportUrl={copyImportUrl}
+            />
 
             {SYNC_JOBS.map(job => (
               <div
