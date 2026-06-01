@@ -191,16 +191,21 @@ router.get("/dashboard/summary", async (req, res) => {
       .map(line => {
         const proj = projLookup.get(`${line.playerId}:${line.statType}`);
         if (!proj?.pOver) return null;
-        const pOverPct = Math.round(parseFloat(proj.pOver.toString()) * 10) / 10;
         const player = playerMap[line.playerId];
         const teamId = player?.teamId ?? null;
-        const teamAbbr = teamId ? (teamMap[teamId]?.abbreviation ?? null) : null;
         const game = teamId ? gamesByTeam[teamId] : null;
-        const opponentTeamId = game
-          ? (game.homeTeamId === teamId ? game.awayTeamId : game.homeTeamId)
-          : null;
-        const opponentAbbr = opponentTeamId ? (teamMap[opponentTeamId]?.abbreviation ?? null) : null;
+        // Only surface picks whose team actually plays in the current slate
+        // (today's games). This keeps Top Picks tied to what's live tonight
+        // instead of stale off-season lines that linger as active.
+        if (!game) return null;
         const score = scoreByLineId[line.id];
+        // "Top Picks" must be actionable — drop gated and NO-PLAY props so the
+        // section isn't a wall of picks the model is telling you to avoid.
+        if (proj.noPlayReason || score?.actionTag === "NO-PLAY") return null;
+        const pOverPct = Math.round(parseFloat(proj.pOver.toString()) * 10) / 10;
+        const teamAbbr = teamId ? (teamMap[teamId]?.abbreviation ?? null) : null;
+        const opponentTeamId = game.homeTeamId === teamId ? game.awayTeamId : game.homeTeamId;
+        const opponentAbbr = opponentTeamId ? (teamMap[opponentTeamId]?.abbreviation ?? null) : null;
         return {
           ppLineId: line.id,
           playerName: player?.fullName ?? "Unknown",

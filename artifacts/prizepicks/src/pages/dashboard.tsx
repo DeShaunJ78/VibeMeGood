@@ -342,8 +342,10 @@ export default function Dashboard() {
                     </div>
                   ))
                 ) : (
-                  <div className="flex items-center justify-center h-32 text-muted-foreground font-mono text-sm">
-                    No projection data — run Force Sync
+                  <div className="flex flex-col items-center justify-center h-32 text-muted-foreground font-mono text-sm text-center px-4">
+                    {data.todaysGames && data.todaysGames.length > 0
+                      ? "No actionable picks in today's slate yet — sync the slate to refresh projections."
+                      : "No games in today's slate. Top picks appear once today's slate is live."}
                   </div>
                 )}
               </CardContent>

@@ -6,5 +6,6 @@
 - [Line overrides](line-overrides.md) — pp_lines lineValueOverride/payoutMultiplier keyed per-ppLineId (fixes bleed); survive resync; always eval against `lineValueOverride ?? lineValue`.
 - [Data-quality gate](data-quality-gate.md) — `data-quality` script asserts 5 DQ categories w/ soft/hard tiers; dataset quirks (teams free-form, negative spread lines, audit-table orphans) invalidate naive rules.
 - [Manual hand-entry slips](manual-slips.md) — user-typed legs use nullable playerId + free-text playerName; grade enum is hit/miss/dnp (no push) aligned across create+PATCH+UI; every GET must fall back to stored playerName.
+- [Stale active pp_lines](stale-active-lines.md) — seed lines (isActive + lastSyncedAt NULL) pass freshness filter forever; slate-scope dashboard lists by team-plays-today + exclude gated/NO-PLAY, no upcoming-slate fallback.
 - [Atomic entry+picks](entry-creation-atomic.md) — createEntry takes inline `picks[]`, inserts entry+legs in one txn; never create-then-loop addEntryPick (orphan ungradeable entries). Drizzle numeric needs String().
 - [Single-sport lineups](single-sport-lineups.md) — lineup factory must lock each lineup to the first accepted pick's sport in BOTH main loop and relaxed fallback; pool is global cross-sport.
