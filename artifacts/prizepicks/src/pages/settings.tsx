@@ -230,8 +230,8 @@ export default function Settings() {
   const importUrl = `${serverOrigin}/api/sync/pp-lines-import`;
   const ppApiUrl = "https://api.prizepicks.com/projections?per_page=25000&single_stat=true&include=new_player,league";
 
-  // Desktop bookmarklet (drag to bookmarks bar — works on Chrome/Firefox/Safari desktop)
-  const bookmarkletCode = `javascript:(async()=>{try{const r=await fetch('${ppApiUrl}');const d=await r.json();const s=await fetch('${importUrl}',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:d.data,included:d.included})});const j=await s.json();alert('\u2713 '+j.recordsProcessed+' lines synced!');}catch(e){alert('\u274c Sync failed: '+e.message);}})();`;
+  // Desktop bookmarklet — must run on app.prizepicks.com so session cookies are sent (credentials:'include')
+  const bookmarkletCode = `javascript:(async()=>{try{const r=await fetch('${ppApiUrl}',{credentials:'include'});if(!r.ok){throw new Error('PP API '+r.status);}const d=await r.json();const s=await fetch('${importUrl}',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:d.data,included:d.included})});const j=await s.json();alert('\u2713 '+j.recordsProcessed+' lines synced!');}catch(e){alert('\u274c Sync failed: '+e.message);}})();`;
 
   function copyBookmarklet() {
     navigator.clipboard.writeText(bookmarkletCode).then(() => {
