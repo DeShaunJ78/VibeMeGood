@@ -17,17 +17,24 @@ const PER_PAGE = 25000;
 export const PP_PROJECTIONS_URL =
   `${PP_BASE}/projections?per_page=${PER_PAGE}&single_stat=true&include=new_player,league`;
 
-// If PP_PROXY_URL is set (e.g. http://user:pass@host:port), all PP fetches route
-// through it. A residential proxy is required when running on cloud infrastructure
-// because PrizePicks blocks datacenter IPs at the network level.
-const proxyAgent = process.env.PP_PROXY_URL
-  ? new ProxyAgent(process.env.PP_PROXY_URL)
-  : undefined;
+// PP_PROXY_URL accepts one URL or a comma-separated list.
+// A random agent is picked each call so load is spread across all IPs and
+// a flagged IP doesn't take down the whole sync.
+const proxyAgents: ProxyAgent[] = (process.env.PP_PROXY_URL ?? "")
+  .split(",")
+  .map(u => u.trim())
+  .filter(Boolean)
+  .map(u => new ProxyAgent(u));
 
-if (proxyAgent) {
-  logger.info("PP proxy enabled via PP_PROXY_URL");
+if (proxyAgents.length > 0) {
+  logger.info({ count: proxyAgents.length }, "PP proxy pool ready");
 } else {
   logger.warn("PP_PROXY_URL not set — PrizePicks syncs will fail on cloud IPs");
+}
+
+function pickAgent(): ProxyAgent | undefined {
+  if (proxyAgents.length === 0) return undefined;
+  return proxyAgents[Math.floor(Math.random() * proxyAgents.length)];
 }
 
 async function fetchPP(url: string): Promise<Response> {
@@ -36,7 +43,7 @@ async function fetchPP(url: string): Promise<Response> {
     if (delays[i] > 0) await new Promise(r => setTimeout(r, delays[i]));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await (fetch as any)(url, {
-      dispatcher: proxyAgent,
+      dispatcher: pickAgent(),
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         "Accept": "application/json",
