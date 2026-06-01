@@ -35,6 +35,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useEntry } from "@/lib/entry-context";
 import { useUserSettings } from "@/hooks/use-user-settings";
+import { useGetDataHealth, getGetDataHealthQueryKey } from "@workspace/api-client-react";
 
 const NAV_ITEMS = [
   { title: "Command Center", url: "/", icon: LayoutDashboard },
@@ -67,12 +68,31 @@ const VARIANCE_ITEMS = [
   { title: "Experimental Lab", url: "/variance/lab",          icon: FlaskConical, isLab: true },
 ];
 
+const PP_STALE_HOURS = 4; // show warning after this many hours without a sync
+
 export function AppSidebar() {
   const [location] = useLocation();
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
   const { picks } = useEntry();
   const { data: userSettings } = useUserSettings();
+
+  // Poll data health every 5 min to detect stale PP lines
+  const { data: healthData } = useGetDataHealth({
+    query: {
+      queryKey: getGetDataHealthQueryKey(),
+      refetchInterval: 5 * 60 * 1000,
+      staleTime: 4 * 60 * 1000,
+    },
+  });
+  const ppProvider = (healthData?.providers as any[])?.find(
+    (p: any) => p.provider === "prizepicks",
+  );
+  const ppAgeHours: number = ppProvider?.boardAgeHours ?? 0;
+  const ppStale = ppAgeHours >= PP_STALE_HOURS;
+  const ppAgeLabel = ppAgeHours < 1
+    ? "<1h"
+    : `${Math.floor(ppAgeHours)}h`;
 
   return (
     <Sidebar variant="sidebar" collapsible="icon">
@@ -245,20 +265,32 @@ export function AppSidebar() {
             <SidebarMenu>
               {BOTTOM_ITEMS.map((item) => {
                 const isActive = location === item.url;
+                const isSettings = item.url === "/settings";
+                const showStaleBadge = isSettings && ppStale;
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
-                      tooltip={item.title}
+                      tooltip={isSettings && ppStale ? `Lines stale — ${ppAgeLabel} since last sync` : item.title}
                       className={cn(
                         "transition-colors",
                         isActive ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-slate-800/50"
                       )}
                     >
                       <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                        <item.icon />
+                        <div className="relative shrink-0">
+                          <item.icon />
+                          {showStaleBadge && (
+                            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                          )}
+                        </div>
                         <span>{item.title}</span>
+                        {showStaleBadge && !isCollapsed && (
+                          <span className="ml-auto font-mono text-[10px] bg-red-500/20 text-red-400 border border-red-500/40 px-1.5 py-0.5 rounded">
+                            {ppAgeLabel} stale
+                          </span>
+                        )}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

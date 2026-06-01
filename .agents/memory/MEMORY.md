@@ -9,3 +9,4 @@
 - [Stale active pp_lines](stale-active-lines.md) — seed lines (isActive + lastSyncedAt NULL) pass freshness filter forever; slate-scope dashboard lists by team-plays-today + exclude gated/NO-PLAY, no upcoming-slate fallback.
 - [Atomic entry+picks](entry-creation-atomic.md) — createEntry takes inline `picks[]`, inserts entry+legs in one txn; never create-then-loop addEntryPick (orphan ungradeable entries). Drizzle numeric needs String().
 - [Single-sport lineups](single-sport-lineups.md) — lineup factory must lock each lineup to the first accepted pick's sport in BOTH main loop and relaxed fallback; pool is global cross-sport.
+- [PP PerimeterX block](pp-perimeter-x-block.md) — server-side PP syncs always 403 (PerimeterX CAPTCHA); proxies don't help. Browser-import button is the correct solution; cron stays at 30 min with circuit breaker.
