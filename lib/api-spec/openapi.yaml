@@ -980,6 +980,33 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SyncResult" }
 
+  /sync/pp-lines-import:
+    post:
+      operationId: ppLinesBrowserImport
+      tags: [sync]
+      summary: Import PP lines from browser-fetched payload (bypasses server IP block)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data: { type: array, items: {} }
+                included: { type: array, items: {} }
+              required: [data, included]
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  recordsProcessed: { type: integer }
+                required: [status, recordsProcessed]
+
   /sync/injuries:
     post:
       operationId: syncInjuries

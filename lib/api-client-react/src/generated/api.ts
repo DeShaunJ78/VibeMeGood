@@ -85,6 +85,8 @@ import type {
   PpLineInput,
   PpLineOverrideInput,
   PpLineUpdate,
+  PpLinesBrowserImport200,
+  PpLinesBrowserImportBody,
   Projection,
   ProjectionInput,
   PropDetail,
@@ -4450,6 +4452,77 @@ export const useSyncPpLines = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getSyncPpLinesMutationOptions(options));
+    }
+
+export const getPpLinesBrowserImportUrl = () => {
+
+
+
+
+  return `/api/sync/pp-lines-import`
+}
+
+/**
+ * @summary Import PP lines from browser-fetched payload (bypasses server IP block)
+ */
+export const ppLinesBrowserImport = async (ppLinesBrowserImportBody: PpLinesBrowserImportBody, options?: RequestInit): Promise<PpLinesBrowserImport200> => {
+
+  return customFetch<PpLinesBrowserImport200>(getPpLinesBrowserImportUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      ppLinesBrowserImportBody,)
+  }
+);}
+
+
+
+
+export const getPpLinesBrowserImportMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof ppLinesBrowserImport>>, TError,{data: BodyType<PpLinesBrowserImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof ppLinesBrowserImport>>, TError,{data: BodyType<PpLinesBrowserImportBody>}, TContext> => {
+
+const mutationKey = ['ppLinesBrowserImport'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof ppLinesBrowserImport>>, {data: BodyType<PpLinesBrowserImportBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  ppLinesBrowserImport(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PpLinesBrowserImportMutationResult = NonNullable<Awaited<ReturnType<typeof ppLinesBrowserImport>>>
+    export type PpLinesBrowserImportMutationBody = BodyType<PpLinesBrowserImportBody>
+    export type PpLinesBrowserImportMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Import PP lines from browser-fetched payload (bypasses server IP block)
+ */
+export const usePpLinesBrowserImport = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof ppLinesBrowserImport>>, TError,{data: BodyType<PpLinesBrowserImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof ppLinesBrowserImport>>,
+        TError,
+        {data: BodyType<PpLinesBrowserImportBody>},
+        TContext
+      > => {
+      return useMutation(getPpLinesBrowserImportMutationOptions(options));
     }
 
 export const getSyncInjuriesUrl = () => {

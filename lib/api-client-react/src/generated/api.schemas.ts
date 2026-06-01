@@ -1144,6 +1144,16 @@ since?: string;
 until?: string;
 };
 
+export type PpLinesBrowserImportBody = {
+  data: unknown[];
+  included: unknown[];
+};
+
+export type PpLinesBrowserImport200 = {
+  status: string;
+  recordsProcessed: number;
+};
+
 export type GetHistoricalHitRatesParams = {
 playerId: number;
 statType: string;

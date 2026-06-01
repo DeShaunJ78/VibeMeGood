@@ -13,6 +13,9 @@ const PP_BASE = process.env.PP_API_BASE || "https://api.prizepicks.com";
 // deactivation, since the missing tail would otherwise be mass-deactivated.
 const PER_PAGE = 25000;
 
+export const PP_PROJECTIONS_URL =
+  `${PP_BASE}/projections?per_page=${PER_PAGE}&single_stat=true&include=new_player,league`;
+
 async function fetchPP(url: string): Promise<Response> {
   const delays = [0, 1000, 3000];
   for (let i = 0; i < delays.length; i++) {
@@ -26,16 +29,11 @@ async function fetchPP(url: string): Promise<Response> {
   throw new Error("PP API rate limited after 3 attempts");
 }
 
-export async function syncPpLines(): Promise<number> {
-  const res = await fetchPP(
-    `${PP_BASE}/projections?per_page=${PER_PAGE}&single_stat=true&include=new_player,league`,
-  );
-  if (!res.ok) throw new Error(`PrizePicks API error: ${res.status}`);
-  const data = await res.json() as {
-    data: any[];
-    included: any[];
-  };
-
+// ── Core processing logic ────────────────────────────────────────────────────
+// Separated from the fetch step so it can be called by:
+//   1. The server-side cron/manual sync (fetchPP → processPpData)
+//   2. The browser-import endpoint (user fetches from their home IP → POST raw JSON here)
+export async function processPpData(data: { data: any[]; included: any[] }): Promise<number> {
   const playerMap: Record<string, Record<string, unknown>> = {};
   const leagueMap: Record<string, Record<string, unknown>> = {};
   for (const inc of (data.included || [])) {
@@ -157,7 +155,6 @@ export async function syncPpLines(): Promise<number> {
         .limit(1);
 
       if (existing) {
-        // Row exists — update timestamps and gameId only
         await db.update(ppLinesTable)
           .set({
             isActive: true,
@@ -167,7 +164,6 @@ export async function syncPpLines(): Promise<number> {
           })
           .where(eq(ppLinesTable.id, existing.id));
       } else {
-        // New tier — insert fresh row
         const [newLine] = await db
           .insert(ppLinesTable)
           .values({
@@ -202,11 +198,6 @@ export async function syncPpLines(): Promise<number> {
   }
 
   // ── Deactivation guard ──────────────────────────────────────────────────────
-  // Deactivation removes any active line not refreshed in the last hour. That is only
-  // safe on a COMPLETE response — a partial / empty / truncated PP payload would
-  // otherwise mass-deactivate live lines across every sport. So we refuse to run it
-  // unless the response looks trustworthy, AND we scope it to the sports we actually
-  // saw this run (a transient drop of one sport can't deactivate another's lines).
   const totalReturned = (data.data || []).length;
   let skipReason = "";
   if (totalReturned === 0) {
@@ -249,4 +240,12 @@ export async function syncPpLines(): Promise<number> {
   }
 
   return processed;
+}
+
+// ── Server-side sync (cron + manual "PrizePicks Lines" button) ───────────────
+export async function syncPpLines(): Promise<number> {
+  const res = await fetchPP(PP_PROJECTIONS_URL);
+  if (!res.ok) throw new Error(`PrizePicks API error: ${res.status}`);
+  const data = await res.json() as { data: any[]; included: any[] };
+  return processPpData(data);
 }

@@ -4,7 +4,7 @@ import { dataPullLogsTable, alertsTable, syncRunsTable, playersTable, injuriesTa
 import { eq, and, isNull, or, gte, lte } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { broadcastSyncStatus, broadcast } from "../lib/sse";
-import { syncPpLines } from "../lib/sync/prizepicks";
+import { syncPpLines, processPpData } from "../lib/sync/prizepicks";
 import { syncExternalOdds, recalcPropScores } from "../lib/sync/external-odds";
 import { computeAllProjections } from "../lib/projection/compute";
 import { computeStreaks } from "../lib/sync/streaks";
@@ -233,6 +233,42 @@ router.post("/sync/game-schedule-history", async (req, res) => {
     logger.error({ err: e }, "Historical game schedule sync failed");
     broadcastSyncStatus("game-schedule-history", "error",
       e instanceof Error ? e.message : "Unknown error");
+  }
+});
+
+// Browser-import: user's browser fetches PP directly (bypasses cloud IP block),
+// posts the raw JSON here. Server processes it identically to a normal sync.
+router.post("/sync/pp-lines-import", async (req, res) => {
+  const body = req.body as { data?: unknown[]; included?: unknown[] };
+  if (!Array.isArray(body?.data) || !Array.isArray(body?.included)) {
+    res.status(400).json({ error: "Request body must have data[] and included[] arrays" });
+    return;
+  }
+
+  const [log] = await db.insert(dataPullLogsTable).values({
+    provider: "prizepicks",
+    jobName: "pp-lines-browser-import",
+    status: "running",
+    startedAt: new Date(),
+  }).returning();
+
+  try {
+    const recordsProcessed = await processPpData({ data: body.data, included: body.included });
+    await recalcPropScores();
+    await db.update(dataPullLogsTable)
+      .set({ status: "success", recordsProcessed, finishedAt: new Date() })
+      .where(eq(dataPullLogsTable.id, log.id));
+    broadcastSyncStatus("pp-lines", "success", `${recordsProcessed} records (browser import)`);
+    req.log.info({ recordsProcessed }, "PP browser import complete");
+    res.json({ status: "success", recordsProcessed });
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    await db.update(dataPullLogsTable)
+      .set({ status: "error", errorMessage, finishedAt: new Date() })
+      .where(eq(dataPullLogsTable.id, log.id));
+    broadcastSyncStatus("pp-lines", "error", errorMessage);
+    req.log.error({ err }, "PP browser import failed");
+    res.status(500).json({ error: errorMessage });
   }
 });
 

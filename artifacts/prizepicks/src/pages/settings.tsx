@@ -185,6 +185,7 @@ export default function Settings() {
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncingPreLock, setSyncingPreLock] = useState(false);
   const [syncingJob, setSyncingJob] = useState<string | null>(null);
+  const [browserSyncState, setBrowserSyncState] = useState<"idle" | "fetching" | "importing" | "done" | "error">("idle");
   const { data: userSettings } = useUserSettings();
   const updateSettings = useUpdateUserSettings();
 
@@ -223,6 +224,52 @@ export default function Settings() {
       refetch();
     }, 2000);
     setSyncingAll(false);
+  }
+
+  async function browserSyncPP() {
+    setBrowserSyncState("fetching");
+    try {
+      // Step 1: your browser fetches PP directly using your home IP (not the server's cloud IP)
+      const ppRes = await fetch(
+        "https://api.prizepicks.com/projections?per_page=25000&single_stat=true&include=new_player,league",
+        { headers: { Accept: "application/json" } },
+      );
+      if (!ppRes.ok) {
+        throw new Error(`PrizePicks returned ${ppRes.status} — try again or check your connection`);
+      }
+      const ppData = await ppRes.json();
+
+      // Step 2: hand the raw payload to the server for processing
+      setBrowserSyncState("importing");
+      const importRes = await fetch("/api/sync/pp-lines-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: ppData.data, included: ppData.included }),
+      });
+      if (!importRes.ok) {
+        const err = await importRes.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? "Import failed");
+      }
+      const result = await importRes.json() as { recordsProcessed: number };
+      setBrowserSyncState("done");
+      toast({
+        title: "PrizePicks synced",
+        description: `${result.recordsProcessed} lines imported from your browser.`,
+      });
+      setTimeout(() => {
+        setBrowserSyncState("idle");
+        qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
+        refetch();
+      }, 3000);
+    } catch (e) {
+      setBrowserSyncState("error");
+      toast({
+        title: "Browser sync failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+      setTimeout(() => setBrowserSyncState("idle"), 4000);
+    }
   }
 
   async function preLockSync() {
@@ -308,6 +355,44 @@ export default function Settings() {
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
+            {/* Browser sync callout — prominent when PP is in error state */}
+            <div className={`p-3 rounded border ${
+              browserSyncState === "done"
+                ? "border-emerald-500/40 bg-emerald-500/5"
+                : browserSyncState === "error"
+                  ? "border-red-500/40 bg-red-500/5"
+                  : "border-amber-500/30 bg-amber-500/5"
+            }`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-mono text-xs font-bold text-amber-400 mb-0.5">
+                    🏠 Browser Sync — Bypasses Server IP Block
+                  </p>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    {browserSyncState === "fetching"  && "Fetching data from PrizePicks via your browser…"}
+                    {browserSyncState === "importing" && "Sending to server for processing…"}
+                    {browserSyncState === "done"      && "✓ PrizePicks lines updated successfully."}
+                    {browserSyncState === "error"     && "Failed — see toast for details."}
+                    {browserSyncState === "idle"      && "Your browser uses your home IP. Click to fetch PP data directly and send it to the server — no proxy needed."}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={browserSyncPP}
+                  disabled={browserSyncState !== "idle"}
+                  className="shrink-0 h-7 font-mono text-xs bg-amber-600 hover:bg-amber-500 text-white border-0"
+                >
+                  <RefreshCw className={`w-3 h-3 mr-1 ${
+                    browserSyncState === "fetching" || browserSyncState === "importing" ? "animate-spin" : ""
+                  }`} />
+                  {browserSyncState === "fetching"  ? "Fetching…"
+                   : browserSyncState === "importing" ? "Importing…"
+                   : browserSyncState === "done"      ? "Done ✓"
+                   : "Sync PP Now"}
+                </Button>
+              </div>
+            </div>
+
             {SYNC_JOBS.map(job => (
               <div
                 key={job.endpoint}

@@ -1349,6 +1349,20 @@ export const SyncPpLinesResponse = zod.object({
 
 
 /**
+ * @summary Import PP lines from browser-fetched payload (bypasses server IP block)
+ */
+export const PpLinesBrowserImportBody = zod.object({
+  "data": zod.array(zod.unknown()),
+  "included": zod.array(zod.unknown())
+})
+
+export const PpLinesBrowserImportResponse = zod.object({
+  "status": zod.string(),
+  "recordsProcessed": zod.number()
+})
+
+
+/**
  * @summary Manually trigger injury sync
  */
 export const SyncInjuriesResponse = zod.object({
