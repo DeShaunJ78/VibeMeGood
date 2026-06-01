@@ -123,8 +123,9 @@ async function logPull(provider: string, jobName: string, fn: () => Promise<numb
 }
 
 export function startCronJobs() {
-  // PP lines every 10 minutes
-  cron.schedule("*/10 * * * *", () =>
+  // PP lines every 30 minutes — lines reprice infrequently; 48 pulls/day keeps
+  // proxy bandwidth at ~6GB/month vs 17GB at 10min intervals.
+  cron.schedule("*/30 * * * *", () =>
     logPull("prizepicks", "pp-lines", syncPpLines)
   );
 
