@@ -74,11 +74,34 @@ async function fetchPP(url: string): Promise<Response> {
 // Separated from the fetch step so it can be called by:
 //   1. The server-side cron/manual sync (fetchPP → processPpData)
 //   2. The browser-import endpoint (user fetches from their home IP → POST raw JSON here)
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+type PpNorm = {
+  sport: string;
+  teamAbbr: string;
+  playerName: string;
+  ppPlayerId: string | undefined;
+  statType: string;
+  lineValue: number;
+  lineType: string;
+  imageUrl: string | null;
+  position: string | null;
+};
+
+// Processes a PP projections payload. Previously this did ~6 sequential DB
+// round-trips PER projection (team/player/game/line lookups + writes), which on a
+// full per_page=25000 feed meant tens of thousands of serial queries and ran for
+// minutes. This version preloads every lookup table into memory once and batches
+// all inserts/updates, turning O(rows) round-trips into a small constant.
 export async function processPpData(data: { data: any[]; included: any[] }): Promise<number> {
-  const playerMap: Record<string, Record<string, unknown>> = {};
+  const playerAttrMap: Record<string, Record<string, unknown>> = {};
   const leagueMap: Record<string, Record<string, unknown>> = {};
   for (const inc of (data.included || [])) {
-    if (inc.type === "new_player") playerMap[inc.id] = inc.attributes;
+    if (inc.type === "new_player") playerAttrMap[inc.id] = inc.attributes;
     if (inc.type === "league") leagueMap[inc.id] = inc.attributes;
   }
 
@@ -92,150 +115,223 @@ export async function processPpData(data: { data: any[]; included: any[] }): Pro
   // Sports that actually appeared in THIS response — deactivation is scoped to these.
   const seenSports = new Set<string>();
 
-  let processed = 0;
+  // ── Phase 1: normalize projections; collect the unique teams & players needed ──
+  const norms: PpNorm[] = [];
+  const neededTeams = new Map<string, { sport: string; abbr: string }>();
+  const neededPlayers = new Map<string, PpNorm>();
 
   for (const proj of (data.data || [])) {
-    try {
-      const pAttr = playerMap[proj.relationships?.new_player?.data?.id] || {};
-      const lAttr = leagueMap[proj.relationships?.league?.data?.id] || {};
-      const lineValue = parseFloat(proj.attributes.line_score as string);
-      if (isNaN(lineValue)) continue;
+    const pAttr = playerAttrMap[proj.relationships?.new_player?.data?.id] || {};
+    const lAttr = leagueMap[proj.relationships?.league?.data?.id] || {};
+    const lineValue = parseFloat(proj.attributes?.line_score as string);
+    if (isNaN(lineValue)) continue;
 
-      // PrizePicks exposes the tier as `odds_type` (standard | goblin | demon).
-      // There is NO `line_type` field on the API — reading it left every row
-      // labelled "standard", which collapsed goblin/demon tiers and made same-value
-      // standard+demon pairs collide on the upsert key (lines stopped matching PP).
-      const lineType = ((proj.attributes.odds_type as string) || "standard").toLowerCase();
-      const statType = proj.attributes.stat_type as string;
-      const sport = (lAttr.name as string) || (pAttr.sport as string) || "Unknown";
-      seenSports.add(sport);
-      const playerName = (pAttr.name as string) || "Unknown";
-      const teamAbbr = ((pAttr.team as string) || "").toUpperCase();
-      const imageUrl = (pAttr.image_url as string | undefined) ?? null;
-      const position = ((pAttr.position as string | undefined) ?? "").trim() || null;
+    // PrizePicks exposes the tier as `odds_type` (standard | goblin | demon).
+    // There is NO `line_type` field on the API.
+    const lineType = ((proj.attributes?.odds_type as string) || "standard").toLowerCase();
+    const statType = proj.attributes?.stat_type as string;
+    // statType is NOT NULL on pp_lines — drop rows missing it so one bad
+    // projection can't abort the whole batched insert.
+    if (!statType) continue;
+    const sport = (lAttr.name as string) || (pAttr.sport as string) || "Unknown";
+    seenSports.add(sport);
+    const playerName = (pAttr.name as string) || "Unknown";
+    const teamAbbr = ((pAttr.team as string) || "").toUpperCase();
+    const imageUrl = (pAttr.image_url as string | undefined) ?? null;
+    const position = ((pAttr.position as string | undefined) ?? "").trim() || null;
 
-      // Upsert team
-      let teamId: number | null = null;
-      if (teamAbbr) {
-        let [team] = await db.select()
-          .from(teamsTable)
-          .where(and(eq(teamsTable.abbreviation, teamAbbr), eq(teamsTable.sport, sport)))
-          .limit(1);
-        if (!team) {
-          [team] = await db.insert(teamsTable).values({
-            sport, name: teamAbbr, abbreviation: teamAbbr,
-          }).returning();
-        }
-        teamId = team.id;
-      }
+    const norm: PpNorm = {
+      sport, teamAbbr, playerName,
+      ppPlayerId: proj.relationships?.new_player?.data?.id,
+      statType, lineValue, lineType, imageUrl, position,
+    };
+    norms.push(norm);
+    if (teamAbbr) neededTeams.set(`${sport}|${teamAbbr}`, { sport, abbr: teamAbbr });
+    neededPlayers.set(`${sport}|${playerName}`, norm);
+  }
 
-      // Upsert player
-      let [player] = await db.select().from(playersTable)
-        .where(and(eq(playersTable.fullName, playerName), eq(playersTable.sport, sport)))
-        .limit(1);
+  // ── Phase 2: resolve teams (preload all, batch-insert the missing) ──
+  const teamMap = new Map<string, number>(); // `${sport}|${abbr}` -> id
+  {
+    const existing = await db
+      .select({ id: teamsTable.id, sport: teamsTable.sport, abbreviation: teamsTable.abbreviation })
+      .from(teamsTable);
+    for (const t of existing) teamMap.set(`${t.sport}|${t.abbreviation}`, t.id);
+    const toInsert = [...neededTeams.values()]
+      .filter(t => !teamMap.has(`${t.sport}|${t.abbr}`))
+      .map(t => ({ sport: t.sport, name: t.abbr, abbreviation: t.abbr }));
+    for (const batch of chunk(toInsert, 500)) {
+      const inserted = await db.insert(teamsTable).values(batch)
+        .returning({ id: teamsTable.id, sport: teamsTable.sport, abbreviation: teamsTable.abbreviation });
+      for (const t of inserted) teamMap.set(`${t.sport}|${t.abbreviation}`, t.id);
+    }
+  }
 
-      if (!player) {
-        const parts = playerName.split(" ");
-        [player] = await db.insert(playersTable).values({
-          sport,
-          fullName: playerName,
+  // ── Phase 3: resolve players (preload all, batch-insert new, update changed) ──
+  const playerIdByKey = new Map<string, number>(); // `${sport}|${fullName}` -> id
+  {
+    const existing = await db
+      .select({
+        id: playersTable.id, sport: playersTable.sport, fullName: playersTable.fullName,
+        teamId: playersTable.teamId, imageUrl: playersTable.imageUrl, position: playersTable.position,
+      })
+      .from(playersTable);
+    const existingByKey = new Map<string, typeof existing[number]>();
+    for (const p of existing) existingByKey.set(`${p.sport}|${p.fullName}`, p);
+
+    const toInsert: (typeof playersTable.$inferInsert)[] = [];
+    const toUpdate: { id: number; updates: Record<string, unknown> }[] = [];
+    for (const [key, n] of neededPlayers) {
+      const teamId = n.teamAbbr ? (teamMap.get(`${n.sport}|${n.teamAbbr}`) ?? null) : null;
+      const ex = existingByKey.get(key);
+      if (!ex) {
+        const parts = n.playerName.split(" ");
+        toInsert.push({
+          sport: n.sport,
+          fullName: n.playerName,
           firstName: parts[0] || "",
           lastName: parts.slice(1).join(" ") || "",
           teamId,
-          imageUrl,
-          position,
+          imageUrl: n.imageUrl,
+          position: n.position,
           status: "active",
-          externalIds: { pp_id: proj.relationships?.new_player?.data?.id },
-        }).returning();
+          externalIds: { pp_id: n.ppPlayerId },
+        });
       } else {
-        const updates: Record<string, unknown> = { updatedAt: new Date() };
-        if (teamId && player.teamId !== teamId) updates.teamId = teamId;
-        if (imageUrl && player.imageUrl !== imageUrl) updates.imageUrl = imageUrl;
-        if (position && player.position !== position) updates.position = position;
-        if (Object.keys(updates).length > 1) {
-          await db.update(playersTable).set(updates).where(eq(playersTable.id, player.id));
+        playerIdByKey.set(key, ex.id);
+        const updates: Record<string, unknown> = {};
+        if (teamId && ex.teamId !== teamId) updates.teamId = teamId;
+        if (n.imageUrl && ex.imageUrl !== n.imageUrl) updates.imageUrl = n.imageUrl;
+        if (n.position && ex.position !== n.position) updates.position = n.position;
+        if (Object.keys(updates).length > 0) {
+          updates.updatedAt = new Date();
+          toUpdate.push({ id: ex.id, updates });
         }
       }
+    }
+    for (const batch of chunk(toInsert, 500)) {
+      const inserted = await db.insert(playersTable).values(batch)
+        .returning({ id: playersTable.id, sport: playersTable.sport, fullName: playersTable.fullName });
+      for (const p of inserted) playerIdByKey.set(`${p.sport}|${p.fullName}`, p.id);
+    }
+    for (const u of toUpdate) {
+      await db.update(playersTable).set(u.updates).where(eq(playersTable.id, u.id));
+    }
+  }
 
-      // Resolve today's game for this player's team
-      let gameId: number | null = null;
-      if (teamId) {
-        const now = new Date();
-        const dayStart = new Date(now);
-        dayStart.setHours(0, 0, 0, 0);
-        const dayEnd = new Date(now);
-        dayEnd.setHours(23, 59, 59, 999);
+  // ── Phase 4: today's games, keyed by `${sport}|${teamId}` ──
+  const gameMap = new Map<string, number>();
+  {
+    const now = new Date();
+    const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(now); dayEnd.setHours(23, 59, 59, 999);
+    const games = await db
+      .select({
+        id: gamesTable.id, sport: gamesTable.sport,
+        homeTeamId: gamesTable.homeTeamId, awayTeamId: gamesTable.awayTeamId,
+      })
+      .from(gamesTable)
+      .where(and(gte(gamesTable.startTime, dayStart), lte(gamesTable.startTime, dayEnd)));
+    for (const g of games) {
+      if (g.homeTeamId != null) gameMap.set(`${g.sport}|${g.homeTeamId}`, g.id);
+      if (g.awayTeamId != null) gameMap.set(`${g.sport}|${g.awayTeamId}`, g.id);
+    }
+  }
 
-        const [matchingGame] = await db
-          .select({ id: gamesTable.id })
-          .from(gamesTable)
-          .where(and(
-            eq(gamesTable.sport, sport),
-            gte(gamesTable.startTime, dayStart),
-            lte(gamesTable.startTime, dayEnd),
-            or(
-              eq(gamesTable.homeTeamId, teamId),
-              eq(gamesTable.awayTeamId, teamId),
-            ),
-          ))
-          .limit(1);
+  // ── Phase 5: lines (preload all, partition into batch update vs batch insert) ──
+  const normVal = (v: number | string) => Number(v).toString();
+  const existingLines = new Map<string, number>(); // `${playerId}|${stat}|${val}|${type}` -> id
+  {
+    const rows = await db
+      .select({
+        id: ppLinesTable.id, playerId: ppLinesTable.playerId, statType: ppLinesTable.statType,
+        lineValue: ppLinesTable.lineValue, lineType: ppLinesTable.lineType,
+      })
+      .from(ppLinesTable);
+    for (const l of rows) {
+      existingLines.set(`${l.playerId}|${l.statType}|${normVal(l.lineValue)}|${l.lineType}`, l.id);
+    }
+  }
 
-        gameId = matchingGame?.id ?? null;
+  const updateIds: number[] = [];
+  const updateIdsByGame = new Map<number, number[]>();
+  const linesToInsert: { record: PpNorm; playerId: number; gameId: number | null }[] = [];
+  const queuedNew = new Set<string>();
+  let processed = 0;
+
+  for (const n of norms) {
+    const pid = playerIdByKey.get(`${n.sport}|${n.playerName}`);
+    if (pid == null) continue;
+    const teamId = n.teamAbbr ? (teamMap.get(`${n.sport}|${n.teamAbbr}`) ?? null) : null;
+    const gameId = teamId != null ? (gameMap.get(`${n.sport}|${teamId}`) ?? null) : null;
+    const key = `${pid}|${n.statType}|${normVal(n.lineValue)}|${n.lineType}`;
+
+    const existingId = existingLines.get(key);
+    if (existingId != null) {
+      updateIds.push(existingId);
+      if (gameId != null) {
+        const arr = updateIdsByGame.get(gameId) ?? [];
+        arr.push(existingId);
+        updateIdsByGame.set(gameId, arr);
       }
+    } else if (!queuedNew.has(key)) {
+      queuedNew.add(key);
+      linesToInsert.push({ record: n, playerId: pid, gameId });
+    }
+    processed++;
+  }
 
-      // Upsert on (playerId, statType, lineValue, lineType)
-      const [existing] = await db
-        .select()
-        .from(ppLinesTable)
-        .where(and(
-          eq(ppLinesTable.playerId, player.id),
-          eq(ppLinesTable.statType, statType),
-          eq(ppLinesTable.lineValue, lineValue.toString()),
-          eq(ppLinesTable.lineType, lineType),
-        ))
-        .limit(1);
+  // Refresh existing lines: one bulk update for the common fields...
+  const allUpdateIds = [...new Set(updateIds)];
+  for (const batch of chunk(allUpdateIds, 1000)) {
+    await db.update(ppLinesTable)
+      .set({ isActive: true, lastSyncedAt: new Date(), updatedAt: new Date() })
+      .where(inArray(ppLinesTable.id, batch));
+  }
+  // ...then one update per distinct game for the few that resolved a game today.
+  for (const [gameId, ids] of updateIdsByGame) {
+    for (const batch of chunk([...new Set(ids)], 1000)) {
+      await db.update(ppLinesTable).set({ gameId }).where(inArray(ppLinesTable.id, batch));
+    }
+  }
 
-      if (existing) {
-        await db.update(ppLinesTable)
-          .set({
-            isActive: true,
-            lastSyncedAt: new Date(),
-            updatedAt: new Date(),
-            ...(gameId ? { gameId } : {}),
-          })
-          .where(eq(ppLinesTable.id, existing.id));
-      } else {
-        const [newLine] = await db
-          .insert(ppLinesTable)
-          .values({
-            playerId: player.id,
-            statType,
-            lineValue: lineValue.toString(),
-            lineType,
-            gameId,
-            directionalityType: "over_under",
-            isActive: true,
-            openedAt: new Date(),
-            lastSyncedAt: new Date(),
-          })
-          .returning();
-
-        await db.insert(ppLineHistoryTable)
-          .values({
-            ppLineId: newLine.id,
-            lineValue: lineValue.toString(),
-            lineType,
+  // Insert new lines + their history rows atomically (a history failure must not
+  // leave orphan lines), then fire goblin alerts only after the commit succeeds.
+  const goblins: PpNorm[] = [];
+  if (linesToInsert.length > 0) {
+    await db.transaction(async (tx) => {
+      const historyRows: (typeof ppLineHistoryTable.$inferInsert)[] = [];
+      for (const batch of chunk(linesToInsert, 500)) {
+        const values = batch.map(b => ({
+          playerId: b.playerId,
+          statType: b.record.statType,
+          lineValue: b.record.lineValue.toString(),
+          lineType: b.record.lineType,
+          gameId: b.gameId,
+          directionalityType: "over_under",
+          isActive: true,
+          openedAt: new Date(),
+          lastSyncedAt: new Date(),
+        }));
+        const inserted = await tx.insert(ppLinesTable).values(values).returning({ id: ppLinesTable.id });
+        inserted.forEach((row, i) => {
+          const b = batch[i];
+          historyRows.push({
+            ppLineId: row.id,
+            lineValue: b.record.lineValue.toString(),
+            lineType: b.record.lineType,
             capturedAt: new Date(),
           });
-
-        if (lineType === "goblin") {
-          broadcastNewGoblin(playerName, statType, lineValue, sport);
-        }
+          if (b.record.lineType === "goblin") goblins.push(b.record);
+        });
       }
-      processed++;
-    } catch (e) {
-      logger.error({ err: e }, "Error processing PP projection");
-    }
+      for (const batch of chunk(historyRows, 500)) {
+        await tx.insert(ppLineHistoryTable).values(batch);
+      }
+    });
+  }
+  for (const g of goblins) {
+    broadcastNewGoblin(g.playerName, g.statType, g.lineValue, g.sport);
   }
 
   // ── Deactivation guard ──────────────────────────────────────────────────────

@@ -3,7 +3,7 @@ import {
   externalLinesTable, ppLinesTable, playersTable, propScoresTable,
   lineMoveEventsTable, ourProjectionsTable, dataPullLogsTable,
 } from "@workspace/db/schema";
-import { eq, and, notInArray, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { logger } from "../logger";
 import { twoWayHold, noVigProbs } from "../analytics/odds-math";
 import { pOverLine } from "../projection/normal-dist";
@@ -339,25 +339,20 @@ export async function recalcPropScores(): Promise<void> {
     .innerJoin(playersTable, eq(ppLinesTable.playerId, playersTable.id))
     .where(eq(ppLinesTable.isActive, true));
 
-  // Remove stale prop_scores for lines that are no longer active.
+  // Scores are fully recomputed each run, so we clear and rebuild rather than
+  // diffing per-row — see the batched delete+insert at the end.
   const activeIds = lines.map(r => r.line.id);
-  if (activeIds.length > 0) {
-    await db.delete(propScoresTable)
-      .where(notInArray(propScoresTable.ppLineId, activeIds));
-  } else {
+  if (activeIds.length === 0) {
     await db.delete(propScoresTable);
     return;
   }
 
   // --- Batch-load all related data upfront (eliminates N+1 queries) ---
-  const [allExtLines, allProjections, allExistingScores] = await Promise.all([
+  const [allExtLines, allProjections] = await Promise.all([
     db.select().from(externalLinesTable).where(inArray(externalLinesTable.ppLineId, activeIds)),
     db.select().from(ourProjectionsTable).where(
       inArray(ourProjectionsTable.playerId, [...new Set(lines.map(r => r.line.playerId))]),
     ),
-    db.select({ id: propScoresTable.id, ppLineId: propScoresTable.ppLineId })
-      .from(propScoresTable)
-      .where(inArray(propScoresTable.ppLineId, activeIds)),
   ]);
 
   // Index for O(1) lookups
@@ -373,10 +368,8 @@ export async function recalcPropScores(): Promise<void> {
     projByPlayerStat.set(`${p.playerId}:${p.statType}`, p);
   }
 
-  const existingScoreByLineId = new Map<number, number>();
-  for (const s of allExistingScores) {
-    existingScoreByLineId.set(s.ppLineId, s.id);
-  }
+  // Computed scores are accumulated here, then written in one batched swap.
+  const scorePayloads: (typeof propScoresTable.$inferInsert)[] = [];
 
   for (const { line, player } of lines) {
     try {
@@ -501,26 +494,20 @@ export async function recalcPropScores(): Promise<void> {
         scoredAt:           new Date(),
       };
 
-      const existingId = existingScoreByLineId.get(line.id);
-      if (existingId) {
-        await db.update(propScoresTable)
-          .set({
-            marketSupportScore: scorePayload.marketSupportScore,
-            edgeScore:          scorePayload.edgeScore,
-            stabilityScore:     scorePayload.stabilityScore,
-            finalScore:         scorePayload.finalScore,
-            actionTag,
-            reasoning,
-            scoredAt: new Date(),
-          })
-          .where(eq(propScoresTable.id, existingId));
-      } else {
-        await db.insert(propScoresTable).values(scorePayload);
-      }
+      scorePayloads.push(scorePayload);
 
       void player;
     } catch (e) {
       logger.error({ err: e, lineId: line.id }, "Prop score calc error");
     }
   }
+
+  // Atomically swap in the freshly computed scores: clear all, then batch-insert.
+  // Chunked to stay well under Postgres' parameter limit on large slates.
+  await db.transaction(async (tx) => {
+    await tx.delete(propScoresTable);
+    for (let i = 0; i < scorePayloads.length; i += 500) {
+      await tx.insert(propScoresTable).values(scorePayloads.slice(i, i + 500));
+    }
+  });
 }

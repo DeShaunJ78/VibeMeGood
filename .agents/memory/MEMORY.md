@@ -10,3 +10,4 @@
 - [Atomic entry+picks](entry-creation-atomic.md) — createEntry takes inline `picks[]`, inserts entry+legs in one txn; never create-then-loop addEntryPick (orphan ungradeable entries). Drizzle numeric needs String().
 - [Single-sport lineups](single-sport-lineups.md) — lineup factory must lock each lineup to the first accepted pick's sport in BOTH main loop and relaxed fallback; pool is global cross-sport.
 - [PP PerimeterX block](pp-perimeter-x-block.md) — server-side PP syncs always 403 (PerimeterX CAPTCHA); proxies don't help. Browser-import button is the correct solution; cron stays at 30 min with circuit breaker.
+- [PP import performance](pp-import-performance.md) — PP sync writes must be bulk/batched, never per-row, or full imports take minutes; deactivation guard mutates real lines by sport.
