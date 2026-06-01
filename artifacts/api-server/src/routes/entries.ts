@@ -88,12 +88,14 @@ const CreateEntrySchema = z.object({
 
 const InlinePickSchema = z.object({
   ppLineId:       z.number().int().nullable().optional(),
-  playerId:       z.number().int(),
+  playerId:       z.number().int().nullable().optional(),
+  playerName:     z.string().max(120).nullable().optional(),
   gameId:         z.number().int().nullable().optional(),
   statType:       z.string(),
   direction:      z.enum(["more", "less"]),
   lineValue:      z.number(),
   lineType:       z.string(),
+  result:         z.enum(["pending", "hit", "miss", "dnp"]).optional(),
   yourProjection: z.number().nullable().optional(),
   projectionGap:  z.number().nullable().optional(),
 });
@@ -181,7 +183,7 @@ router.get("/entries", async (req, res) => {
     const allPicks = entryIds.length
       ? await db.select().from(entryPicksTable).where(inArray(entryPicksTable.entryId, entryIds))
       : [];
-    const allPlayerIds = [...new Set(allPicks.map(p => p.playerId))];
+    const allPlayerIds = [...new Set(allPicks.map(p => p.playerId).filter((x): x is number => x != null))];
     const allPlayers = allPlayerIds.length
       ? await db.select({ id: playersTable.id, fullName: playersTable.fullName })
           .from(playersTable).where(inArray(playersTable.id, allPlayerIds))
@@ -190,7 +192,7 @@ router.get("/entries", async (req, res) => {
     const picksByEntry: Record<number, typeof allPicks> = {};
     for (const pick of allPicks) {
       if (!picksByEntry[pick.entryId]) picksByEntry[pick.entryId] = [];
-      picksByEntry[pick.entryId].push({ ...pick, playerName: playerNameMap[pick.playerId] ?? null } as any);
+      picksByEntry[pick.entryId].push({ ...pick, playerName: (pick.playerId != null ? playerNameMap[pick.playerId] : null) ?? pick.playerName ?? null } as any);
     }
 
     res.json(sorted.map(e => ({ ...e, picks: picksByEntry[e.id] ?? [] })));
@@ -222,6 +224,12 @@ router.post("/entries", async (req, res): Promise<void> => {
         return;
       }
       picksToInsert = picksParsed.data;
+      // A manual slip is 2–6 legs; reject malformed payloads server-side so
+      // integrity never depends solely on the client.
+      if (picksToInsert.length > 0 && (picksToInsert.length < 2 || picksToInsert.length > 6)) {
+        res.status(400).json({ error: "A slip must have between 2 and 6 picks" });
+        return;
+      }
     }
 
     // Entry + legs are created in a single transaction so a leg failure rolls back
@@ -233,12 +241,14 @@ router.post("/entries", async (req, res): Promise<void> => {
           picksToInsert.map(p => ({
             entryId:        created.id,
             ppLineId:       p.ppLineId ?? null,
-            playerId:       p.playerId,
+            playerId:       p.playerId ?? null,
+            playerName:     p.playerName ?? null,
             gameId:         p.gameId ?? null,
             statType:       p.statType,
             direction:      p.direction,
             lineValue:      String(p.lineValue),
             lineType:       p.lineType,
+            result:         p.result ?? "pending",
             yourProjection: p.yourProjection != null ? String(p.yourProjection) : null,
             projectionGap:  p.projectionGap != null ? String(p.projectionGap) : null,
           })),
@@ -308,13 +318,13 @@ router.get("/entries/:id", async (req, res): Promise<void> => {
     }
 
     const picks = await db.select().from(entryPicksTable).where(eq(entryPicksTable.entryId, id));
-    const playerIds = [...new Set(picks.map(p => p.playerId))];
+    const playerIds = [...new Set(picks.map(p => p.playerId).filter((x): x is number => x != null))];
     const players = playerIds.length
       ? await db.select({ id: playersTable.id, fullName: playersTable.fullName })
           .from(playersTable).where(inArray(playersTable.id, playerIds))
       : [];
     const playerMap = Object.fromEntries(players.map(p => [p.id, p.fullName]));
-    const enrichedPicks = picks.map(p => ({ ...p, playerName: playerMap[p.playerId] ?? null }));
+    const enrichedPicks = picks.map(p => ({ ...p, playerName: (p.playerId != null ? playerMap[p.playerId] : null) ?? p.playerName ?? null }));
 
     res.json({ entry, picks: enrichedPicks });
   } catch (err) {
@@ -356,13 +366,13 @@ router.delete("/entries/:id", async (req, res) => {
 router.get("/entries/:entryId/picks", async (req, res) => {
   try {
     const picks = await db.select().from(entryPicksTable).where(eq(entryPicksTable.entryId, Number(req.params.entryId)));
-    const playerIds = [...new Set(picks.map(p => p.playerId))];
+    const playerIds = [...new Set(picks.map(p => p.playerId).filter((x): x is number => x != null))];
     const players = playerIds.length
       ? await db.select({ id: playersTable.id, fullName: playersTable.fullName })
           .from(playersTable).where(inArray(playersTable.id, playerIds))
       : [];
     const playerMap = Object.fromEntries(players.map(p => [p.id, p.fullName]));
-    res.json(picks.map(p => ({ ...p, playerName: playerMap[p.playerId] ?? null })));
+    res.json(picks.map(p => ({ ...p, playerName: (p.playerId != null ? playerMap[p.playerId] : null) ?? p.playerName ?? null })));
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });

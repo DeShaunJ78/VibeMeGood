@@ -9,13 +9,17 @@
 export interface EntryPickInput {
   /** @nullable */
   ppLineId?: number | null;
-  playerId: number;
+  /** @nullable */
+  playerId?: number | null;
+  /** @nullable */
+  playerName?: string | null;
   /** @nullable */
   gameId?: number | null;
   statType: string;
   direction: string;
   lineValue: number;
   lineType: string;
+  result?: string;
   /** @nullable */
   yourProjection?: number | null;
   /** @nullable */

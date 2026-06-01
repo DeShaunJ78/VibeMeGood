@@ -6,7 +6,10 @@ export const entryPicksTable = pgTable("entry_picks", {
   id: serial("id").primaryKey(),
   entryId: integer("entry_id").notNull(),
   ppLineId: integer("pp_line_id"),
-  playerId: integer("player_id").notNull(),
+  // Nullable: manually logged slips reference players by free-typed name
+  // (playerName) rather than a seeded player row.
+  playerId: integer("player_id"),
+  playerName: text("player_name"),
   gameId: integer("game_id"),
   statType: text("stat_type").notNull(),
   direction: text("direction").notNull(), // more | less

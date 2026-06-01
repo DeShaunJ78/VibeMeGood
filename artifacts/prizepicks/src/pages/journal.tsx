@@ -3,6 +3,7 @@ import {
   useListEntries, getListEntriesQueryKey, useCreateEntry,
   useUpdateEntry, useUpdateEntryPick,
 } from "@workspace/api-client-react";
+import type { EntryPickInput } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -442,6 +443,19 @@ function EntryRow({ entry }: { entry: any }) {
   );
 }
 
+type LegDraft = {
+  playerName: string;
+  statType: string;
+  lineValue: string;
+  direction: "more" | "less";
+  lineType: string;
+  result: "pending" | "hit" | "miss" | "dnp";
+};
+
+function blankLeg(): LegDraft {
+  return { playerName: "", statType: "", lineValue: "", direction: "more", lineType: "standard", result: "pending" };
+}
+
 function NewEntryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -450,7 +464,6 @@ function NewEntryModal({ open, onClose }: { open: boolean; onClose: () => void }
   const [form, setForm] = useState({
     entryDate: new Date().toISOString().split("T")[0],
     entryType: "power",
-    pickCount: "3",
     stake: "25",
     potentialPayout: "",
     actualPayout: "",
@@ -458,13 +471,46 @@ function NewEntryModal({ open, onClose }: { open: boolean; onClose: () => void }
     emotionalState: "",
     notes: "",
   });
+  const [legs, setLegs] = useState<LegDraft[]>([blankLeg(), blankLeg(), blankLeg()]);
 
   function set(field: string, val: string) {
     setForm(f => ({ ...f, [field]: val }));
   }
+  function setLeg(i: number, patch: Partial<LegDraft>) {
+    setLegs(ls => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  }
+  function addLeg() {
+    setLegs(ls => (ls.length >= 6 ? ls : [...ls, blankLeg()]));
+  }
+  function removeLeg(i: number) {
+    setLegs(ls => (ls.length <= 1 ? ls : ls.filter((_, idx) => idx !== i)));
+  }
 
   async function handleSave() {
     const decided = form.result !== "pending";
+
+    // Build the legs the user typed by hand. A leg counts as "filled" once it
+    // has a player and a line; blank trailing rows are ignored so the user can
+    // leave spares without breaking the save.
+    const filledLegs = legs.filter(l => l.playerName.trim() && l.lineValue.trim());
+    if (filledLegs.length < 2) {
+      toast({ title: "Add at least 2 legs", description: "Each leg needs a player and a line value.", variant: "destructive" });
+      return;
+    }
+    if (filledLegs.length > 6) {
+      toast({ title: "Too many legs", description: "PrizePicks slips are 2–6 picks.", variant: "destructive" });
+      return;
+    }
+    const badLine = filledLegs.find(l => Number.isNaN(parseFloat(l.lineValue)));
+    if (badLine) {
+      toast({ title: "Invalid line value", description: `Check the line for ${badLine.playerName || "a leg"}.`, variant: "destructive" });
+      return;
+    }
+    const missingStat = filledLegs.find(l => !l.statType.trim());
+    if (missingStat) {
+      toast({ title: "Add a stat for every leg", description: `${missingStat.playerName || "A leg"} is missing its stat type.`, variant: "destructive" });
+      return;
+    }
 
     // Partial entries settle to a specific payout — require it explicitly so we
     // never silently record a partial win as a full loss ($0).
@@ -473,18 +519,29 @@ function NewEntryModal({ open, onClose }: { open: boolean; onClose: () => void }
       return;
     }
 
-    // Phase 1: create the entry.
+    const picks: EntryPickInput[] = filledLegs.map(l => ({
+      playerId:   null,
+      playerName: l.playerName.trim(),
+      statType:   l.statType.trim(),
+      direction:  l.direction,
+      lineValue:  parseFloat(l.lineValue),
+      lineType:   l.lineType,
+      result:     l.result,
+    }));
+
+    // Phase 1: create the entry + all legs atomically (server transaction).
     let created: Awaited<ReturnType<typeof mutateAsync>>;
     try {
       created = await mutateAsync({
         data: {
           entryDate: form.entryDate,
           entryType: form.entryType as any,
-          pickCount: parseInt(form.pickCount),
+          pickCount: picks.length,
           stake: parseFloat(form.stake),
           potentialPayout: form.potentialPayout ? parseFloat(form.potentialPayout) : null,
           emotionalState: form.emotionalState || null,
           notes: form.notes || null,
+          picks,
         },
       });
     } catch {
@@ -523,13 +580,14 @@ function NewEntryModal({ open, onClose }: { open: boolean; onClose: () => void }
 
     await qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
     const resultNote = decided ? ` (${form.result.toUpperCase()})` : "";
-    toast({ title: "Entry logged", description: `${form.pickCount}-pick ${form.entryType}${resultNote} saved to journal.` });
+    toast({ title: "Entry logged", description: `${picks.length}-pick ${form.entryType}${resultNote} saved to journal.` });
+    setLegs([blankLeg(), blankLeg(), blankLeg()]);
     onClose();
   }
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="bg-slate-900 border-slate-800 text-foreground max-w-lg">
+      <DialogContent className="bg-slate-900 border-slate-800 text-foreground max-w-2xl max-h-[88vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-mono text-base">Log New Entry</DialogTitle>
         </DialogHeader>
@@ -552,7 +610,7 @@ function NewEntryModal({ open, onClose }: { open: boolean; onClose: () => void }
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] font-mono text-muted-foreground uppercase block mb-1">Type</label>
               <Select value={form.entryType} onValueChange={v => set("entryType", v)}>
@@ -564,20 +622,56 @@ function NewEntryModal({ open, onClose }: { open: boolean; onClose: () => void }
               </Select>
             </div>
             <div>
-              <label className="text-[10px] font-mono text-muted-foreground uppercase block mb-1">Picks</label>
-              <Select value={form.pickCount} onValueChange={v => set("pickCount", v)}>
-                <SelectTrigger className="bg-slate-950 border-slate-800 font-mono text-sm h-8"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {["2","3","4","5","6"].map(n => (
-                    <SelectItem key={n} value={n} className="font-mono">{n}-pick</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
               <label className="text-[10px] font-mono text-muted-foreground uppercase block mb-1">Stake ($)</label>
               <Input value={form.stake} onChange={e => set("stake", e.target.value)} className="bg-slate-950 border-slate-800 font-mono text-sm h-8" />
             </div>
+          </div>
+
+          {/* Hand-entered legs — type each pick exactly as it appears on your slip */}
+          <div className="border border-slate-800 rounded-md p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-mono text-muted-foreground uppercase">Picks ({legs.filter(l => l.playerName.trim() && l.lineValue.trim()).length})</label>
+              <Button type="button" variant="outline" onClick={addLeg} disabled={legs.length >= 6}
+                className="font-mono text-[10px] border-slate-700 h-6 px-2">+ Add Leg</Button>
+            </div>
+            <div className="grid grid-cols-[1fr_1fr_auto_70px_auto_auto] gap-1.5 items-center text-[9px] font-mono text-muted-foreground uppercase px-0.5">
+              <span>Player</span>
+              <span>Stat</span>
+              <span>O/U</span>
+              <span>Line</span>
+              <span>Result</span>
+              <span />
+            </div>
+            {legs.map((leg, i) => (
+              <div key={i} className="grid grid-cols-[1fr_1fr_auto_70px_auto_auto] gap-1.5 items-center">
+                <Input value={leg.playerName} onChange={e => setLeg(i, { playerName: e.target.value })}
+                  placeholder="Player" className="bg-slate-950 border-slate-800 font-mono text-xs h-8 px-2" />
+                <Input value={leg.statType} onChange={e => setLeg(i, { statType: e.target.value })}
+                  placeholder="Points" className="bg-slate-950 border-slate-800 font-mono text-xs h-8 px-2" />
+                <Select value={leg.direction} onValueChange={v => setLeg(i, { direction: v as LegDraft["direction"] })}>
+                  <SelectTrigger className="bg-slate-950 border-slate-800 font-mono text-xs h-8 w-[68px] px-2"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="more" className="font-mono text-xs">More</SelectItem>
+                    <SelectItem value="less" className="font-mono text-xs">Less</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input value={leg.lineValue} onChange={e => setLeg(i, { lineValue: e.target.value })}
+                  placeholder="0.5" inputMode="decimal" className="bg-slate-950 border-slate-800 font-mono text-xs h-8 px-2" />
+                <Select value={leg.result} onValueChange={v => setLeg(i, { result: v as LegDraft["result"] })}>
+                  <SelectTrigger className="bg-slate-950 border-slate-800 font-mono text-xs h-8 w-[88px] px-2"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["pending","hit","miss","dnp"].map(r => (
+                      <SelectItem key={r} value={r} className="font-mono text-xs uppercase">{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" variant="ghost" onClick={() => removeLeg(i)} disabled={legs.length <= 1}
+                  className="font-mono text-xs h-8 w-8 p-0 text-muted-foreground hover:text-rose-400">×</Button>
+              </div>
+            ))}
+            <p className="text-[9px] font-mono text-muted-foreground/70 pt-0.5">
+              2–6 legs. Leave Result on PENDING now and grade them later, or fill them in if the slate already settled.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

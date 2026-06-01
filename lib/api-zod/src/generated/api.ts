@@ -801,12 +801,14 @@ export const CreateEntryBody = zod.object({
   "submittedAt": zod.string().nullish(),
   "picks": zod.array(zod.object({
   "ppLineId": zod.number().nullish(),
-  "playerId": zod.number(),
+  "playerId": zod.number().nullish(),
+  "playerName": zod.string().nullish(),
   "gameId": zod.number().nullish(),
   "statType": zod.string(),
   "direction": zod.string(),
   "lineValue": zod.number(),
   "lineType": zod.string(),
+  "result": zod.string().optional(),
   "yourProjection": zod.number().nullish(),
   "projectionGap": zod.number().nullish()
 })).optional().describe('Optional legs persisted atomically with the entry in a single transaction.')
@@ -840,7 +842,7 @@ export const GetEntryResponse = zod.object({
   "id": zod.number(),
   "entryId": zod.number(),
   "ppLineId": zod.number().nullish(),
-  "playerId": zod.number(),
+  "playerId": zod.number().nullish(),
   "playerName": zod.string().nullish(),
   "gameId": zod.number().nullish(),
   "statType": zod.string(),
@@ -909,7 +911,7 @@ export const ListEntryPicksResponseItem = zod.object({
   "id": zod.number(),
   "entryId": zod.number(),
   "ppLineId": zod.number().nullish(),
-  "playerId": zod.number(),
+  "playerId": zod.number().nullish(),
   "playerName": zod.string().nullish(),
   "gameId": zod.number().nullish(),
   "statType": zod.string(),
@@ -935,12 +937,14 @@ export const AddEntryPickParams = zod.object({
 
 export const AddEntryPickBody = zod.object({
   "ppLineId": zod.number().nullish(),
-  "playerId": zod.number(),
+  "playerId": zod.number().nullish(),
+  "playerName": zod.string().nullish(),
   "gameId": zod.number().nullish(),
   "statType": zod.string(),
   "direction": zod.string(),
   "lineValue": zod.number(),
   "lineType": zod.string(),
+  "result": zod.string().optional(),
   "yourProjection": zod.number().nullish(),
   "projectionGap": zod.number().nullish()
 })
@@ -964,7 +968,7 @@ export const UpdateEntryPickResponse = zod.object({
   "id": zod.number(),
   "entryId": zod.number(),
   "ppLineId": zod.number().nullish(),
-  "playerId": zod.number(),
+  "playerId": zod.number().nullish(),
   "playerName": zod.string().nullish(),
   "gameId": zod.number().nullish(),
   "statType": zod.string(),

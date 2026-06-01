@@ -1770,7 +1770,7 @@ components:
         id: { type: integer }
         entryId: { type: integer }
         ppLineId: { type: ["integer", "null"] }
-        playerId: { type: integer }
+        playerId: { type: ["integer", "null"] }
         playerName: { type: ["string", "null"] }
         gameId: { type: ["integer", "null"] }
         statType: { type: string }
@@ -1783,21 +1783,23 @@ components:
         closingLine: { type: ["number", "null"] }
         clv: { type: ["number", "null"] }
         createdAt: { type: string, format: date-time }
-      required: [id, entryId, playerId, statType, direction, lineValue, lineType, result, createdAt]
+      required: [id, entryId, statType, direction, lineValue, lineType, result, createdAt]
 
     EntryPickInput:
       type: object
       properties:
         ppLineId: { type: ["integer", "null"] }
-        playerId: { type: integer }
+        playerId: { type: ["integer", "null"] }
+        playerName: { type: ["string", "null"] }
         gameId: { type: ["integer", "null"] }
         statType: { type: string }
         direction: { type: string }
         lineValue: { type: number }
         lineType: { type: string }
+        result: { type: string }
         yourProjection: { type: ["number", "null"] }
         projectionGap: { type: ["number", "null"] }
-      required: [playerId, statType, direction, lineValue, lineType]
+      required: [statType, direction, lineValue, lineType]
 
     EntryPickUpdate:
       type: object

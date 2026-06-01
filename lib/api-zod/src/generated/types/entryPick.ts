@@ -11,7 +11,8 @@ export interface EntryPick {
   entryId: number;
   /** @nullable */
   ppLineId?: number | null;
-  playerId: number;
+  /** @nullable */
+  playerId?: number | null;
   /** @nullable */
   playerName?: string | null;
   /** @nullable */
