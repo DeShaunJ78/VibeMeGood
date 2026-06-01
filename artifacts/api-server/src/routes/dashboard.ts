@@ -25,7 +25,7 @@ router.get("/dashboard/summary", async (req, res) => {
           eq(ppLinesTable.isActive, true),
           or(
             isNull(ppLinesTable.lastSyncedAt),
-            gte(ppLinesTable.lastSyncedAt, new Date(Date.now() - 12 * 60 * 60 * 1000)),
+            gte(ppLinesTable.lastSyncedAt, new Date(Date.now() - 72 * 60 * 60 * 1000)),
           ),
         )),
         db.select({ count: sql<number>`count(*)` }).from(watchlistItemsTable),
@@ -189,22 +189,23 @@ router.get("/dashboard/summary", async (req, res) => {
     const topProjProps = activeLines
       .filter(l => !l.pickCategory || l.pickCategory === "player")
       .map(line => {
+        // Skip stale seed lines (lastSyncedAt IS NULL = never actually synced).
+        // Real slate lines always receive a lastSyncedAt timestamp on sync.
+        if (!line.lastSyncedAt) return null;
         const proj = projLookup.get(`${line.playerId}:${line.statType}`);
         if (!proj?.pOver) return null;
         const player = playerMap[line.playerId];
         const teamId = player?.teamId ?? null;
+        // Opponent is populated when a game record exists for today; optional.
         const game = teamId ? gamesByTeam[teamId] : null;
-        // Only surface picks whose team actually plays in the current slate
-        // (today's games). This keeps Top Picks tied to what's live tonight
-        // instead of stale off-season lines that linger as active.
-        if (!game) return null;
         const score = scoreByLineId[line.id];
-        // "Top Picks" must be actionable — drop gated and NO-PLAY props so the
-        // section isn't a wall of picks the model is telling you to avoid.
+        // Drop gated and NO-PLAY props — Top Picks must be actionable.
         if (proj.noPlayReason || score?.actionTag === "NO-PLAY") return null;
         const pOverPct = Math.round(parseFloat(proj.pOver.toString()) * 10) / 10;
         const teamAbbr = teamId ? (teamMap[teamId]?.abbreviation ?? null) : null;
-        const opponentTeamId = game.homeTeamId === teamId ? game.awayTeamId : game.homeTeamId;
+        const opponentTeamId = game
+          ? (game.homeTeamId === teamId ? game.awayTeamId : game.homeTeamId)
+          : null;
         const opponentAbbr = opponentTeamId ? (teamMap[opponentTeamId]?.abbreviation ?? null) : null;
         return {
           ppLineId: line.id,
