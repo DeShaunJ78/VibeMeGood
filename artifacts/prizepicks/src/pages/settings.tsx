@@ -355,27 +355,31 @@ export default function Settings() {
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            {/* Browser sync callout — prominent when PP is in error state */}
-            <div className={`p-3 rounded border ${
-              browserSyncState === "done"
-                ? "border-emerald-500/40 bg-emerald-500/5"
-                : browserSyncState === "error"
-                  ? "border-red-500/40 bg-red-500/5"
-                  : "border-amber-500/30 bg-amber-500/5"
-            }`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-mono text-xs font-bold text-amber-400 mb-0.5">
-                    🏠 Browser Sync — Bypasses Server IP Block
-                  </p>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
-                    {browserSyncState === "fetching"  && "Fetching data from PrizePicks via your browser…"}
-                    {browserSyncState === "importing" && "Sending to server for processing…"}
-                    {browserSyncState === "done"      && "✓ PrizePicks lines updated successfully."}
-                    {browserSyncState === "error"     && "Failed — see toast for details."}
-                    {browserSyncState === "idle"      && "Your browser uses your home IP. Click to fetch PP data directly and send it to the server — no proxy needed."}
-                  </p>
-                </div>
+            {/* PrizePicks IP block callout */}
+            <div className="p-3 rounded border border-rose-500/30 bg-rose-500/5 space-y-3">
+              <div>
+                <p className="font-mono text-xs font-bold text-rose-400 mb-1">
+                  ⚠ PrizePicks — Datacenter IP Block
+                </p>
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  PrizePicks blocks cloud datacenter IPs (Cloudflare WAF). Automated server syncs will always fail without a residential proxy.
+                  Set the <span className="font-mono text-amber-300">PP_PROXY_URL</span> secret to a residential proxy URL
+                  (<span className="font-mono text-slate-400">http://user:pass@host:port</span>) to enable automatic syncs.
+                  Until then, use Browser Sync below.
+                </p>
+              </div>
+              <div className={`flex items-center justify-between p-2 rounded border ${
+                browserSyncState === "done"  ? "border-emerald-500/40 bg-emerald-500/5" :
+                browserSyncState === "error" ? "border-red-500/40 bg-red-500/5" :
+                "border-slate-700 bg-slate-950"
+              }`}>
+                <span className="font-mono text-xs text-slate-300">
+                  {browserSyncState === "fetching"  ? "Fetching from PrizePicks via your browser…" :
+                   browserSyncState === "importing" ? "Sending payload to server…" :
+                   browserSyncState === "done"      ? "✓ Lines updated successfully" :
+                   browserSyncState === "error"     ? "Failed — see toast" :
+                   "Browser Sync — uses your home IP, bypasses block"}
+                </span>
                 <Button
                   size="sm"
                   onClick={browserSyncPP}
@@ -385,10 +389,9 @@ export default function Settings() {
                   <RefreshCw className={`w-3 h-3 mr-1 ${
                     browserSyncState === "fetching" || browserSyncState === "importing" ? "animate-spin" : ""
                   }`} />
-                  {browserSyncState === "fetching"  ? "Fetching…"
-                   : browserSyncState === "importing" ? "Importing…"
-                   : browserSyncState === "done"      ? "Done ✓"
-                   : "Sync PP Now"}
+                  {browserSyncState === "fetching"  ? "Fetching…"  :
+                   browserSyncState === "importing" ? "Importing…" :
+                   browserSyncState === "done"      ? "Done ✓"     : "Sync PP Now"}
                 </Button>
               </div>
             </div>

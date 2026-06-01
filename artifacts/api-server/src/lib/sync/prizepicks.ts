@@ -1,3 +1,4 @@
+import { ProxyAgent } from "undici";
 import { db } from "@workspace/db";
 import {
   ppLinesTable, ppLineHistoryTable, playersTable, teamsTable, gamesTable,
@@ -16,12 +17,33 @@ const PER_PAGE = 25000;
 export const PP_PROJECTIONS_URL =
   `${PP_BASE}/projections?per_page=${PER_PAGE}&single_stat=true&include=new_player,league`;
 
+// If PP_PROXY_URL is set (e.g. http://user:pass@host:port), all PP fetches route
+// through it. A residential proxy is required when running on cloud infrastructure
+// because PrizePicks blocks datacenter IPs at the network level.
+const proxyAgent = process.env.PP_PROXY_URL
+  ? new ProxyAgent(process.env.PP_PROXY_URL)
+  : undefined;
+
+if (proxyAgent) {
+  logger.info("PP proxy enabled via PP_PROXY_URL");
+} else {
+  logger.warn("PP_PROXY_URL not set — PrizePicks syncs will fail on cloud IPs");
+}
+
 async function fetchPP(url: string): Promise<Response> {
-  const delays = [0, 1000, 3000];
+  const delays = [0, 2000, 5000];
   for (let i = 0; i < delays.length; i++) {
     if (delays[i] > 0) await new Promise(r => setTimeout(r, delays[i]));
-    const res = await fetch(url, {
-      headers: { "User-Agent": "VibeMeGood/1.0", "Accept": "application/json" },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await (fetch as any)(url, {
+      dispatcher: proxyAgent,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://app.prizepicks.com/",
+        "Origin": "https://app.prizepicks.com",
+      },
     });
     if (res.status !== 429) return res;
     logger.warn({ attempt: i + 1 }, "PP API 429 — retrying");
