@@ -185,7 +185,7 @@ export default function Settings() {
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncingPreLock, setSyncingPreLock] = useState(false);
   const [syncingJob, setSyncingJob] = useState<string | null>(null);
-  const [browserSyncState, setBrowserSyncState] = useState<"idle" | "fetching" | "importing" | "done" | "error">("idle");
+  const [bookmarkletCopied, setBookmarkletCopied] = useState(false);
   const { data: userSettings } = useUserSettings();
   const updateSettings = useUpdateUserSettings();
 
@@ -226,50 +226,16 @@ export default function Settings() {
     setSyncingAll(false);
   }
 
-  async function browserSyncPP() {
-    setBrowserSyncState("fetching");
-    try {
-      // Step 1: your browser fetches PP directly using your home IP (not the server's cloud IP)
-      const ppRes = await fetch(
-        "https://api.prizepicks.com/projections?per_page=25000&single_stat=true&include=new_player,league",
-        { headers: { Accept: "application/json" } },
-      );
-      if (!ppRes.ok) {
-        throw new Error(`PrizePicks returned ${ppRes.status} — try again or check your connection`);
-      }
-      const ppData = await ppRes.json();
+  // Bookmarklet that runs inside app.prizepicks.com (same-origin — no CORS block).
+  // The server URL is baked in at render time so it points to whichever domain is active.
+  const serverOrigin = window.location.origin;
+  const bookmarkletCode = `javascript:(async()=>{try{const r=await fetch('https://api.prizepicks.com/projections?per_page=25000&single_stat=true&include=new_player,league');const d=await r.json();const s=await fetch('${serverOrigin}/api/sync/pp-lines-import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:d.data,included:d.included})});const j=await s.json();alert('\u2713 '+j.recordsProcessed+' lines synced!');}catch(e){alert('\u274c Sync failed: '+e.message);}})();`;
 
-      // Step 2: hand the raw payload to the server for processing
-      setBrowserSyncState("importing");
-      const importRes = await fetch("/api/sync/pp-lines-import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: ppData.data, included: ppData.included }),
-      });
-      if (!importRes.ok) {
-        const err = await importRes.json().catch(() => ({})) as { error?: string };
-        throw new Error(err.error ?? "Import failed");
-      }
-      const result = await importRes.json() as { recordsProcessed: number };
-      setBrowserSyncState("done");
-      toast({
-        title: "PrizePicks synced",
-        description: `${result.recordsProcessed} lines imported from your browser.`,
-      });
-      setTimeout(() => {
-        setBrowserSyncState("idle");
-        qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
-        refetch();
-      }, 3000);
-    } catch (e) {
-      setBrowserSyncState("error");
-      toast({
-        title: "Browser sync failed",
-        description: e instanceof Error ? e.message : "Unknown error",
-        variant: "destructive",
-      });
-      setTimeout(() => setBrowserSyncState("idle"), 4000);
-    }
+  function copyBookmarklet() {
+    navigator.clipboard.writeText(bookmarkletCode).then(() => {
+      setBookmarkletCopied(true);
+      setTimeout(() => setBookmarkletCopied(false), 3000);
+    });
   }
 
   async function preLockSync() {
@@ -355,45 +321,46 @@ export default function Settings() {
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            {/* PrizePicks IP block callout */}
-            <div className="p-3 rounded border border-rose-500/30 bg-rose-500/5 space-y-3">
+            {/* PrizePicks bookmarklet sync */}
+            <div className="p-3 rounded border border-amber-500/30 bg-amber-500/5 space-y-3">
               <div>
-                <p className="font-mono text-xs font-bold text-rose-400 mb-1">
-                  ⚠ PrizePicks — Datacenter IP Block
+                <p className="font-mono text-xs font-bold text-amber-400 mb-1">
+                  🔖 PrizePicks Sync — Bookmarklet Method
                 </p>
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  PrizePicks blocks cloud datacenter IPs (Cloudflare WAF). Automated server syncs will always fail without a residential proxy.
-                  Set the <span className="font-mono text-amber-300">PP_PROXY_URL</span> secret to a residential proxy URL
-                  (<span className="font-mono text-slate-400">http://user:pass@host:port</span>) to enable automatic syncs.
-                  Until then, use Browser Sync below.
+                  PP blocks direct fetches from this app (CORS). Instead: save the bookmarklet below, go to{" "}
+                  <span className="font-mono text-slate-300">app.prizepicks.com</span>, tap it — done.
+                  It runs inside PP's own tab so there's no block.
                 </p>
               </div>
-              <div className={`flex items-center justify-between p-2 rounded border ${
-                browserSyncState === "done"  ? "border-emerald-500/40 bg-emerald-500/5" :
-                browserSyncState === "error" ? "border-red-500/40 bg-red-500/5" :
-                "border-slate-700 bg-slate-950"
-              }`}>
-                <span className="font-mono text-xs text-slate-300">
-                  {browserSyncState === "fetching"  ? "Fetching from PrizePicks via your browser…" :
-                   browserSyncState === "importing" ? "Sending payload to server…" :
-                   browserSyncState === "done"      ? "✓ Lines updated successfully" :
-                   browserSyncState === "error"     ? "Failed — see toast" :
-                   "Browser Sync — uses your home IP, bypasses block"}
-                </span>
+
+              {/* Draggable bookmarklet link (desktop) */}
+              <div className="flex items-center gap-2">
+                <a
+                  href={bookmarkletCode}
+                  onClick={e => e.preventDefault()}
+                  draggable
+                  className="flex-1 flex items-center gap-2 px-3 py-2 rounded border border-amber-500/40 bg-slate-950 text-amber-300 font-mono text-xs hover:border-amber-400 cursor-grab active:cursor-grabbing select-none"
+                  title="Drag this to your bookmarks bar"
+                >
+                  🔖 <span className="truncate">Sync PP Lines → {serverOrigin}</span>
+                </a>
                 <Button
                   size="sm"
-                  onClick={browserSyncPP}
-                  disabled={browserSyncState !== "idle"}
-                  className="shrink-0 h-7 font-mono text-xs bg-amber-600 hover:bg-amber-500 text-white border-0"
+                  variant="outline"
+                  onClick={copyBookmarklet}
+                  className="shrink-0 h-8 font-mono text-xs border-slate-700 bg-slate-800 hover:bg-slate-700"
                 >
-                  <RefreshCw className={`w-3 h-3 mr-1 ${
-                    browserSyncState === "fetching" || browserSyncState === "importing" ? "animate-spin" : ""
-                  }`} />
-                  {browserSyncState === "fetching"  ? "Fetching…"  :
-                   browserSyncState === "importing" ? "Importing…" :
-                   browserSyncState === "done"      ? "Done ✓"     : "Sync PP Now"}
+                  {bookmarkletCopied ? "Copied ✓" : "Copy URL"}
                 </Button>
               </div>
+
+              {/* Step-by-step */}
+              <ol className="text-[10px] text-muted-foreground space-y-1 list-none">
+                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">1.</span><span><strong>Desktop:</strong> drag the button above to your bookmarks bar. <strong>Mobile:</strong> tap "Copy URL", create a new bookmark, paste as the URL.</span></li>
+                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">2.</span><span>Go to <span className="font-mono text-slate-300">app.prizepicks.com</span> in any tab.</span></li>
+                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">3.</span><span>Click / tap the bookmark. An alert will confirm how many lines were synced.</span></li>
+              </ol>
             </div>
 
             {SYNC_JOBS.map(job => (
