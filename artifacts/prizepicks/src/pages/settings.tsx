@@ -384,26 +384,84 @@ export default function Settings() {
             <CardTitle className="flex items-center gap-2 text-base">
               <Database className="w-4 h-4 text-primary" /> Data Providers
             </CardTitle>
-            <CardDescription>Status of upstream API connections</CardDescription>
+            <CardDescription>
+              Live sync status — last 10 runs per provider
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="space-y-2">
-                {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 bg-slate-800" />)}
+                {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 bg-slate-800" />)}
               </div>
             ) : data?.providers && data.providers.length > 0 ? (
               <div className="space-y-2">
-                {data.providers.map((p: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span className="font-bold font-mono text-sm">{p.name ?? "Unknown Provider"}</span>
+                {data.providers.map((p: any, i: number) => {
+                  const isError   = p.status === "error";
+                  const isNever   = p.status === "never_run";
+                  const isRunning = p.status === "running";
+                  const rateOk    = p.recentSuccessRate === null || p.recentSuccessRate >= 0.5;
+                  const degraded  = isError || !rateOk;
+
+                  return (
+                    <div
+                      key={i}
+                      className={`p-3 bg-slate-950 border rounded ${
+                        degraded ? "border-red-500/40" : isRunning ? "border-amber-500/40" : "border-slate-800"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {degraded
+                            ? <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                            : isRunning
+                              ? <RefreshCw className="w-4 h-4 text-amber-400 shrink-0 animate-spin" />
+                              : isNever
+                                ? <AlertCircle className="w-4 h-4 text-slate-500 shrink-0" />
+                                : <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          }
+                          <div>
+                            <span className="font-bold font-mono text-sm block">
+                              {p.label ?? p.name}
+                            </span>
+                            {p.lastSuccessAt && (
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                Last OK: {formatDistanceToNow(new Date(p.lastSuccessAt), { addSuffix: true })}
+                                {p.recordsLastSync != null && ` · ${p.recordsLastSync} records`}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {p.recentSuccessRate !== null && (
+                            <span className={`text-[10px] font-mono ${
+                              p.recentSuccessRate >= 0.8 ? "text-emerald-400"
+                              : p.recentSuccessRate >= 0.5 ? "text-amber-400"
+                              : "text-red-400"
+                            }`}>
+                              {Math.round(p.recentSuccessRate * 100)}%
+                            </span>
+                          )}
+                          <Badge
+                            variant="outline"
+                            className={
+                              degraded  ? "text-red-400 border-red-400/30 font-mono text-[10px]"
+                              : isRunning ? "text-amber-400 border-amber-400/30 font-mono text-[10px]"
+                              : isNever  ? "text-slate-500 border-slate-600 font-mono text-[10px]"
+                              : "text-emerald-400 border-emerald-400/30 font-mono text-[10px]"
+                            }
+                          >
+                            {isNever ? "NEVER RUN" : p.status?.toUpperCase()}
+                          </Badge>
+                        </div>
+                      </div>
+                      {degraded && p.lastError && (
+                        <p className="text-[10px] text-red-400/80 font-mono mt-1.5 truncate">
+                          {p.lastError}
+                        </p>
+                      )}
                     </div>
-                    <Badge variant="outline" className="text-emerald-400 border-emerald-400/30 font-mono text-[10px]">
-                      HEALTHY
-                    </Badge>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="text-sm text-muted-foreground font-mono">No providers listed.</div>
@@ -421,6 +479,33 @@ export default function Settings() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded">
+              <span className="font-mono text-sm text-muted-foreground">System Health</span>
+              <Badge
+                variant="outline"
+                className={data?.systemHealthy
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/40 font-mono"
+                  : "bg-red-500/10 text-red-400 border-red-500/40 font-mono"
+                }
+              >
+                {data?.systemHealthy ? "HEALTHY" : "DEGRADED"}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded">
+              <span className="font-mono text-sm text-muted-foreground">Board Freshness</span>
+              <span className={`font-mono text-sm font-bold ${
+                data?.boardAgeHours == null ? "text-slate-500"
+                : data.boardAgeHours < 1 ? "text-emerald-400"
+                : data.boardAgeHours < 3 ? "text-amber-400"
+                : "text-red-400"
+              }`}>
+                {data?.boardAgeHours != null
+                  ? `${data.boardAgeHours}h ago`
+                  : data?.boardFreshnessAt
+                    ? formatDistanceToNow(new Date(data.boardFreshnessAt), { addSuffix: true })
+                    : "—"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded">
               <span className="font-mono text-sm text-muted-foreground">Data Mode</span>
               <Badge
                 variant="outline"
@@ -431,10 +516,6 @@ export default function Settings() {
               >
                 {data?.mode?.toUpperCase() ?? "UNKNOWN"}
               </Badge>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded">
-              <span className="font-mono text-sm text-muted-foreground">Data Providers</span>
-              <span className="font-mono text-sm font-bold text-primary">{data?.providers?.length ?? 0}</span>
             </div>
             <div className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded">
               <span className="font-mono text-sm text-muted-foreground">Sync Log Entries</span>

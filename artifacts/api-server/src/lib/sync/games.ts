@@ -39,6 +39,23 @@ async function findOrCreateTeam(
   return team;
 }
 
+async function fetchSchedule(url: string, retries = 2): Promise<Response> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      if (attempt > 0) await sleep(attempt * 2_000);
+      const res = await fetch(url, {
+        headers: { "User-Agent": "VibeMeGood/1.0" },
+        signal: AbortSignal.timeout(15_000),
+      });
+      return res;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
+
 async function syncSportForDate(
   sport: string,
   baseUrl: string,
@@ -46,10 +63,7 @@ async function syncSportForDate(
 ): Promise<number> {
   const url = dateStr ? `${baseUrl}?dates=${dateStr}` : baseUrl;
   try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "VibeMeGood/1.0" },
-      signal: AbortSignal.timeout(15_000),
-    });
+    const res = await fetchSchedule(url);
     if (!res.ok) return 0;
     const data = await res.json() as any;
     const events: any[] = data?.events ?? [];

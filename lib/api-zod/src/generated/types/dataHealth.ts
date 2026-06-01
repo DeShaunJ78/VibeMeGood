@@ -11,4 +11,7 @@ export interface DataHealth {
   providers: unknown[];
   lastPullLogs: DataPullLog[];
   mode: string;
+  systemHealthy?: boolean | null;
+  boardFreshnessAt?: Date | null;
+  boardAgeHours?: number | null;
 }

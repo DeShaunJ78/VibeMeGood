@@ -81,7 +81,12 @@ async function syncInjuriesImpl(): Promise<number> {
 }
 
 async function syncScoresImpl(): Promise<number> {
-  return 0;
+  // Scores are derived from game logs (backfillHistoricalStats) and prop score
+  // recalculation (recalcPropScores). This endpoint triggers both.
+  const { backfillHistoricalStats } = await import("../lib/sync/historical-stats");
+  const result = await backfillHistoricalStats({ nba: true, mlb: true, nhl: true, nfl: false });
+  await recalcPropScores();
+  return result.total;
 }
 
 router.post("/sync/historical-stats", async (req, res) => {

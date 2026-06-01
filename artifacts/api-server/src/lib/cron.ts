@@ -4,7 +4,7 @@ import {
   dataPullLogsTable, alertsTable, ppLinesTable, gamesTable,
   lineMoveEventsTable, externalLinesTable, propScoresTable, syncRunsTable,
 } from "@workspace/db/schema";
-import { eq, and, lt, gte, lte } from "drizzle-orm";
+import { eq, and, lt, gte, lte, desc } from "drizzle-orm";
 import { logger } from "./logger";
 import { syncPpLines } from "./sync/prizepicks";
 import { syncExternalOdds, recalcPropScores } from "./sync/external-odds";
@@ -22,7 +22,61 @@ import { backfillHistoricalStats } from "./sync/historical-stats";
 export let preLockActive = false;
 export function isPreLockActive(): boolean { return preLockActive; }
 
+// ---------------------------------------------------------------------------
+// In-memory circuit breaker — prevents hammering a dead provider every tick.
+// ---------------------------------------------------------------------------
+interface CircuitState {
+  consecutiveFails: number;
+  backoffUntil: number;
+}
+const circuit: Record<string, CircuitState> = {};
+
+function getCircuit(provider: string): CircuitState {
+  if (!circuit[provider]) circuit[provider] = { consecutiveFails: 0, backoffUntil: 0 };
+  return circuit[provider];
+}
+
+// Thresholds: PP gets stricter backoff since 403s are long-lived blocks.
+const CIRCUIT_CONFIG: Record<string, { threshold: number; backoffMs: number }> = {
+  prizepicks: { threshold: 3, backoffMs: 30 * 60 * 1000 },  // 3 fails → 30 min backoff
+  default:    { threshold: 5, backoffMs: 10 * 60 * 1000 },  // 5 fails → 10 min backoff
+};
+
+function circuitIsOpen(provider: string): boolean {
+  const cb = getCircuit(provider);
+  if (cb.backoffUntil > Date.now()) {
+    const remainingMin = Math.ceil((cb.backoffUntil - Date.now()) / 60_000);
+    logger.info({ provider, remainingMin }, "Circuit breaker open — skipping sync tick");
+    return true;
+  }
+  return false;
+}
+
+function recordCircuitSuccess(provider: string) {
+  const cb = getCircuit(provider);
+  cb.consecutiveFails = 0;
+  cb.backoffUntil = 0;
+}
+
+function recordCircuitFailure(provider: string) {
+  const cb = getCircuit(provider);
+  cb.consecutiveFails++;
+  const cfg = CIRCUIT_CONFIG[provider] ?? CIRCUIT_CONFIG.default;
+  if (cb.consecutiveFails >= cfg.threshold) {
+    cb.backoffUntil = Date.now() + cfg.backoffMs;
+    logger.warn(
+      { provider, consecutiveFails: cb.consecutiveFails, backoffMin: cfg.backoffMs / 60_000 },
+      "Circuit breaker tripped — backing off",
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// logPull — wraps every cron sync with logging + circuit breaker
+// ---------------------------------------------------------------------------
 async function logPull(provider: string, jobName: string, fn: () => Promise<number>) {
+  if (circuitIsOpen(provider)) return;
+
   const [log] = await db.insert(dataPullLogsTable).values({
     provider,
     jobName,
@@ -35,6 +89,7 @@ async function logPull(provider: string, jobName: string, fn: () => Promise<numb
     await db.update(dataPullLogsTable)
       .set({ status: "success", recordsProcessed, finishedAt: new Date() })
       .where(eq(dataPullLogsTable.id, log.id));
+    recordCircuitSuccess(provider);
     logger.info({ provider, jobName, recordsProcessed }, "Sync completed");
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
@@ -42,12 +97,28 @@ async function logPull(provider: string, jobName: string, fn: () => Promise<numb
     await db.update(dataPullLogsTable)
       .set({ status: "error", errorMessage, finishedAt: new Date() })
       .where(eq(dataPullLogsTable.id, log.id));
-    await db.insert(alertsTable).values({
-      type: "sync_failure",
-      severity: "warning",
-      title: `Sync Failed: ${jobName}`,
-      message: `${provider} sync failed: ${errorMessage}`,
-    });
+    recordCircuitFailure(provider);
+
+    // Only insert a sync_failure alert if we haven't already fired one for this
+    // provider in the last 30 minutes — prevents alert spam during outages.
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+    const [recentAlert] = await db
+      .select({ id: alertsTable.id })
+      .from(alertsTable)
+      .where(and(
+        eq(alertsTable.type, "sync_failure"),
+        gte(alertsTable.createdAt, thirtyMinAgo),
+      ))
+      .limit(1);
+
+    if (!recentAlert) {
+      await db.insert(alertsTable).values({
+        type: "sync_failure",
+        severity: "warning",
+        title: `Sync Failed: ${jobName}`,
+        message: `${provider} sync failed: ${errorMessage}`,
+      });
+    }
   }
 }
 
@@ -108,7 +179,8 @@ export function startCronJobs() {
     logPull("internal", "fatigue", syncFatigueData)
   );
 
-  // Alert: stale data check every hour
+  // Alert: stale data check every hour — deduplicated so it only fires once
+  // per stale window rather than every hour for the full duration of an outage.
   cron.schedule("0 * * * *", async () => {
     try {
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
@@ -118,12 +190,24 @@ export function startCronJobs() {
 
       const actuallyStale = staleLines.filter(l => l.updatedAt < twoHoursAgo);
       if (actuallyStale.length > 10) {
-        await db.insert(alertsTable).values({
-          type: "stale_data",
-          severity: "warning",
-          title: "Stale Line Data",
-          message: `${actuallyStale.length} active lines haven't been updated in over 2 hours.`,
-        });
+        // Only insert if there isn't already a stale_data alert from the last 2 hours.
+        const [existing] = await db
+          .select({ id: alertsTable.id })
+          .from(alertsTable)
+          .where(and(
+            eq(alertsTable.type, "stale_data"),
+            gte(alertsTable.createdAt, twoHoursAgo),
+          ))
+          .limit(1);
+
+        if (!existing) {
+          await db.insert(alertsTable).values({
+            type: "stale_data",
+            severity: "warning",
+            title: "Stale Line Data",
+            message: `${actuallyStale.length} active lines haven't been updated in over 2 hours. Manual sync recommended.`,
+          });
+        }
       }
     } catch (err) {
       logger.error({ err }, "Stale data check failed");
@@ -149,12 +233,8 @@ export function startCronJobs() {
       preLockActive = upcoming.length > 0;
       if (preLockActive && !wasActive) {
         logger.info("Pre-lock window detected — triggering urgent sync (lines + injuries + odds)");
+        // Pre-lock bypasses circuit breaker — these are time-critical.
         await syncPpLines();
-        // Also refresh injuries and odds so lineup decisions have fresh data.
-        // syncExternalOdds(true) bypasses the hourly cooldown for this urgent case.
-        // Route the forced odds pull through logPull so it records a success row —
-        // the FORCE_FLOOR / cadence gate reads dataPullLogs, so an unlogged force
-        // would let repeated triggers double-spend credits.
         await Promise.all([
           syncInjuries(),
           logPull("the-odds-api", "external-odds", () => syncExternalOdds(true)),

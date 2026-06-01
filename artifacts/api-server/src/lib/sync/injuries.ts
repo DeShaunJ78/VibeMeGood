@@ -12,15 +12,32 @@ const SPORT_URLS: Record<string, string> = {
   WNBA: "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/injuries",
 };
 
+// Fetch with up to `retries` retries and exponential backoff.
+// Each attempt gets its own 12s timeout so a hung connection doesn't block forever.
+async function fetchWithRetry(url: string, retries = 2): Promise<Response> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 2_000));
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" },
+        signal: AbortSignal.timeout(12_000),
+      });
+      return res;
+    } catch (e) {
+      lastErr = e;
+      logger.warn({ url, attempt, err: e }, "ESPN injury fetch attempt failed — retrying");
+    }
+  }
+  throw lastErr;
+}
+
 export async function syncInjuries(): Promise<number> {
   let processed = 0;
 
   for (const [sport, url] of Object.entries(SPORT_URLS)) {
     try {
-      const res = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" },
-        signal: AbortSignal.timeout(10_000),
-      });
+      const res = await fetchWithRetry(url);
       if (!res.ok) {
         logger.warn({ sport, status: res.status }, "ESPN injury fetch non-OK");
         continue;

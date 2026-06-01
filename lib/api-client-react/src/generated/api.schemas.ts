@@ -641,6 +641,9 @@ export interface DataHealth {
   providers: unknown[];
   lastPullLogs: DataPullLog[];
   mode: string;
+  systemHealthy?: boolean | null;
+  boardFreshnessAt?: string | null;
+  boardAgeHours?: number | null;
 }
 
 export interface SyncResult {

@@ -1962,6 +1962,9 @@ components:
         providers: { type: array, items: {} }
         lastPullLogs: { type: array, items: { $ref: "#/components/schemas/DataPullLog" } }
         mode: { type: string }
+        systemHealthy: { type: boolean, nullable: true }
+        boardFreshnessAt: { type: string, format: date-time, nullable: true }
+        boardAgeHours: { type: number, nullable: true }
       required: [providers, lastPullLogs, mode]
 
     # ─── SYNC ───────────────────────────────────────────────────────

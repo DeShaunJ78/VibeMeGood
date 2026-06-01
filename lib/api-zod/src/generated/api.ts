@@ -1328,7 +1328,10 @@ export const GetDataHealthResponse = zod.object({
   "finishedAt": zod.string().nullish(),
   "errorMessage": zod.string().nullish()
 })),
-  "mode": zod.string()
+  "mode": zod.string(),
+  "systemHealthy": zod.boolean().nullish(),
+  "boardFreshnessAt": zod.coerce.date().nullish(),
+  "boardAgeHours": zod.number().nullish()
 })
 
 
