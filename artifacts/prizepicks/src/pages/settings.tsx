@@ -240,12 +240,6 @@ export default function Settings() {
     });
   }
 
-  function copyImportUrl() {
-    navigator.clipboard.writeText(importUrl).then(() => {
-      setBookmarkletCopied(true);
-      setTimeout(() => setBookmarkletCopied(false), 3000);
-    });
-  }
 
   async function preLockSync() {
     setSyncingPreLock(true);
@@ -330,15 +324,41 @@ export default function Settings() {
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            {/* PrizePicks manual sync — tabbed: iOS Shortcut / Desktop bookmarklet */}
-            <PpSyncPanel
-              bookmarkletCode={bookmarkletCode}
-              importUrl={importUrl}
-              ppApiUrl={ppApiUrl}
-              bookmarkletCopied={bookmarkletCopied}
-              onCopyBookmarklet={copyBookmarklet}
-              onCopyImportUrl={copyImportUrl}
-            />
+            {/* PrizePicks bookmarklet sync */}
+            <div className="p-3 rounded border border-amber-500/30 bg-amber-500/5 space-y-3">
+              <p className="font-mono text-xs font-bold text-amber-400">
+                🔖 PrizePicks Sync — Bookmarklet
+              </p>
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                PP blocks fetches from this app's domain (CORS). Drag the link below to your bookmarks bar,
+                go to <span className="font-mono text-slate-300">app.prizepicks.com</span>, click it — done.
+                It runs inside PP's tab so there's no block.
+              </p>
+              <div className="flex items-center gap-2">
+                <a
+                  href={bookmarkletCode}
+                  onClick={e => e.preventDefault()}
+                  draggable
+                  className="flex-1 flex items-center gap-2 px-3 py-2 rounded border border-amber-500/40 bg-slate-950 text-amber-300 font-mono text-xs hover:border-amber-400 cursor-grab active:cursor-grabbing select-none"
+                  title="Drag to bookmarks bar, then click it on app.prizepicks.com"
+                >
+                  🔖 <span className="truncate">Sync PP Lines</span>
+                </a>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={copyBookmarklet}
+                  className="shrink-0 h-8 font-mono text-xs border-slate-700 bg-slate-800 hover:bg-slate-700"
+                >
+                  {bookmarkletCopied ? "Copied ✓" : "Copy"}
+                </Button>
+              </div>
+              <ol className="text-[10px] text-muted-foreground space-y-1 list-none">
+                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">1.</span><span>Drag the button above to your browser's bookmarks bar.</span></li>
+                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">2.</span><span>Go to <span className="font-mono text-slate-300">app.prizepicks.com</span>.</span></li>
+                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">3.</span><span>Click the bookmark — an alert will confirm the line count synced.</span></li>
+              </ol>
+            </div>
 
             {SYNC_JOBS.map(job => (
               <div
