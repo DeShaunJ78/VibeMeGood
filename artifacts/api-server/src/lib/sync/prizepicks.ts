@@ -1,4 +1,4 @@
-import { ProxyAgent } from "undici";
+import { ProxyAgent, fetch as undiciFetch } from "undici";
 import { db } from "@workspace/db";
 import {
   ppLinesTable, ppLineHistoryTable, playersTable, teamsTable, gamesTable,
@@ -20,11 +20,24 @@ export const PP_PROJECTIONS_URL =
 // PP_PROXY_URL accepts one URL or a comma-separated list.
 // A random agent is picked each call so load is spread across all IPs and
 // a flagged IP doesn't take down the whole sync.
+// Accepts two formats per entry (comma-separated list of either):
+//   Standard URL:  http://user:pass@host:port
+//   Webshare list: host:port:user:pass  (auto-converted)
+function normalizeProxyUrl(raw: string): string {
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+  const parts = raw.split(":");
+  if (parts.length === 4) {
+    const [host, port, user, pass] = parts;
+    return `http://${user}:${pass}@${host}:${port}`;
+  }
+  throw new Error(`Unrecognized proxy format: ${raw}`);
+}
+
 const proxyAgents: ProxyAgent[] = (process.env.PP_PROXY_URL ?? "")
   .split(",")
   .map(u => u.trim())
   .filter(Boolean)
-  .map(u => new ProxyAgent(u));
+  .map(u => new ProxyAgent(normalizeProxyUrl(u)));
 
 if (proxyAgents.length > 0) {
   logger.info({ count: proxyAgents.length }, "PP proxy pool ready");
@@ -41,8 +54,7 @@ async function fetchPP(url: string): Promise<Response> {
   const delays = [0, 2000, 5000];
   for (let i = 0; i < delays.length; i++) {
     if (delays[i] > 0) await new Promise(r => setTimeout(r, delays[i]));
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = await (fetch as any)(url, {
+    const res = await undiciFetch(url, {
       dispatcher: pickAgent(),
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -274,7 +286,11 @@ export async function processPpData(data: { data: any[]; included: any[] }): Pro
 // ── Server-side sync (cron + manual "PrizePicks Lines" button) ───────────────
 export async function syncPpLines(): Promise<number> {
   const res = await fetchPP(PP_PROJECTIONS_URL);
-  if (!res.ok) throw new Error(`PrizePicks API error: ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "(unreadable)");
+    logger.error({ status: res.status, body: body.slice(0, 500) }, "PrizePicks fetch failed");
+    throw new Error(`PrizePicks API error: ${res.status}`);
+  }
   const data = await res.json() as { data: any[]; included: any[] };
   return processPpData(data);
 }
