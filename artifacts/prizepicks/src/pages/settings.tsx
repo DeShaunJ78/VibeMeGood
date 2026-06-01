@@ -185,7 +185,8 @@ export default function Settings() {
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncingPreLock, setSyncingPreLock] = useState(false);
   const [syncingJob, setSyncingJob] = useState<string | null>(null);
-  const [bookmarkletCopied, setBookmarkletCopied] = useState(false);
+  const [ppPaste, setPpPaste] = useState("");
+  const [ppImporting, setPpImporting] = useState<"idle" | "importing" | "done" | "error">("idle");
   const { data: userSettings } = useUserSettings();
   const updateSettings = useUpdateUserSettings();
 
@@ -230,15 +231,45 @@ export default function Settings() {
   const importUrl = `${serverOrigin}/api/sync/pp-lines-import`;
   const ppApiUrl = "https://api.prizepicks.com/projections?per_page=25000&single_stat=true&include=new_player,league";
 
-  // Desktop bookmarklet — runs on app.prizepicks.com. Reads response as text first so a
-  // non-JSON response (login redirect / bot-block page) is reported instead of crashing.
-  const bookmarkletCode = `javascript:(async()=>{try{const r=await fetch('${ppApiUrl}',{credentials:'include',headers:{'Accept':'application/json'}});const t=await r.text();let d;try{d=JSON.parse(t);}catch(_){alert('\u274c PP returned status '+r.status+' (not JSON).\\nURL: '+r.url+'\\n\\nFirst 300 chars:\\n'+t.slice(0,300));return;}const s=await fetch('${importUrl}',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:d.data,included:d.included})});const j=await s.json();alert('\u2713 '+j.recordsProcessed+' lines synced!');}catch(e){alert('\u274c Sync failed: '+e.message);}})();`;
-
-  function copyBookmarklet() {
-    navigator.clipboard.writeText(bookmarkletCode).then(() => {
-      setBookmarkletCopied(true);
-      setTimeout(() => setBookmarkletCopied(false), 3000);
-    });
+  async function importPpPaste() {
+    setPpImporting("importing");
+    try {
+      let parsed: { data?: unknown[]; included?: unknown[] };
+      try {
+        parsed = JSON.parse(ppPaste);
+      } catch {
+        throw new Error("That isn't valid JSON. Make sure you copied the entire page (Ctrl+A then Ctrl+C).");
+      }
+      if (!Array.isArray(parsed?.data) || !Array.isArray(parsed?.included)) {
+        throw new Error("This doesn't look like the PrizePicks feed — it should contain 'data' and 'included' arrays. You may have copied a login or block page.");
+      }
+      const res = await fetch(importUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: parsed.data, included: parsed.included }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `Server returned ${res.status}`);
+      }
+      const result = await res.json() as { recordsProcessed: number };
+      setPpImporting("done");
+      setPpPaste("");
+      toast({ title: "PrizePicks synced", description: `${result.recordsProcessed} lines imported.` });
+      setTimeout(() => {
+        setPpImporting("idle");
+        qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
+        refetch();
+      }, 2500);
+    } catch (e) {
+      setPpImporting("error");
+      toast({
+        title: "Import failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+      setTimeout(() => setPpImporting("idle"), 5000);
+    }
   }
 
 
@@ -325,44 +356,39 @@ export default function Settings() {
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            {/* PrizePicks bookmarklet sync */}
+            {/* PrizePicks manual paste sync */}
             <div className="p-3 rounded border border-amber-500/30 bg-amber-500/5 space-y-3">
               <p className="font-mono text-xs font-bold text-amber-400">
-                🔖 PrizePicks Sync — Bookmarklet
+                PrizePicks Sync — Copy &amp; Paste
               </p>
               <p className="text-[10px] text-muted-foreground leading-relaxed">
-                PP blocks fetches from this app's domain (CORS). Save the code below as a browser bookmark,
-                click it on <span className="font-mono text-slate-300">app.prizepicks.com</span> — it runs inside PP's tab where there's no block.
+                PP blocks automated fetches (bot protection). The reliable way: open their data feed in a normal
+                browser tab using your logged-in session, copy everything, paste it here.
               </p>
-
-              {/* Code display + copy */}
-              <div className="relative">
-                <pre className="text-[9px] font-mono text-slate-400 bg-slate-950 border border-slate-700 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
-                  {bookmarkletCode}
-                </pre>
-                <Button
-                  size="sm"
-                  onClick={copyBookmarklet}
-                  className="absolute top-1.5 right-1.5 h-6 px-2 font-mono text-[10px] bg-amber-600 hover:bg-amber-500 text-white border-0"
-                >
-                  {bookmarkletCopied ? "Copied ✓" : "Copy"}
-                </Button>
-              </div>
-
-              {/* Steps */}
-              <div className="space-y-1">
-                <p className="text-[10px] font-semibold text-slate-300">One-time setup:</p>
-                <ol className="text-[10px] text-muted-foreground space-y-1 list-none">
-                  <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">1.</span><span>Click <strong>Copy</strong> above.</span></li>
-                  <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">2.</span><span>Open Bookmark Manager — <span className="font-mono text-slate-300">Ctrl+Shift+O</span> (Chrome/Edge) or <span className="font-mono text-slate-300">⌘+Shift+O</span> (Mac).</span></li>
-                  <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">3.</span><span>Click <strong>Add new bookmark</strong>, name it "Sync PP Lines", paste the copied code as the URL. Save.</span></li>
-                </ol>
-                <p className="text-[10px] font-semibold text-slate-300 pt-1">Every sync:</p>
-                <ol className="text-[10px] text-muted-foreground space-y-1 list-none">
-                  <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">4.</span><span>Go to <span className="font-mono text-slate-300">app.prizepicks.com</span>.</span></li>
-                  <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">5.</span><span>Click the "Sync PP Lines" bookmark — an alert confirms lines synced.</span></li>
-                </ol>
-              </div>
+              <ol className="text-[10px] text-muted-foreground space-y-1 list-none">
+                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">1.</span><span>Be logged in at <span className="font-mono text-slate-300">app.prizepicks.com</span>.</span></li>
+                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">2.</span><span><a href={ppApiUrl} target="_blank" rel="noreferrer" className="text-amber-300 underline hover:text-amber-200">Open the PP data feed →</a> (opens in a new tab).</span></li>
+                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">3.</span><span>Select all (<span className="font-mono text-slate-300">Ctrl+A</span>), copy (<span className="font-mono text-slate-300">Ctrl+C</span>).</span></li>
+                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">4.</span><span>Paste below, then hit <strong>Import</strong>.</span></li>
+              </ol>
+              <textarea
+                value={ppPaste}
+                onChange={e => setPpPaste(e.target.value)}
+                placeholder="Paste the PrizePicks JSON here…"
+                spellCheck={false}
+                className="w-full h-24 rounded border border-slate-700 bg-slate-950 p-2 font-mono text-[10px] text-slate-300 resize-y focus:outline-none focus:border-amber-500/50"
+              />
+              <Button
+                size="sm"
+                onClick={importPpPaste}
+                disabled={ppImporting === "importing" || ppPaste.trim().length === 0}
+                className="h-8 font-mono text-xs bg-amber-600 hover:bg-amber-500 text-white border-0"
+              >
+                <RefreshCw className={`w-3 h-3 mr-1 ${ppImporting === "importing" ? "animate-spin" : ""}`} />
+                {ppImporting === "importing" ? "Importing…" :
+                 ppImporting === "done"      ? "Done ✓" :
+                 "Import Pasted Lines"}
+              </Button>
             </div>
 
             {SYNC_JOBS.map(job => (
