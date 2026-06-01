@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetDashboardSummary,
@@ -13,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
 import {
   AlertTriangle, Activity, Eye, Target, TrendingUp, Cpu, ShieldOff, BarChart2,
-  BellOff, CheckCheck, Trash2, X,
+  BellOff, CheckCheck, Trash2, X, ChevronRight,
 } from "lucide-react";
 import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge } from "@/components/ui/badges";
 
@@ -25,12 +26,15 @@ function StatCard({
 }) {
   return (
     <Card
-      className={`bg-slate-900 border-slate-800 ${onClick ? "cursor-pointer hover:bg-slate-800/70 hover:border-slate-700 transition-colors" : ""}`}
+      className={`bg-slate-900 border-slate-800 ${onClick ? "cursor-pointer hover:bg-slate-800/70 hover:border-slate-700 active:bg-slate-800 transition-colors" : ""}`}
       onClick={onClick}
     >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-        <Icon className={`h-4 w-4 ${iconClass}`} />
+        <div className="flex items-center gap-1">
+          <Icon className={`h-4 w-4 ${iconClass}`} />
+          {onClick && <ChevronRight className="h-3 w-3 text-muted-foreground/50" />}
+        </div>
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold font-mono">{value}</div>
@@ -206,6 +210,7 @@ function AlertsPanel({
 export default function Dashboard() {
   const [selectedPropId, setSelectedPropId] = useState<number | null>(null);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const [, navigate] = useLocation();
 
   const { data, isLoading } = useGetDashboardSummary({
     query: { queryKey: ["/api/dashboard/summary"] },
@@ -241,16 +246,44 @@ export default function Dashboard() {
         <>
           {/* KPI row — data */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <StatCard label="Active Props"    value={data.activePropsCount}                           icon={Activity}      iconClass="text-primary"      />
-            <StatCard label="Watched"         value={data.watchlistCount}                             icon={Eye}           iconClass="text-amber-500"    />
-            <StatCard label="Pending Entries" value={data.pendingEntriesCount}                        icon={Target}        iconClass="text-fuchsia-500"  />
-            <StatCard label="Avg Edge"        value={data.averageEdgeScore?.toFixed(1) ?? "—"}        icon={TrendingUp}    iconClass="text-emerald-500"  />
+            <StatCard
+              label="Active Props"
+              value={data.activePropsCount}
+              icon={Activity}
+              iconClass="text-primary"
+              subLabel="total lines on the board"
+              onClick={() => navigate("/slate")}
+            />
+            <StatCard
+              label="Watched"
+              value={data.watchlistCount}
+              icon={Eye}
+              iconClass="text-amber-500"
+              subLabel="props you're tracking"
+              onClick={() => navigate("/slate")}
+            />
+            <StatCard
+              label="Pending Entries"
+              value={data.pendingEntriesCount}
+              icon={Target}
+              iconClass="text-fuchsia-500"
+              subLabel="slips awaiting results"
+              onClick={() => navigate("/journal")}
+            />
+            <StatCard
+              label="Avg Edge"
+              value={data.averageEdgeScore?.toFixed(1) ?? "—"}
+              icon={TrendingUp}
+              iconClass="text-emerald-500"
+              subLabel="model edge across all props"
+              onClick={() => navigate("/review")}
+            />
             <StatCard
               label="Unread Alerts"
               value={<span className="text-rose-500">{data.unreadAlertsCount}</span>}
               icon={AlertTriangle}
               iconClass="text-rose-500"
-              subLabel="click to view"
+              subLabel="tap to view"
               onClick={() => setAlertsOpen(true)}
             />
           </div>
@@ -262,28 +295,32 @@ export default function Dashboard() {
               value={<span className="text-emerald-400">{(data as any).playPropsCount ?? "—"}</span>}
               icon={Cpu}
               iconClass="text-emerald-500"
-              subLabel="model-rated actionable"
+              subLabel="props our model recommends"
+              onClick={() => navigate("/slate")}
             />
             <StatCard
               label="Gated / NO-PLAY"
               value={<span className="text-rose-400">{(data as any).gatedPropsCount ?? "—"}</span>}
               icon={ShieldOff}
               iconClass="text-rose-500"
-              subLabel="insufficient data quality"
+              subLabel="props we can't rate yet"
+              onClick={() => navigate("/slate")}
             />
             <StatCard
               label="Avg P(Over)"
               value={(data as any).avgModelPOver != null ? `${(data as any).avgModelPOver}%` : "—"}
               icon={BarChart2}
               iconClass="text-sky-400"
-              subLabel="across all qualified props"
+              subLabel="model confidence, all props"
+              onClick={() => navigate("/review")}
             />
             <StatCard
               label="PLAY Avg P(Over)"
               value={(data as any).avgPlayPOver != null ? `${(data as any).avgPlayPOver}%` : "—"}
               icon={TrendingUp}
               iconClass="text-violet-400"
-              subLabel="model confidence on PLAYs"
+              subLabel="confidence on PLAYs only"
+              onClick={() => navigate("/review")}
             />
           </div>
 
@@ -294,9 +331,17 @@ export default function Dashboard() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-mono uppercase tracking-wider">Top Picks by Model Edge</CardTitle>
-                  <span className="text-[10px] font-mono text-muted-foreground bg-slate-800 px-2 py-0.5 rounded">
-                    sorted by P(Over)
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono text-muted-foreground bg-slate-800 px-2 py-0.5 rounded">
+                      sorted by P(Over)
+                    </span>
+                    <button
+                      onClick={() => navigate("/slate")}
+                      className="text-[10px] font-mono text-primary hover:text-primary/80 transition-colors flex items-center gap-0.5"
+                    >
+                      View all <ChevronRight className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="flex-1 overflow-auto space-y-2">

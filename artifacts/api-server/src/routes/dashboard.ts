@@ -225,7 +225,7 @@ router.get("/dashboard/summary", async (req, res) => {
       })
       .filter(Boolean)
       .sort((a, b) => (b?.pOver ?? 0) - (a?.pOver ?? 0))
-      .slice(0, 6);
+      .slice(0, 12);
 
     const dataFreshness = {
       ppLines: activeLines.length > 0 ? Math.min(...activeLines.map(l => l.updatedAt.getTime())) : null,
