@@ -335,15 +335,17 @@ export default function Settings() {
                 It runs inside PP's tab so there's no block.
               </p>
               <div className="flex items-center gap-2">
-                <a
-                  href={bookmarkletCode}
-                  onClick={e => e.preventDefault()}
+                <div
                   draggable
+                  onDragStart={e => {
+                    e.dataTransfer.setData("text/uri-list", bookmarkletCode);
+                    e.dataTransfer.setData("text/plain", bookmarkletCode);
+                  }}
                   className="flex-1 flex items-center gap-2 px-3 py-2 rounded border border-amber-500/40 bg-slate-950 text-amber-300 font-mono text-xs hover:border-amber-400 cursor-grab active:cursor-grabbing select-none"
                   title="Drag to bookmarks bar, then click it on app.prizepicks.com"
                 >
-                  🔖 <span className="truncate">Sync PP Lines</span>
-                </a>
+                  🔖 <span className="truncate">Sync PP Lines — drag me to bookmarks bar</span>
+                </div>
                 <Button
                   size="sm"
                   variant="outline"
