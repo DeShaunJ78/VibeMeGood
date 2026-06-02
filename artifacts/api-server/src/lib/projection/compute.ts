@@ -7,7 +7,8 @@ import {
 import { eq, and, desc, inArray, isNotNull, sql } from "drizzle-orm";
 import { getNflUsageMap } from "../sync/nfl-advanced";
 import { getPaceAdjustment, NBA_2025_SEED_PACE } from "../analytics/pace";
-import { pOverLine, percentileAtLine, volatilityPct } from "./normal-dist";
+import { volatilityPct } from "./normal-dist";
+import { pOverLineDist, percentileAtLineDist, getDistributionFamily, type DistributionFamily } from "./distributions";
 import {
   getPrior, minGamesForConfidence,
   MIN_GAMES_FOR_PLAY, SHRINKAGE_K, DQ_PLAY_THRESHOLD,
@@ -27,7 +28,8 @@ export interface ProjectionOutput {
   stdDev: number;
   p99: number | null;       // mean + 2.33σ — 99th percentile ceiling (null when prior_only)
   pOver: number;            // 0–100 (calibrated when a calibration map is supplied)
-  pOverRaw: number;         // 0–100 raw normal-CDF P(over), pre-calibration
+  pOverRaw: number;         // 0–100 raw P(over), pre-calibration (Poisson or normal CDF)
+  distributionFamily: DistributionFamily; // "poisson" for sparse counting stats, "normal" otherwise
   percentileAtLine: number; // 0–100, where line sits in distribution
   dataQualityScore: number; // 0–100 gate score
   shrinkageFactor: number;  // 0=no shrinkage, 1=full prior
@@ -266,8 +268,11 @@ export async function computeProjection(
   const effectiveStd = stdDev * stdAdj;
 
   // --- 7. Compute distribution outputs ---
-  const pOverRaw = pOverLine(mean, effectiveStd, ppLine);
-  const pctAtLine = percentileAtLine(mean, effectiveStd, ppLine);
+  // Route to Poisson CDF for sparse counting stats (Home Runs, Goals, TDs, etc.)
+  // All other stats continue to use the normal CDF.
+  const distFamily = getDistributionFamily(statType);
+  const pOverRaw = pOverLineDist(mean, effectiveStd, ppLine, statType);
+  const pctAtLine = percentileAtLineDist(mean, effectiveStd, ppLine, statType);
   const volPct = volatilityPct(effectiveStd, ppLine);
 
   // --- 7b. Probability calibration: blend raw P(over) toward the empirical bucket
@@ -317,6 +322,7 @@ export async function computeProjection(
     p99,
     pOver: Math.round(pOver * 10) / 10,
     pOverRaw: Math.round(pOverRaw * 10) / 10,
+    distributionFamily: distFamily,
     percentileAtLine: Math.round(pctAtLine * 10) / 10,
     dataQualityScore: finalDQ,
     shrinkageFactor: Math.round(shrinkageFactor * 1000) / 1000,

@@ -20,7 +20,7 @@
 import { db } from "@workspace/db";
 import { playerGameLogsTable } from "@workspace/db/schema";
 import { asc } from "drizzle-orm";
-import { pOverLine } from "../lib/projection/normal-dist.js";
+import { pOverLineDist } from "../lib/projection/distributions.js";
 import {
   restFactor,
   homeAwayFactor,
@@ -111,16 +111,17 @@ async function main() {
     );
 
   // group into series keyed by player+statType
-  const series = new Map<string, LogRow[]>();
+  const series = new Map<string, { statType: string; logs: LogRow[] }>();
   for (const r of rows) {
     const key = `${r.playerId}::${r.statType}`;
-    const arr = series.get(key) ?? [];
-    arr.push({
+    const existing = series.get(key);
+    const logs = existing?.logs ?? [];
+    logs.push({
       gameDate: r.gameDate,
       value: Number(r.value),
       homeAway: r.homeAway,
     });
-    series.set(key, arr);
+    series.set(key, { statType: r.statType, logs });
   }
 
   const base = new Stats();
@@ -139,7 +140,7 @@ async function main() {
   let seriesUsed = 0;
   let predictions = 0;
 
-  for (const [, logs] of series) {
+  for (const [, { statType, logs }] of series) {
     if (logs.length < MIN_PRIOR + 1) continue;
     seriesUsed++;
 
@@ -155,7 +156,7 @@ async function main() {
       const actualOver = cur.value > line;
 
       // ── base projection ──
-      const basePOver = pOverLine(mu, std, line) / 100;
+      const basePOver = pOverLineDist(mu, std, line, statType) / 100;
       base.add(basePOver, actualOver);
 
       // ── derive log-only factor inputs ──
@@ -191,7 +192,7 @@ async function main() {
       const { combinedFactor, applied: appliedFactors } =
         combineFactors(applied);
       const adjMu = mu * combinedFactor;
-      const adjPOver = pOverLine(adjMu, std, line) / 100;
+      const adjPOver = pOverLineDist(adjMu, std, line, statType) / 100;
       adjusted.add(adjPOver, actualOver);
 
       // True per-factor marginal lift: apply ONLY that one factor (isolated
@@ -199,7 +200,7 @@ async function main() {
       // effect to each. base = no factors; +factor = just this factor.
       for (const f of appliedFactors) {
         const solo = combineFactors([f]).combinedFactor;
-        const soloPOver = pOverLine(mu * solo, std, line) / 100;
+        const soloPOver = pOverLineDist(mu * solo, std, line, statType) / 100;
         const slot = ensureFactor(f.key);
         slot.base.add(basePOver, actualOver);
         slot.adj.add(soloPOver, actualOver);

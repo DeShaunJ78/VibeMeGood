@@ -7,7 +7,7 @@ import {
   ourProjectionsTable, playerGameLogsTable,
 } from "@workspace/db/schema";
 import { eq, and, inArray, desc, gte, isNull, or } from "drizzle-orm";
-import { pOverLine, percentileAtLine } from "../lib/projection/normal-dist";
+import { pOverLineDist, percentileAtLineDist } from "../lib/projection/distributions";
 import { effectivePayoutMultiplier } from "../lib/payout/multiplier";
 
 const router = Router();
@@ -90,7 +90,7 @@ router.get("/slate", async (req, res) => {
       const p = projMap[`${l.playerId}:${l.statType}`];
       if (!p?.projectedValue || !p?.stdDev) continue;
       standardPOverMap[`${l.playerId}:${l.statType}`] =
-        pOverLine(Number(p.projectedValue), Number(p.stdDev), Number(l.lineValueOverride ?? l.lineValue)) / 100;
+        pOverLineDist(Number(p.projectedValue), Number(p.stdDev), Number(l.lineValueOverride ?? l.lineValue), l.statType) / 100;
     }
 
     const rows = lines.map(line => {
@@ -109,7 +109,7 @@ router.get("/slate", async (req, res) => {
       // probability/gap so a Slate Board correction flows through automatically.
       const effectiveLine = line.lineValueOverride != null ? Number(line.lineValueOverride) : Number(line.lineValue);
       const rawTierPOver: number | null = (proj?.projectedValue && proj?.stdDev)
-        ? pOverLine(Number(proj.projectedValue), Number(proj.stdDev), effectiveLine)
+        ? pOverLineDist(Number(proj.projectedValue), Number(proj.stdDev), effectiveLine, line.statType)
         : null;
 
       return {
@@ -272,7 +272,7 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
       .map(s => {
         const sEff = Number(s.lineValueOverride ?? s.lineValue);
         const sPOver = (op?.projectedValue && op?.stdDev)
-          ? pOverLine(Number(op.projectedValue), Number(op.stdDev), sEff)
+          ? pOverLineDist(Number(op.projectedValue), Number(op.stdDev), sEff, line.statType)
           : null;
         const sScore = siblingScoreByLine.get(s.id);
         return {
@@ -304,10 +304,10 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
         // Tier-specific: evaluate against this line's value rather than the stored
         // pOver/percentile (computed against one arbitrary tier of this stat).
         pOver: op.stdDev
-          ? Math.round(pOverLine(parseFloat(op.projectedValue.toString()), parseFloat(op.stdDev.toString()), effLineNum) * 10) / 10
+          ? Math.round(pOverLineDist(parseFloat(op.projectedValue.toString()), parseFloat(op.stdDev.toString()), effLineNum, line.statType) * 10) / 10
           : null,
         percentileAtLine: op.stdDev
-          ? Math.round(percentileAtLine(parseFloat(op.projectedValue.toString()), parseFloat(op.stdDev.toString()), effLineNum) * 10) / 10
+          ? Math.round(percentileAtLineDist(parseFloat(op.projectedValue.toString()), parseFloat(op.stdDev.toString()), effLineNum, line.statType) * 10) / 10
           : null,
         dataQualityScore: op.dataQualityScore,
         shrinkageFactor: op.shrinkageFactor ? parseFloat(op.shrinkageFactor.toString()) : null,
