@@ -16,6 +16,7 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
+  DollarSign,
 } from "lucide-react";
 
 // ── colour helpers ───────────────────────────────────────────────────────────
@@ -59,6 +60,33 @@ function DeltaIcon({ d }: { d: number }) {
   if (d > 0.0005)  return <TrendingUp className="w-3 h-3 text-emerald-400" />;
   if (d < -0.0005) return <TrendingDown className="w-3 h-3 text-red-400" />;
   return <Minus className="w-3 h-3 text-slate-400" />;
+}
+
+function roiColor(v: number) {
+  if (v > 0.10)  return "text-emerald-400";
+  if (v > 0.02)  return "text-green-400";
+  if (v > -0.02) return "text-yellow-400";
+  if (v > -0.08) return "text-orange-400";
+  return "text-red-400";
+}
+
+function clvColor(v: number) {
+  if (v > 0.05)  return "text-emerald-400";
+  if (v > 0.01)  return "text-green-400";
+  if (v > -0.03) return "text-slate-300";
+  if (v > -0.08) return "text-orange-400";
+  return "text-red-400";
+}
+
+function varianceColor(v: number) {
+  if (v < 0.40) return "text-emerald-400";
+  if (v < 0.60) return "text-yellow-400";
+  if (v < 0.80) return "text-orange-400";
+  return "text-red-400";
+}
+
+function signed(v: number, decimals = 1) {
+  return `${v >= 0 ? "+" : ""}${(v * 100).toFixed(decimals)}%`;
 }
 
 function pct(v: number, decimals = 1) {
@@ -482,6 +510,171 @@ export default function ModelAudit() {
           Edge = |predicted pOver − 50%|. Monotonic = higher edge → higher hit rate.
           An inversion means the model is over-confident at that edge level.
         </p>
+      </section>
+
+      {/* ── Tier 5: ROI / CLV audit ── */}
+      <section>
+        <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+          <DollarSign className="w-3.5 h-3.5" />
+          Tier 5 — ROI / CLV Audit
+        </h2>
+        <p className="text-[11px] text-muted-foreground font-mono mb-3">
+          Flat $1 even-money simulation per prediction.
+          Realized ROI = 2×hitRate−1. Predicted ROI = 2×avg(|pOver−50%|).
+          CLV = Realized − Predicted (positive = model underestimated real edge).
+        </p>
+
+        {(() => {
+          const hasRoiData = perEdgeBucket.some(b => b.predictedROI !== undefined);
+
+          if (!hasRoiData) {
+            return (
+              <div className="border border-amber-900/40 bg-amber-950/20 rounded p-4 text-center space-y-2">
+                <div className="text-amber-400 font-mono text-xs">
+                  ROI / CLV data not present in this audit run.
+                </div>
+                <div className="text-muted-foreground font-mono text-[10px]">
+                  Re-run the audit to generate Tier 5 metrics.
+                </div>
+              </div>
+            );
+          }
+
+          // derive insight answers
+          const activeBuckets = perEdgeBucket.filter(b => b.n > 0 && b.realizedROI !== undefined);
+          const peakBucket    = activeBuckets.reduce<typeof activeBuckets[0] | null>(
+            (best, b) => (best === null || (b.realizedROI ?? -Infinity) > (best.realizedROI ?? -Infinity)) ? b : best,
+            null,
+          );
+          const roiMonotonic  = activeBuckets.every((b, i) =>
+            i === 0 || (b.realizedROI ?? 0) >= (activeBuckets[i - 1].realizedROI ?? 0) - 0.02
+          );
+          const totalN        = activeBuckets.reduce((s, b) => s + b.n, 0);
+          const weightedCLV   = totalN > 0
+            ? activeBuckets.reduce((s, b) => s + (b.clv ?? 0) * b.n, 0) / totalN
+            : 0;
+          const highVarBucket = activeBuckets.reduce<typeof activeBuckets[0] | null>(
+            (worst, b) => (worst === null || (b.variance ?? 0) > (worst.variance ?? 0)) ? b : worst,
+            null,
+          );
+
+          return (
+            <div className="space-y-4">
+
+              {/* summary cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="border border-border/50 bg-slate-900/60 rounded px-4 py-3">
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1">Peak ROI Bucket</div>
+                  <div className={cn("text-xl font-mono font-bold", peakBucket ? roiColor(peakBucket.realizedROI ?? 0) : "text-muted-foreground")}>
+                    {peakBucket ? peakBucket.label : "—"}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                    {peakBucket ? signed(peakBucket.realizedROI ?? 0) + " ROI" : "no data"}
+                  </div>
+                </div>
+
+                <div className="border border-border/50 bg-slate-900/60 rounded px-4 py-3">
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1">Weighted CLV</div>
+                  <div className={cn("text-xl font-mono font-bold", clvColor(weightedCLV))}>
+                    {signed(weightedCLV)}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                    {weightedCLV > 0.01 ? "model undersells real edge" : weightedCLV < -0.03 ? "model over-confident" : "close to model prediction"}
+                  </div>
+                </div>
+
+                <div className="border border-border/50 bg-slate-900/60 rounded px-4 py-3">
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1">ROI vs Edge</div>
+                  <div className={cn("text-xl font-mono font-bold", roiMonotonic ? "text-emerald-400" : "text-orange-400")}>
+                    {roiMonotonic ? "✓ mono" : "⚠ inv"}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                    {roiMonotonic ? "ROI rises with edge" : "inversion present"}
+                  </div>
+                </div>
+
+                <div className="border border-border/50 bg-slate-900/60 rounded px-4 py-3">
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1">Max Variance (σ)</div>
+                  <div className={cn("text-xl font-mono font-bold", highVarBucket ? varianceColor(highVarBucket.variance ?? 0) : "text-muted-foreground")}>
+                    {highVarBucket ? (((highVarBucket.variance ?? 0) * 100).toFixed(1) + "%") : "—"}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                    {highVarBucket ? `in ${highVarBucket.label} bucket` : "no data"}
+                  </div>
+                </div>
+              </div>
+
+              {/* per-bucket table */}
+              <div className="border border-border/50 rounded overflow-hidden">
+                <table className="w-full text-[11px] font-mono">
+                  <thead>
+                    <tr className="border-b border-border/50 bg-slate-900/80">
+                      <th className="px-3 py-2 text-left text-muted-foreground font-normal">Edge bucket</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-normal">n</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-normal">Hit rate</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-normal">Pred. ROI</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-normal">Realized ROI</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-normal">CLV</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-normal">σ</th>
+                      <th className="px-3 py-2 text-left text-muted-foreground font-normal">Signal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {perEdgeBucket.map((e) => {
+                      const rROI = e.realizedROI ?? 0;
+                      const pROI = e.predictedROI ?? 0;
+                      const clv  = e.clv ?? 0;
+                      const vari = e.variance ?? 0;
+
+                      let signal: React.ReactNode;
+                      if (e.n === 0) {
+                        signal = <span className="text-muted-foreground">no data</span>;
+                      } else if (rROI > 0.10 && clv > 0) {
+                        signal = <span className="text-emerald-400 font-semibold">STRONG EDGE</span>;
+                      } else if (rROI > 0 && clv >= -0.03) {
+                        signal = <span className="text-green-400">POSITIVE</span>;
+                      } else if (clv < -0.08) {
+                        signal = <span className="text-red-400">OVER-CONFIDENT</span>;
+                      } else if (rROI < -0.05) {
+                        signal = <span className="text-orange-400">NEGATIVE ROI</span>;
+                      } else {
+                        signal = <span className="text-slate-400">NEUTRAL</span>;
+                      }
+
+                      return (
+                        <tr key={e.label} className="border-b border-border/20 hover:bg-slate-800/30">
+                          <td className="px-3 py-2 text-foreground">{e.label}</td>
+                          <td className="px-3 py-2 text-right text-muted-foreground">{e.n.toLocaleString()}</td>
+                          <td className={cn("px-3 py-2 text-right", chrColor(e.actualHitRate))}>
+                            {e.n > 0 ? pct(e.actualHitRate) : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-400">
+                            {e.n > 0 ? signed(pROI) : "—"}
+                          </td>
+                          <td className={cn("px-3 py-2 text-right font-semibold", e.n > 0 ? roiColor(rROI) : "text-muted-foreground")}>
+                            {e.n > 0 ? signed(rROI) : "—"}
+                          </td>
+                          <td className={cn("px-3 py-2 text-right font-semibold", e.n > 0 ? clvColor(clv) : "text-muted-foreground")}>
+                            {e.n > 0 ? signed(clv) : "—"}
+                          </td>
+                          <td className={cn("px-3 py-2 text-right", e.n > 0 ? varianceColor(vari) : "text-muted-foreground")}>
+                            {e.n > 0 ? pct(vari) : "—"}
+                          </td>
+                          <td className="px-3 py-2">{signal}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="text-[10px] text-muted-foreground font-mono">
+                Pred. ROI = 2×avgEdge (model's expected return). Realized ROI = 2×hitRate−1 (actual return).
+                σ = std dev of $±1 per-bet outcomes. High σ at high edge is normal — variance is the price of expected value.
+              </p>
+            </div>
+          );
+        })()}
       </section>
 
     </div>

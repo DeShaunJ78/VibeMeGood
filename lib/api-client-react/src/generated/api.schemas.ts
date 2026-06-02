@@ -1125,6 +1125,10 @@ export interface AuditEdgeBucketRow {
   n: number;
   avgPredicted: number;
   actualHitRate: number;
+  predictedROI?: number;
+  realizedROI?: number;
+  clv?: number;
+  variance?: number;
 }
 
 export interface AuditCalibrationBucket {

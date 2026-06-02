@@ -131,8 +131,9 @@ export class StatsAccum {
 
 interface EdgeBucketAccum {
   n: number;
-  predSum: number;
-  hits: number;
+  predSum: number;   // Σ pOver01 (absolute probability, for avgPredicted)
+  predEdgeSum: number; // Σ |pOver01 − 0.5| (predicted edge per bet)
+  hits: number;      // directionally correct predictions
 }
 
 const EDGE_BREAKPOINTS = [0.0, 0.05, 0.10, 0.15, 0.20];
@@ -194,6 +195,10 @@ export interface EdgeBucketRow {
   n:             number;
   avgPredicted:  number;
   actualHitRate: number;
+  predictedROI:  number;  // 2 × avg predicted edge (expected return per $1)
+  realizedROI:   number;  // 2 × hitRate − 1 (actual return per $1 flat-bet)
+  clv:           number;  // realizedROI − predictedROI (excess return vs model expectation)
+  variance:      number;  // 2√(hitRate×(1−hitRate)) — σ of per-bet returns
 }
 
 export interface CalibrationBucket {
@@ -262,7 +267,7 @@ export async function runBacktest(): Promise<BacktestResult> {
   const ensureStat  = (st: string) => { let s = perStat.get(st);  if (!s) { s = new StatsAccum(); perStat.set(st, s); }  return s; };
   const ensureSport = (sp: string) => { let s = perSport.get(sp); if (!s) { s = new StatsAccum(); perSport.set(sp, s); } return s; };
 
-  const edgeBuckets: EdgeBucketAccum[] = EDGE_LABELS.map(() => ({ n: 0, predSum: 0, hits: 0 }));
+  const edgeBuckets: EdgeBucketAccum[] = EDGE_LABELS.map(() => ({ n: 0, predSum: 0, predEdgeSum: 0, hits: 0 }));
 
   let seriesUsed  = 0;
   let predictions = 0;
@@ -290,7 +295,8 @@ export async function runBacktest(): Promise<BacktestResult> {
       // edge bucket
       const ei = edgeBucketIndex(basePOver01);
       edgeBuckets[ei].n++;
-      edgeBuckets[ei].predSum += basePOver01;
+      edgeBuckets[ei].predSum     += basePOver01;
+      edgeBuckets[ei].predEdgeSum += Math.abs(basePOver01 - 0.5);
       if ((basePOver01 > 0.5) === actualOver) edgeBuckets[ei].hits++;
 
       // factor engine
@@ -355,14 +361,23 @@ export async function runBacktest(): Promise<BacktestResult> {
   }));
 
   const edgeBucketRows: EdgeBucketRow[] = EDGE_LABELS.map((label, i) => {
-    const eb = edgeBuckets[i];
+    const eb       = edgeBuckets[i];
+    const hitRate  = eb.n ? eb.hits / eb.n : 0;
+    const avgEdge  = eb.n ? eb.predEdgeSum / eb.n : 0;
+    const realROI  = 2 * hitRate - 1;             // (hits − misses) / n on even-money $1 bets
+    const predROI  = 2 * avgEdge;                 // model's expected return per $1
+    const sigma    = eb.n > 1 ? 2 * Math.sqrt(hitRate * (1 - hitRate)) : 0;
     return {
       label,
       minEdge:       EDGE_BREAKPOINTS[i],
       maxEdge:       i + 1 < EDGE_BREAKPOINTS.length ? EDGE_BREAKPOINTS[i + 1] : 1.0,
       n:             eb.n,
       avgPredicted:  eb.n ? round4(eb.predSum / eb.n) : 0,
-      actualHitRate: eb.n ? round4(eb.hits / eb.n) : 0,
+      actualHitRate: round4(hitRate),
+      predictedROI:  round4(predROI),
+      realizedROI:   round4(realROI),
+      clv:           round4(realROI - predROI),
+      variance:      round4(sigma),
     };
   });
 

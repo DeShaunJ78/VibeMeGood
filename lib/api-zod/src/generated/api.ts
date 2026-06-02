@@ -1926,7 +1926,11 @@ export const GetAuditLatestResponse = zod.object({
   "maxEdge": zod.number(),
   "n": zod.number(),
   "avgPredicted": zod.number(),
-  "actualHitRate": zod.number()
+  "actualHitRate": zod.number(),
+  "predictedROI": zod.number().optional(),
+  "realizedROI": zod.number().optional(),
+  "clv": zod.number().optional(),
+  "variance": zod.number().optional()
 })),
   "calibrationBuckets": zod.array(zod.object({
   "bucket": zod.string(),
@@ -2006,7 +2010,11 @@ export const RunAuditResponse = zod.object({
   "maxEdge": zod.number(),
   "n": zod.number(),
   "avgPredicted": zod.number(),
-  "actualHitRate": zod.number()
+  "actualHitRate": zod.number(),
+  "predictedROI": zod.number().optional(),
+  "realizedROI": zod.number().optional(),
+  "clv": zod.number().optional(),
+  "variance": zod.number().optional()
 })),
   "calibrationBuckets": zod.array(zod.object({
   "bucket": zod.string(),

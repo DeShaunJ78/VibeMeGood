@@ -2490,6 +2490,10 @@ components:
         n:             { type: integer }
         avgPredicted:  { type: number }
         actualHitRate: { type: number }
+        predictedROI:  { type: number }
+        realizedROI:   { type: number }
+        clv:           { type: number }
+        variance:      { type: number }
       required: [label, minEdge, maxEdge, n, avgPredicted, actualHitRate]
 
     AuditCalibrationBucket:
