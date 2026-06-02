@@ -14,6 +14,8 @@ import { syncInjuries } from "../lib/sync/injuries";
 import { syncProjections } from "../lib/projections/sync";
 import { syncNflAdvancedMetrics } from "../lib/sync/nfl-advanced";
 import { syncGameSchedule } from "../lib/sync/games";
+import { syncGameOdds } from "../lib/sync/game-odds";
+import { syncWeather } from "../lib/sync/weather";
 import { computeMatchupHistory } from "../lib/sync/matchup-history";
 
 const router = Router();
@@ -287,6 +289,14 @@ router.post("/sync/external-odds", async (req, res) => {
   await runSync("the-odds-api", "external-odds", syncExternalOdds, res);
 });
 
+router.post("/sync/game-odds", async (req, res) => {
+  await runSync("the-odds-api", "game-odds", syncGameOdds, res);
+});
+
+router.post("/sync/weather", async (req, res) => {
+  await runSync("open-meteo", "weather", syncWeather, res);
+});
+
 // Pre-lock sync — fast sequential refresh of the 4 data types that matter before
 // game lock: lines → injuries → odds (cooldown bypassed) → prop score recalc.
 // Safe to hit repeatedly; odds cooldown is bypassed intentionally here.
@@ -414,6 +424,8 @@ router.post("/sync/all", async (req, res) => {
   const jobs: Array<{ name: string; provider: string; fn: () => Promise<number> }> = [
     { name: "injuries",    provider: "injury-news",   fn: syncInjuriesImpl },
     { name: "external-odds", provider: "the-odds-api", fn: syncExternalOdds },
+    { name: "game-odds",   provider: "the-odds-api",  fn: syncGameOdds },
+    { name: "weather",     provider: "open-meteo",    fn: syncWeather },
     { name: "projections", provider: "nba-stats",     fn: syncProjectionsImpl },
     { name: "variance",    provider: "internal",      fn: computeAllVarianceScores },
     { name: "fatigue",     provider: "internal",      fn: syncFatigueData },

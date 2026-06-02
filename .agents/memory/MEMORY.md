@@ -14,3 +14,4 @@
 - [Proxy injects wildcard CORS](proxy-cors-testing.md) — localhost:80 proxy adds `Access-Control-Allow-Origin: *`; test an app's real CORS on its own port, and restart for app.ts middleware changes.
 - [Projection signal data availability](projection-data-availability.md) — schema columns exist but spread/total/minutes/home_away/weather are EMPTY; pace ratings seed-only; check coverage before wiring a factor.
 - [PP import performance](pp-import-performance.md) — PP sync writes must be bulk/batched, never per-row, or full imports take minutes; deactivation guard mutates real lines by sport.
+- [Factor engine & backtest](factor-engine-and-backtest.md) — factors return null when context missing (never default a side); backtest lives in api-server (leaf scripts can't import engine); per-factor lift must be isolated counterfactual.

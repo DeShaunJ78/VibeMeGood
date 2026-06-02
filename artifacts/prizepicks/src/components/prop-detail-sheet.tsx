@@ -10,7 +10,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, ReferenceLine,
 } from "recharts";
-import { Plus, Minus, Zap, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Activity, Database, Wind, CloudRain, Shield, History, Star, Layers } from "lucide-react";
+import { Plus, Minus, Zap, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Activity, Database, Wind, CloudRain, Shield, History, Star, Layers, Sparkles } from "lucide-react";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
 import { VarianceBadge } from "@/components/ui/variance-badge";
 import { useUserSettings } from "@/hooks/use-user-settings";
@@ -81,6 +81,17 @@ interface OurProjection {
   vor: number | null;
   ensembleBlendPct: 0 | 30 | 70;
   calSampleSize: number;
+  adjustments?: ProjectionAdjustment[];
+  paceFactor?: number | null;
+  defenseFactor?: number | null;
+  restFactor?: number | null;
+}
+
+interface ProjectionAdjustment {
+  key: string;
+  label: string;
+  factor: number;
+  explain: string;
 }
 
 interface TierRung {
@@ -541,6 +552,36 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                   </div>
                 </div>
               </div>
+
+              {/* ── Why this number moved (applied context factors) ── */}
+              {op?.adjustments && op.adjustments.length > 0 && (
+                <div className="px-5 py-4 border-b border-slate-800/50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                      Why this number moved · {op.adjustments.length} {op.adjustments.length === 1 ? "factor" : "factors"}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    {op.adjustments.map((adj) => {
+                      const up = adj.factor > 1;
+                      const pct = Math.round((adj.factor - 1) * 1000) / 10;
+                      return (
+                        <div key={adj.key} className="flex items-start justify-between gap-3 bg-slate-900 border border-slate-800 rounded-md px-3 py-2">
+                          <div className="min-w-0">
+                            <div className="text-xs font-mono font-semibold text-slate-200">{adj.label}</div>
+                            <div className="text-[10px] text-slate-400 mt-0.5 leading-snug">{adj.explain}</div>
+                          </div>
+                          <div className={`shrink-0 font-mono text-xs font-bold tabular-nums ${up ? "text-emerald-400" : "text-rose-400"}`}>
+                            {up ? "+" : ""}{pct}%
+                            <div className="text-[9px] text-slate-500 text-right">×{adj.factor.toFixed(3)}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Direction + Add to Entry */}
               <div className="px-5 py-4 border-b border-slate-800/50 flex items-center gap-3">

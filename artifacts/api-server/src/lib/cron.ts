@@ -15,6 +15,8 @@ import { syncInjuries } from "./sync/injuries";
 import { syncProjections } from "./projections/sync";
 import { syncNflAdvancedMetrics } from "./sync/nfl-advanced";
 import { syncGameSchedule } from "./sync/games";
+import { syncGameOdds } from "./sync/game-odds";
+import { syncWeather } from "./sync/weather";
 import { computeMatchupHistory } from "./sync/matchup-history";
 import { backfillHistoricalStats } from "./sync/historical-stats";
 
@@ -247,6 +249,20 @@ export function startCronJobs() {
   // Game schedule every 30 minutes
   cron.schedule("*/30 * * * *", () =>
     logPull("espn", "game-schedule", syncGameSchedule)
+  );
+
+  // Game odds (spread/total) hourly — bulk /odds endpoint, ~2 credits/sport,
+  // self-guarded by a 50-min floor so overlapping triggers don't double-spend.
+  cron.schedule("15 * * * *", () =>
+    logPull("the-odds-api", "game-odds", syncGameOdds)
+  );
+
+  // Weather (Open-Meteo, no key) at 6:40 AM + 4 PM — refresh kickoff forecasts.
+  cron.schedule("40 6 * * *", () =>
+    logPull("open-meteo", "weather", syncWeather)
+  );
+  cron.schedule("0 16 * * *", () =>
+    logPull("open-meteo", "weather", syncWeather)
   );
 
   // NFL advanced metrics every Tuesday at 6 AM (after MNF finalizes)

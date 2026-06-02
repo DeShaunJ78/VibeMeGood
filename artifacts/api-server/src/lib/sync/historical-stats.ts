@@ -71,33 +71,48 @@ async function getJson(url: string, timeoutMs = 15000): Promise<any> {
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-// Upsert game log. When opponentTeamId is provided, update it on conflict so
-// re-runs of sport-specific backfills can fill in the field for existing rows.
+// Upsert game log. Any context fields (opponentTeamId, minutes, homeAway) present
+// in `extra` are written on insert AND updated on conflict, so re-runs of
+// sport-specific backfills can backfill these columns onto existing rows.
 async function upsertLog(
   playerId: number,
   gameDate: string,
   statType: string,
   value: number,
   source: string,
-  opponentTeamId?: number | null,
+  extra: { opponentTeamId?: number | null; minutes?: number | null; homeAway?: string | null } = {},
 ): Promise<void> {
-  if (opponentTeamId != null) {
+  const insertVals: typeof playerGameLogsTable.$inferInsert = {
+    playerId, gameDate, statType, value: value.toString(), source,
+  };
+  const updateSet: Partial<typeof playerGameLogsTable.$inferInsert> = {};
+  if (extra.opponentTeamId != null) {
+    insertVals.opponentTeamId = extra.opponentTeamId;
+    updateSet.opponentTeamId = extra.opponentTeamId;
+  }
+  if (extra.minutes != null) {
+    insertVals.minutes = extra.minutes.toString();
+    updateSet.minutes = extra.minutes.toString();
+  }
+  if (extra.homeAway != null) {
+    insertVals.homeAway = extra.homeAway;
+    updateSet.homeAway = extra.homeAway;
+  }
+
+  if (Object.keys(updateSet).length > 0) {
     await db
       .insert(playerGameLogsTable)
-      .values({ playerId, gameDate, statType, value: value.toString(), source, opponentTeamId })
+      .values(insertVals)
       .onConflictDoUpdate({
         target: [
           playerGameLogsTable.playerId,
           playerGameLogsTable.gameDate,
           playerGameLogsTable.statType,
         ],
-        set: { opponentTeamId },
+        set: updateSet,
       });
   } else {
-    await db
-      .insert(playerGameLogsTable)
-      .values({ playerId, gameDate, statType, value: value.toString(), source })
-      .onConflictDoNothing();
+    await db.insert(playerGameLogsTable).values(insertVals).onConflictDoNothing();
   }
 }
 
@@ -150,6 +165,14 @@ async function backfillNBA(
     return null;
   }
 
+  // ESPN team abbreviation → our DB team id (for opponent + home/away capture)
+  const nbaTeamRows = await db
+    .select({ id: teamsTable.id, abbreviation: teamsTable.abbreviation })
+    .from(teamsTable)
+    .where(eq(teamsTable.sport, "NBA"));
+  const nbaTeamMap = new Map<string, number>();
+  for (const t of nbaTeamRows) if (t.abbreviation) nbaTeamMap.set(t.abbreviation.toUpperCase(), t.id);
+
   // Fetch all 30 NBA team IDs from ESPN
   let teamIds: number[] = [];
   try {
@@ -200,8 +223,24 @@ async function backfillNBA(
         const boxscore = summary?.boxscore;
         if (!boxscore) return 0;
 
+        // Home/away + opponent from the game header competitors.
+        const competitors = summary?.header?.competitions?.[0]?.competitors ?? [];
+        const homeAwayByAbbr = new Map<string, string>();
+        const dbIdByAbbr = new Map<string, number>();
+        for (const c of competitors) {
+          const abbr = (c?.team?.abbreviation ?? "").toUpperCase();
+          if (!abbr) continue;
+          if (c?.homeAway === "home" || c?.homeAway === "away") homeAwayByAbbr.set(abbr, c.homeAway);
+          const dbId = nbaTeamMap.get(abbr);
+          if (dbId) dbIdByAbbr.set(abbr, dbId);
+        }
+
         let count = 0;
         for (const teamSection of (boxscore.players ?? [])) {
+          const teamAbbr = (teamSection?.team?.abbreviation ?? "").toUpperCase();
+          const homeAway = teamAbbr ? homeAwayByAbbr.get(teamAbbr) ?? null : null;
+          let opponentTeamId: number | null = null;
+          for (const [abbr, id] of dbIdByAbbr) if (abbr !== teamAbbr) opponentTeamId = id;
           for (const statsSection of (teamSection.statistics ?? [])) {
             const names: string[] = statsSection.names ?? [];
             const idx: Record<string, number> = {};
@@ -246,7 +285,9 @@ async function backfillNBA(
               ];
 
               for (const [statType, value] of logs) {
-                await upsertLog(dbId, gameDate, statType, value, source);
+                await upsertLog(dbId, gameDate, statType, value, source, {
+                  minutes: min, homeAway, opponentTeamId,
+                });
                 count++;
               }
             }
@@ -498,7 +539,7 @@ async function backfillNHL(
           ];
 
           for (const [statType, value] of logs) {
-            await upsertLog(dbId, gameDate, statType, value, source, opponentTeamId);
+            await upsertLog(dbId, gameDate, statType, value, source, { opponentTeamId });
             count++;
           }
         }

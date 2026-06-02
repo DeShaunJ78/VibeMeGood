@@ -180,6 +180,47 @@ export async function syncNflAdvancedMetrics(): Promise<number> {
   return totalUpserted;
 }
 
+export interface NflUsage {
+  snapPct: number | null;
+  targetShare: number | null;
+  wopr: number | null;
+}
+
+/**
+ * Batch-load the most recent (season, week) advanced usage row for each player name.
+ * Returns a Map keyed by lower-cased player name. Avoids N+1 lookups in the
+ * projection loop.
+ */
+export async function getNflUsageMap(playerNames: string[]): Promise<Map<string, NflUsage>> {
+  const result = new Map<string, NflUsage>();
+  if (playerNames.length === 0) return result;
+
+  const lowered = [...new Set(playerNames.map((n) => n.toLowerCase()))];
+
+  // DISTINCT ON keeps the latest row per player by (season desc, week desc).
+  const rows = await db
+    .select({
+      playerName: nflAdvancedMetricsTable.playerName,
+      snapPct: nflAdvancedMetricsTable.snapPct,
+      targetShare: nflAdvancedMetricsTable.targetShare,
+      wopr: nflAdvancedMetricsTable.wopr,
+    })
+    .from(nflAdvancedMetricsTable)
+    .where(sql`lower(player_name) = ANY(${lowered}) and week is not null`)
+    .orderBy(sql`lower(player_name), season desc, week desc`);
+
+  for (const r of rows) {
+    const key = r.playerName.toLowerCase();
+    if (result.has(key)) continue; // first row per name is the latest
+    result.set(key, {
+      snapPct: r.snapPct != null ? parseFloat(r.snapPct.toString()) : null,
+      targetShare: r.targetShare != null ? parseFloat(r.targetShare.toString()) : null,
+      wopr: r.wopr != null ? parseFloat(r.wopr.toString()) : null,
+    });
+  }
+  return result;
+}
+
 export async function getSnapPctAdjustment(playerName: string): Promise<number> {
   const [row] = await db
     .select({ snapPct: nflAdvancedMetricsTable.snapPct })

@@ -720,6 +720,13 @@ export const GetSlateRowResponse = zod.object({
   "metadata": zod.unknown().optional()
 })),
   "projection": zod.unknown().optional(),
+  "ourProjection": zod.unknown().optional(),
+  "adjustments": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "factor": zod.number().describe('Multiplier applied to the projected mean.'),
+  "explain": zod.string()
+}).describe('One applied context factor (rest, pace, DvP, implied total, weather, etc.).')).optional(),
   "externalLines": zod.array(zod.object({
   "id": zod.number(),
   "playerId": zod.number(),

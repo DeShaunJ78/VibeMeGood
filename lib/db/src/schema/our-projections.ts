@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, numeric, varchar, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, numeric, varchar, timestamp, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { playersTable } from "./players";
 import { gamesTable } from "./games";
 
@@ -22,6 +22,10 @@ export const ourProjectionsTable = pgTable("our_projections", {
   defenseFactor: numeric("defense_factor"),
   restFactor: numeric("rest_factor"),
   opponentAdj: numeric("opponent_adj").default("1"),
+
+  // Transparent breakdown of every applied projection factor:
+  // Array<{ key, label, factor, explain }> (see lib/projection/factors.ts).
+  adjustments: jsonb("adjustments"),
 
   // Shrinkage
   shrinkageFactor: numeric("shrinkage_factor"), // 0=no shrinkage, 1=full prior

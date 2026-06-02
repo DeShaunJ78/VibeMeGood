@@ -358,12 +358,25 @@ export interface SlateSportCount {
   count: number;
 }
 
+/**
+ * One applied context factor (rest, pace, DvP, implied total, weather, etc.).
+ */
+export interface ProjectionAdjustment {
+  key: string;
+  label: string;
+  /** Multiplier applied to the projected mean. */
+  factor: number;
+  explain: string;
+}
+
 export interface PropDetail {
   ppLine: PpLine;
   player: Player;
   game?: unknown;
   lineHistory: PpLineHistory[];
   projection?: unknown;
+  ourProjection?: unknown;
+  adjustments?: ProjectionAdjustment[];
   externalLines: ExternalLine[];
   propScore?: unknown;
   injuries: Injury[];

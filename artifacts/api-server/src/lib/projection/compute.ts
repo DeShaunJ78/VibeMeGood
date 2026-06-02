@@ -2,16 +2,23 @@ import { db } from "@workspace/db";
 import {
   playerGameLogsTable, ourProjectionsTable, ppLinesTable, playersTable,
   injuriesTable, matchupHistoryTable, gamesTable, teamsTable,
-  probabilityCalibrationTable,
+  probabilityCalibrationTable, fatigueDataTable, teamPaceRatingsTable,
 } from "@workspace/db/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
-import { getSnapPctAdjustment } from "../sync/nfl-advanced";
+import { eq, and, desc, inArray, isNotNull, sql } from "drizzle-orm";
+import { getNflUsageMap } from "../sync/nfl-advanced";
+import { getPaceAdjustment, NBA_2025_SEED_PACE } from "../analytics/pace";
 import { pOverLine, percentileAtLine, volatilityPct } from "./normal-dist";
 import {
   getPrior, minGamesForConfidence,
   MIN_GAMES_FOR_PLAY, SHRINKAGE_K, DQ_PLAY_THRESHOLD,
   PROJECTION_TTL_HOURS, LINE_TYPE_STD_ADJ,
 } from "./priors";
+import {
+  restFactor, paceFactor, dvpFactor, impliedTotalFactor, weatherFactor,
+  homeAwayFactor, nflAdvancedFactor, snapFactor, parkFactor, combineFactors,
+  impliedTeamTotal, SPORT_IMPLIED_BASELINE,
+  type FactorResult,
+} from "./factors";
 import { logger } from "../logger";
 
 export interface ProjectionOutput {
@@ -340,6 +347,15 @@ export async function computeProjection(
   };
 }
 
+const MLB_PARK_FACTORS: Record<string, number> = {
+  COL: 1.18, CIN: 1.12, BOS: 1.08, PHI: 1.06, TEX: 1.05,
+  NYY: 1.03, TOR: 0.97, MIA: 0.95, OAK: 0.94, PIT: 0.93,
+  NYM: 0.92, TB: 0.92, SF: 0.90, SD: 0.88, SEA: 0.88,
+};
+const MLB_BATTING_STATS = ["hits", "home runs", "total bases", "rbis", "runs", "doubles", "triples"];
+
+interface WeatherMeta { isOutdoor?: boolean; windSpeed?: number; temp?: number }
+
 export async function computeAllProjections(): Promise<number> {
   const activeLines = await db
     .select({ line: ppLinesTable, player: playersTable })
@@ -347,7 +363,9 @@ export async function computeAllProjections(): Promise<number> {
     .innerJoin(playersTable, eq(ppLinesTable.playerId, playersTable.id))
     .where(eq(ppLinesTable.isActive, true));
 
-  // Pre-fetch games for opponent team ID lookup
+  const playerIds = [...new Set(activeLines.map(r => r.line.playerId))];
+
+  // --- Pre-fetch games (spread/total/weather live here) ---
   const gameIds = [...new Set(
     activeLines.filter(r => r.line.gameId).map(r => r.line.gameId as number),
   )];
@@ -356,30 +374,106 @@ export async function computeAllProjections(): Promise<number> {
     : [];
   const gameMap = Object.fromEntries(games.map(g => [g.id, g]));
 
-  // Pre-fetch home team abbreviations for MLB park factor
-  const homeTeamIds = [...new Set(games.map(g => g.homeTeamId))];
-  const homeTeams = homeTeamIds.length
+  // --- Team abbreviations for ALL teams in play (home + away) — pace + park ---
+  const teamIds = [...new Set(games.flatMap(g => [g.homeTeamId, g.awayTeamId]))];
+  const teams = teamIds.length
     ? await db.select({ id: teamsTable.id, abbreviation: teamsTable.abbreviation })
         .from(teamsTable)
-        .where(inArray(teamsTable.id, homeTeamIds))
+        .where(inArray(teamsTable.id, teamIds))
     : [];
-  const teamAbbrMap = new Map(homeTeams.map(t => [t.id, t.abbreviation]));
+  const teamAbbrMap = new Map(teams.map(t => [t.id, t.abbreviation]));
 
-  const MLB_PARK_FACTORS: Record<string, number> = {
-    COL: 1.18, CIN: 1.12, BOS: 1.08, PHI: 1.06, TEX: 1.05,
-    NYY: 1.03, TOR: 0.97, MIA: 0.95, OAK: 0.94, PIT: 0.93,
-    NYM: 0.92, TB: 0.92, SF: 0.90, SD: 0.88, SEA: 0.88,
+  // --- Batch-load all factor context in parallel ---
+  const [fatigueRows, paceRows, nflUsageMap, dvpRows, splitRows] = await Promise.all([
+    // Latest fatigue row per player (ordered desc; we keep the first seen).
+    playerIds.length
+      ? db.select().from(fatigueDataTable)
+          .where(inArray(fatigueDataTable.playerId, playerIds))
+          .orderBy(desc(fatigueDataTable.computedForDate))
+      : Promise.resolve([] as (typeof fatigueDataTable.$inferSelect)[]),
+    // NBA team pace ratings.
+    db.select().from(teamPaceRatingsTable).where(eq(teamPaceRatingsTable.sport, "NBA"))
+      .orderBy(desc(teamPaceRatingsTable.season)),
+    // NFL advanced usage (target share / WOPR / snap) keyed by player name.
+    getNflUsageMap(activeLines.filter(r => r.player.sport === "NFL").map(r => r.player.fullName)),
+    // Defense-vs-position: opponent-allowed averages by (team, position, stat).
+    db.select({
+        opponentTeamId: playerGameLogsTable.opponentTeamId,
+        sport: playersTable.sport,
+        position: playersTable.position,
+        statType: playerGameLogsTable.statType,
+        avgValue: sql<string>`avg(${playerGameLogsTable.value})`,
+        games: sql<string>`count(*)`,
+      })
+      .from(playerGameLogsTable)
+      .innerJoin(playersTable, eq(playersTable.id, playerGameLogsTable.playerId))
+      .where(and(isNotNull(playerGameLogsTable.opponentTeamId), isNotNull(playersTable.position)))
+      .groupBy(playerGameLogsTable.opponentTeamId, playersTable.sport, playersTable.position, playerGameLogsTable.statType),
+    // Home/away splits per player+stat.
+    playerIds.length
+      ? db.select({
+          playerId: playerGameLogsTable.playerId,
+          statType: playerGameLogsTable.statType,
+          homeAway: playerGameLogsTable.homeAway,
+          avgValue: sql<string>`avg(${playerGameLogsTable.value})`,
+        })
+        .from(playerGameLogsTable)
+        .where(and(inArray(playerGameLogsTable.playerId, playerIds), isNotNull(playerGameLogsTable.homeAway)))
+        .groupBy(playerGameLogsTable.playerId, playerGameLogsTable.statType, playerGameLogsTable.homeAway)
+      : Promise.resolve([] as { playerId: number; statType: string; homeAway: string | null; avgValue: string }[]),
+  ]);
+
+  // Index fatigue (first row per player = latest).
+  const fatigueByPlayer = new Map<number, typeof fatigueDataTable.$inferSelect>();
+  for (const f of fatigueRows) if (!fatigueByPlayer.has(f.playerId)) fatigueByPlayer.set(f.playerId, f);
+
+  // Index NBA pace by abbreviation (first = most recent season), fall back to seed.
+  const paceByAbbr = new Map<string, number>();
+  for (const p of paceRows) {
+    if (!paceByAbbr.has(p.teamAbbr)) paceByAbbr.set(p.teamAbbr, parseFloat(p.paceRating.toString()));
+  }
+  const teamPace = (abbr: string | undefined): number | null => {
+    if (!abbr) return null;
+    return paceByAbbr.get(abbr) ?? NBA_2025_SEED_PACE[abbr.toUpperCase()] ?? null;
   };
-  const MLB_BATTING_STATS = ["hits", "home runs", "total bases", "rbis", "runs", "doubles", "triples"];
+
+  // Index DvP: team-allowed map + league baseline (count-weighted).
+  const dvpByTeam = new Map<string, { avg: number; games: number }>();
+  const leagueAgg = new Map<string, { sum: number; cnt: number }>();
+  for (const r of dvpRows) {
+    if (r.opponentTeamId == null || !r.position) continue;
+    const avg = parseFloat(r.avgValue);
+    const games = parseInt(r.games, 10);
+    dvpByTeam.set(`${r.opponentTeamId}:${r.sport}:${r.position}:${r.statType}`, { avg, games });
+    const lk = `${r.sport}:${r.position}:${r.statType}`;
+    const cur = leagueAgg.get(lk) ?? { sum: 0, cnt: 0 };
+    cur.sum += avg * games;
+    cur.cnt += games;
+    leagueAgg.set(lk, cur);
+  }
+
+  // Index home/away splits.
+  const splitMap = new Map<string, { home?: number; away?: number }>();
+  for (const r of splitRows) {
+    const key = `${r.playerId}:${r.statType}`;
+    const cur = splitMap.get(key) ?? {};
+    if (r.homeAway === "home") cur.home = parseFloat(r.avgValue);
+    else if (r.homeAway === "away") cur.away = parseFloat(r.avgValue);
+    splitMap.set(key, cur);
+  }
 
   let computed = 0;
 
   for (const { line, player } of activeLines) {
-    // Resolve opponent from game context
+    const sport = player.sport.toUpperCase();
+    const game = line.gameId ? gameMap[line.gameId] : null;
+
+    // Resolve opponent + home/away from game context.
     let opponentTeamId: number | null = null;
-    if (line.gameId && gameMap[line.gameId] && player.teamId) {
-      const g = gameMap[line.gameId];
-      opponentTeamId = g.homeTeamId === player.teamId ? g.awayTeamId : g.homeTeamId;
+    let isHome: boolean | null = null;
+    if (game && player.teamId) {
+      opponentTeamId = game.homeTeamId === player.teamId ? game.awayTeamId : game.homeTeamId;
+      isHome = game.homeTeamId === player.teamId;
     }
 
     try {
@@ -392,36 +486,111 @@ export async function computeAllProjections(): Promise<number> {
         opponentTeamId,
       );
 
-      // Apply snap% adjustment for NFL players
-      let adjustedMean = result.mean;
-      if (player.sport.toUpperCase() === "NFL") {
-        const snapAdj = await getSnapPctAdjustment(player.fullName);
-        adjustedMean = Math.round(result.mean * snapAdj * 100) / 100;
+      // ── Build the factor stack ──────────────────────────────────────────
+      const factors: (FactorResult | null)[] = [];
+
+      // Rest / fatigue
+      const fat = fatigueByPlayer.get(line.playerId);
+      if (fat) {
+        factors.push(restFactor({
+          isBackToBack: fat.isBackToBack,
+          isThreeInFour: fat.isThreeInFour,
+          daysRest: fat.daysRest,
+          fatigueScore: fat.fatigueScore,
+        }));
       }
 
-      // Apply MLB park factor for batting stats
-      if (player.sport.toUpperCase() === "MLB" && line.gameId && gameMap[line.gameId]) {
-        const game = gameMap[line.gameId];
-        const homeTeamAbbr = teamAbbrMap.get(game.homeTeamId);
-        if (homeTeamAbbr) {
-          const isBatter = MLB_BATTING_STATS.some(s => line.statType.toLowerCase().includes(s));
-          if (isBatter) {
-            const factor = MLB_PARK_FACTORS[homeTeamAbbr.toUpperCase()] ?? 1.0;
-            adjustedMean = Math.round(adjustedMean * factor * 100) / 100;
-          }
+      // Pace (NBA/WNBA)
+      if ((sport === "NBA" || sport === "WNBA") && game) {
+        const hp = teamPace(teamAbbrMap.get(game.homeTeamId));
+        const ap = teamPace(teamAbbrMap.get(game.awayTeamId));
+        if (hp != null && ap != null) {
+          const gamePace = (hp + ap) / 2;
+          factors.push(paceFactor(getPaceAdjustment(gamePace), gamePace, line.statType));
         }
       }
+
+      // Defense vs position
+      if (opponentTeamId != null && player.position) {
+        const tk = `${opponentTeamId}:${player.sport}:${player.position}:${line.statType}`;
+        const lk = `${player.sport}:${player.position}:${line.statType}`;
+        const allowed = dvpByTeam.get(tk);
+        const lg = leagueAgg.get(lk);
+        const leagueAvg = lg && lg.cnt > 0 ? lg.sum / lg.cnt : null;
+        factors.push(dvpFactor({
+          teamAllowed: allowed?.avg ?? null,
+          leagueAvg,
+          games: allowed?.games ?? null,
+        }));
+      }
+
+      // Implied team total — requires a known home/away side; never assume one
+      // (assuming home when the side is unknown would fabricate a signal).
+      if (game && isHome != null) {
+        const total = game.total != null ? parseFloat(game.total.toString()) : null;
+        const spread = game.spread != null ? parseFloat(game.spread.toString()) : null;
+        const implied = impliedTeamTotal(total, spread, isHome);
+        factors.push(impliedTotalFactor(implied, SPORT_IMPLIED_BASELINE[sport] ?? null, line.statType));
+      }
+
+      // Weather (outdoor NFL)
+      if (game?.metadata) {
+        const w = (game.metadata as { weather?: WeatherMeta }).weather;
+        if (w) {
+          factors.push(weatherFactor({
+            isOutdoor: w.isOutdoor,
+            windSpeed: w.windSpeed,
+            temp: w.temp,
+            statType: line.statType,
+          }));
+        }
+      }
+
+      // Home/away
+      if (isHome != null) {
+        const split = splitMap.get(`${line.playerId}:${line.statType}`);
+        factors.push(homeAwayFactor({ isHome, homeAvg: split?.home, awayAvg: split?.away }));
+      }
+
+      // NFL advanced usage + snap
+      if (sport === "NFL") {
+        const usage = nflUsageMap.get(player.fullName.toLowerCase());
+        if (usage) {
+          factors.push(nflAdvancedFactor({
+            targetShare: usage.targetShare,
+            wopr: usage.wopr,
+            statType: line.statType,
+          }));
+          factors.push(snapFactor(usage.snapPct));
+        }
+      }
+
+      // MLB park
+      if (sport === "MLB" && game) {
+        const homeAbbr = teamAbbrMap.get(game.homeTeamId);
+        const isBatter = MLB_BATTING_STATS.some(s => line.statType.toLowerCase().includes(s));
+        if (homeAbbr && isBatter) {
+          factors.push(parkFactor(MLB_PARK_FACTORS[homeAbbr.toUpperCase()] ?? null, homeAbbr));
+        }
+      }
+
+      const { combinedFactor, applied } = combineFactors(factors);
+      const adjustedMean = Math.round(result.mean * combinedFactor * 100) / 100;
+
+      const factorVal = (key: string): string =>
+        (applied.find(f => f.key === key)?.factor ?? 1).toString();
 
       const payload = {
         playerId: line.playerId,
         statType: line.statType,
+        gameId: line.gameId ?? null,
         projectedValue: adjustedMean.toString(),
         weightedAvg: result.mean.toString(),
         gamesUsed: result.gamesUsed,
         confidence: result.pOver >= 60 && result.dataQualityScore >= 70 ? "high"
           : result.pOver >= 52 && result.dataQualityScore >= 50 ? "medium"
           : "low",
-        modelVersion: "v2",
+        modelVersion: "v3",
         stdDev: result.stdDev.toString(),
         p99: result.p99 != null ? result.p99.toString() : null,
         pOver: result.pOver.toString(),
@@ -431,6 +600,10 @@ export async function computeAllProjections(): Promise<number> {
         noPlayReason: result.noPlayReason,
         sourceLabel: result.sourceLabel,
         opponentAdj: result.opponentAdj.toString(),
+        paceFactor: factorVal("pace"),
+        defenseFactor: factorVal("dvp"),
+        restFactor: factorVal("rest"),
+        adjustments: applied,
         ensembleBlendPct: result.ensembleBlendPct,
         vor: result.vor != null ? result.vor.toString() : null,
         expiresAt: result.expiresAt,

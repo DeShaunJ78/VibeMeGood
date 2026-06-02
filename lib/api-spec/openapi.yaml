@@ -1708,6 +1708,16 @@ components:
       required: [sport, count]
 
     # ─── PROP DETAIL ────────────────────────────────────────────────
+    ProjectionAdjustment:
+      type: object
+      description: One applied context factor (rest, pace, DvP, implied total, weather, etc.).
+      properties:
+        key: { type: string }
+        label: { type: string }
+        factor: { type: number, description: Multiplier applied to the projected mean. }
+        explain: { type: string }
+      required: [key, label, factor, explain]
+
     PropDetail:
       type: object
       properties:
@@ -1716,6 +1726,8 @@ components:
         game: {}
         lineHistory: { type: array, items: { $ref: "#/components/schemas/PpLineHistory" } }
         projection: {}
+        ourProjection: {}
+        adjustments: { type: array, items: { $ref: "#/components/schemas/ProjectionAdjustment" } }
         externalLines: { type: array, items: { $ref: "#/components/schemas/ExternalLine" } }
         propScore: {}
         injuries: { type: array, items: { $ref: "#/components/schemas/Injury" } }

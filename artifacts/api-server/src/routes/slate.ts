@@ -303,6 +303,13 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
         confidence: op.confidence,
         gamesUsed: op.gamesUsed,
         isStale,
+        // Per-factor context adjustments applied on top of the base projection
+        // (rest, pace, DvP, implied total, weather, home/away, NFL usage). Each
+        // entry is {key,label,factor,explain}; surfaced in the detail "why moved" block.
+        adjustments: Array.isArray(op.adjustments) ? op.adjustments : [],
+        paceFactor: op.paceFactor != null ? parseFloat(op.paceFactor.toString()) : null,
+        defenseFactor: op.defenseFactor != null ? parseFloat(op.defenseFactor.toString()) : null,
+        restFactor: op.restFactor != null ? parseFloat(op.restFactor.toString()) : null,
       } : null,
       recentGames: recentGames.map(g => ({
         date: g.gameDate,
