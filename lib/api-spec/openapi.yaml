@@ -2481,6 +2481,21 @@ components:
         delta:     { type: number }
       required: [factor, rows, baseBrier, adjBrier, delta]
 
+    AuditDecileBucketRow:
+      type: object
+      properties:
+        label:        { type: string }
+        threshold:    { type: number }
+        n:            { type: integer }
+        pctOfAll:     { type: number }
+        avgEdge:      { type: number }
+        hitRate:      { type: number }
+        predictedROI: { type: number }
+        realizedROI:  { type: number }
+        clv:          { type: number }
+        variance:     { type: number }
+      required: [label, threshold, n, pctOfAll, avgEdge, hitRate, predictedROI, realizedROI, clv, variance]
+
     AuditEdgeBucketRow:
       type: object
       properties:
@@ -2524,6 +2539,7 @@ components:
         perSport:           { type: array, items: { $ref: "#/components/schemas/AuditSportRow" } }
         perFactor:          { type: array, items: { $ref: "#/components/schemas/AuditFactorRow" } }
         perEdgeBucket:      { type: array, items: { $ref: "#/components/schemas/AuditEdgeBucketRow" } }
+        perDecileBucket:    { type: array, items: { $ref: "#/components/schemas/AuditDecileBucketRow" } }
         calibrationBuckets: { type: array, items: { $ref: "#/components/schemas/AuditCalibrationBucket" } }
       required: [runAt, series, predictions, summary, perStat, perSport, perFactor, perEdgeBucket, calibrationBuckets]
 

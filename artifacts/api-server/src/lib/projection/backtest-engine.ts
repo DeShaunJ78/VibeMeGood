@@ -153,6 +153,12 @@ function round4(x: number): number {
   return isNaN(x) ? 0 : Math.round(x * 10000) / 10000;
 }
 
+function sortedQuantile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = Math.max(0, Math.min(sorted.length - 1, Math.floor(sorted.length * p)));
+  return sorted[idx];
+}
+
 export interface SummaryMetrics {
   brier:       number;
   confHitRate: number;
@@ -195,10 +201,23 @@ export interface EdgeBucketRow {
   n:             number;
   avgPredicted:  number;
   actualHitRate: number;
-  predictedROI:  number;  // 2 × avg predicted edge (expected return per $1)
-  realizedROI:   number;  // 2 × hitRate − 1 (actual return per $1 flat-bet)
-  clv:           number;  // realizedROI − predictedROI (excess return vs model expectation)
-  variance:      number;  // 2√(hitRate×(1−hitRate)) — σ of per-bet returns
+  predictedROI:  number;
+  realizedROI:   number;
+  clv:           number;
+  variance:      number;
+}
+
+export interface DecileBucketRow {
+  label:        string;
+  threshold:    number;   // minimum edge to qualify (0 for "Rest")
+  n:            number;
+  pctOfAll:     number;   // fraction of all predictions in this band
+  avgEdge:      number;
+  hitRate:      number;
+  predictedROI: number;
+  realizedROI:  number;
+  clv:          number;
+  variance:     number;
 }
 
 export interface CalibrationBucket {
@@ -218,6 +237,7 @@ export interface BacktestResult {
   perSport:            SportRow[];
   perFactor:           FactorRow[];
   perEdgeBucket:       EdgeBucketRow[];
+  perDecileBucket:     DecileBucketRow[];
   calibrationBuckets:  CalibrationBucket[];
 }
 
@@ -268,6 +288,7 @@ export async function runBacktest(): Promise<BacktestResult> {
   const ensureSport = (sp: string) => { let s = perSport.get(sp); if (!s) { s = new StatsAccum(); perSport.set(sp, s); } return s; };
 
   const edgeBuckets: EdgeBucketAccum[] = EDGE_LABELS.map(() => ({ n: 0, predSum: 0, predEdgeSum: 0, hits: 0 }));
+  const allPredEdges: Array<{ edge: number; hit: boolean }> = [];
 
   let seriesUsed  = 0;
   let predictions = 0;
@@ -292,12 +313,17 @@ export async function runBacktest(): Promise<BacktestResult> {
       ensureStat(statType).add(basePOver01, actualOver);
       ensureSport(sport).add(basePOver01, actualOver);
 
-      // edge bucket
+      // edge bucket (fixed breakpoints)
+      const rawEdge = Math.abs(basePOver01 - 0.5);
       const ei = edgeBucketIndex(basePOver01);
       edgeBuckets[ei].n++;
       edgeBuckets[ei].predSum     += basePOver01;
-      edgeBuckets[ei].predEdgeSum += Math.abs(basePOver01 - 0.5);
-      if ((basePOver01 > 0.5) === actualOver) edgeBuckets[ei].hits++;
+      edgeBuckets[ei].predEdgeSum += rawEdge;
+      const dirHit = (basePOver01 > 0.5) === actualOver;
+      if (dirHit) edgeBuckets[ei].hits++;
+
+      // decile bucket (rank-based, computed post-loop)
+      allPredEdges.push({ edge: rawEdge, hit: dirHit });
 
       // factor engine
       const prevDate      = prior[prior.length - 1].gameDate;
@@ -364,8 +390,8 @@ export async function runBacktest(): Promise<BacktestResult> {
     const eb       = edgeBuckets[i];
     const hitRate  = eb.n ? eb.hits / eb.n : 0;
     const avgEdge  = eb.n ? eb.predEdgeSum / eb.n : 0;
-    const realROI  = 2 * hitRate - 1;             // (hits − misses) / n on even-money $1 bets
-    const predROI  = 2 * avgEdge;                 // model's expected return per $1
+    const realROI  = 2 * hitRate - 1;
+    const predROI  = 2 * avgEdge;
     const sigma    = eb.n > 1 ? 2 * Math.sqrt(hitRate * (1 - hitRate)) : 0;
     return {
       label,
@@ -378,6 +404,44 @@ export async function runBacktest(): Promise<BacktestResult> {
       realizedROI:   round4(realROI),
       clv:           round4(realROI - predROI),
       variance:      round4(sigma),
+    };
+  });
+
+  // ── decile buckets (rank-based: top 1 / 5 / 10 / 20 / rest) ─────────────────
+  const sortedForQuantile = allPredEdges.map(x => x.edge).sort((a, b) => a - b);
+  const totalPreds        = sortedForQuantile.length;
+  const p80 = sortedQuantile(sortedForQuantile, 0.80);
+  const p90 = sortedQuantile(sortedForQuantile, 0.90);
+  const p95 = sortedQuantile(sortedForQuantile, 0.95);
+  const p99 = sortedQuantile(sortedForQuantile, 0.99);
+
+  const DECILE_BANDS = [
+    { label: "Top 1%",  minEdge: p99, maxEdge: 2.0 },
+    { label: "Top 5%",  minEdge: p95, maxEdge: p99 },
+    { label: "Top 10%", minEdge: p90, maxEdge: p95 },
+    { label: "Top 20%", minEdge: p80, maxEdge: p90 },
+    { label: "Rest",    minEdge: 0,   maxEdge: p80 },
+  ];
+
+  const perDecileBucketRows: DecileBucketRow[] = DECILE_BANDS.map(band => {
+    const preds   = allPredEdges.filter(x => x.edge >= band.minEdge && x.edge < band.maxEdge);
+    const n       = preds.length;
+    const hits    = preds.filter(x => x.hit).length;
+    const hitRate = n ? hits / n : 0;
+    const avgEdge = n ? preds.reduce((s, x) => s + x.edge, 0) / n : 0;
+    const realROI = 2 * hitRate - 1;
+    const predROI = 2 * avgEdge;
+    return {
+      label:        band.label,
+      threshold:    round4(band.minEdge),
+      n,
+      pctOfAll:     totalPreds > 0 ? round4(n / totalPreds) : 0,
+      avgEdge:      round4(avgEdge),
+      hitRate:      round4(hitRate),
+      predictedROI: round4(predROI),
+      realizedROI:  round4(realROI),
+      clv:          round4(realROI - predROI),
+      variance:     n > 1 ? round4(2 * Math.sqrt(hitRate * (1 - hitRate))) : 0,
     };
   });
 
@@ -394,6 +458,7 @@ export async function runBacktest(): Promise<BacktestResult> {
     perSport:           sportRows,
     perFactor:          factorRows,
     perEdgeBucket:      edgeBucketRows,
+    perDecileBucket:    perDecileBucketRows,
     calibrationBuckets: base.calibrationBuckets(),
   };
 }

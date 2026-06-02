@@ -677,6 +677,166 @@ export default function ModelAudit() {
         })()}
       </section>
 
+      {/* ── Tier 5A: edge decile audit ── */}
+      <section>
+        <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+          <TrendingUp className="w-3.5 h-3.5" />
+          Tier 5A — Edge Decile Audit
+        </h2>
+        <p className="text-[11px] text-muted-foreground font-mono mb-3">
+          Rank-based bands — each row is an exclusive percentile slice of the edge distribution.
+          Threshold = minimum |pOver−50%| to qualify. Volume = % of all predictions in this band.
+        </p>
+
+        {(() => {
+          const db = data.perDecileBucket;
+          if (!db || db.length === 0) {
+            return (
+              <div className="border border-amber-900/40 bg-amber-950/20 rounded p-4 text-center space-y-2">
+                <div className="text-amber-400 font-mono text-xs">
+                  Decile data not present in this audit run.
+                </div>
+                <div className="text-muted-foreground font-mono text-[10px]">
+                  Re-run the audit to generate Tier 5A metrics.
+                </div>
+              </div>
+            );
+          }
+
+          const active    = db.filter(b => b.n > 0);
+          const top1      = active.find(b => b.label === "Top 1%");
+          const restBand  = active.find(b => b.label === "Rest");
+          const peakDecile = active.reduce<typeof active[0] | null>(
+            (best, b) => b.label !== "Rest" && (best === null || b.realizedROI > best.realizedROI) ? b : best,
+            null,
+          );
+          const totalN = active.reduce((s, b) => s + b.n, 0);
+          const top20Band = active.find(b => b.label === "Top 20%");
+
+          return (
+            <div className="space-y-4">
+
+              {/* summary cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="border border-border/50 bg-slate-900/60 rounded px-4 py-3">
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1">Top 1% Threshold</div>
+                  <div className="text-xl font-mono font-bold text-foreground">
+                    {top1 ? pct(top1.threshold) : "—"}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                    {top1 ? `${top1.n.toLocaleString()} picks (${pct(top1.pctOfAll, 1)} of all)` : "no data"}
+                  </div>
+                </div>
+
+                <div className="border border-border/50 bg-slate-900/60 rounded px-4 py-3">
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1">Top 1% ROI</div>
+                  <div className={cn("text-xl font-mono font-bold", top1 ? roiColor(top1.realizedROI) : "text-muted-foreground")}>
+                    {top1 ? signed(top1.realizedROI) : "—"}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                    {top1 ? `${pct(top1.hitRate)} hit rate` : "no data"}
+                  </div>
+                </div>
+
+                <div className="border border-border/50 bg-slate-900/60 rounded px-4 py-3">
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1">Volume at Top 20%+</div>
+                  <div className="text-xl font-mono font-bold text-foreground">
+                    {top20Band
+                      ? pct(active.filter(b => b.label !== "Rest").reduce((s, b) => s + b.pctOfAll, 0), 0)
+                      : "—"}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                    {top20Band
+                      ? `${active.filter(b => b.label !== "Rest").reduce((s, b) => s + b.n, 0).toLocaleString()} of ${totalN.toLocaleString()} picks`
+                      : "no data"}
+                  </div>
+                </div>
+
+                <div className="border border-border/50 bg-slate-900/60 rounded px-4 py-3">
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1">Rest ROI</div>
+                  <div className={cn("text-xl font-mono font-bold", restBand ? roiColor(restBand.realizedROI) : "text-muted-foreground")}>
+                    {restBand ? signed(restBand.realizedROI) : "—"}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                    bottom 80% · {restBand ? pct(restBand.pctOfAll, 0) + " of all picks" : "no data"}
+                  </div>
+                </div>
+              </div>
+
+              {/* decile table */}
+              <div className="border border-border/50 rounded overflow-hidden">
+                <table className="w-full text-[11px] font-mono">
+                  <thead>
+                    <tr className="border-b border-border/50 bg-slate-900/80">
+                      <th className="px-3 py-2 text-left text-muted-foreground font-normal">Band</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-normal">Threshold</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-normal">n</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-normal">% of all</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-normal">Avg edge</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-normal">Hit rate</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-normal">Pred. ROI</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-normal">Realized ROI</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-normal">CLV</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {db.map((b) => {
+                      const isRest = b.label === "Rest";
+                      const isPeak = peakDecile?.label === b.label;
+                      return (
+                        <tr
+                          key={b.label}
+                          className={cn(
+                            "border-b border-border/20 hover:bg-slate-800/30",
+                            isPeak && "bg-emerald-950/20",
+                            isRest && "opacity-50",
+                          )}
+                        >
+                          <td className="px-3 py-2 font-semibold text-foreground">
+                            {b.label}
+                            {isPeak && <span className="ml-2 text-[9px] text-emerald-400 font-mono">PEAK</span>}
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-400">
+                            {b.n > 0 ? `≥ ${pct(b.threshold)}` : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground">
+                            {b.n.toLocaleString()}
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-300">
+                            {b.n > 0 ? pct(b.pctOfAll, 1) : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-400">
+                            {b.n > 0 ? pct(b.avgEdge) : "—"}
+                          </td>
+                          <td className={cn("px-3 py-2 text-right", chrColor(b.hitRate))}>
+                            {b.n > 0 ? pct(b.hitRate) : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-400">
+                            {b.n > 0 ? signed(b.predictedROI) : "—"}
+                          </td>
+                          <td className={cn("px-3 py-2 text-right font-semibold", b.n > 0 ? roiColor(b.realizedROI) : "text-muted-foreground")}>
+                            {b.n > 0 ? signed(b.realizedROI) : "—"}
+                          </td>
+                          <td className={cn("px-3 py-2 text-right", b.n > 0 ? clvColor(b.clv) : "text-muted-foreground")}>
+                            {b.n > 0 ? signed(b.clv) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="text-[10px] text-muted-foreground font-mono">
+                Bands are mutually exclusive. "Top 1%" = predictions above the 99th percentile edge; "Rest" = bottom 80%.
+                Threshold is computed fresh each audit run from the actual edge distribution.
+                Highlighted row = peak realized ROI band.
+              </p>
+            </div>
+          );
+        })()}
+      </section>
+
     </div>
   );
 }

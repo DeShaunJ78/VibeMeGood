@@ -1932,6 +1932,18 @@ export const GetAuditLatestResponse = zod.object({
   "clv": zod.number().optional(),
   "variance": zod.number().optional()
 })),
+  "perDecileBucket": zod.array(zod.object({
+  "label": zod.string(),
+  "threshold": zod.number(),
+  "n": zod.number(),
+  "pctOfAll": zod.number(),
+  "avgEdge": zod.number(),
+  "hitRate": zod.number(),
+  "predictedROI": zod.number(),
+  "realizedROI": zod.number(),
+  "clv": zod.number(),
+  "variance": zod.number()
+})).optional(),
   "calibrationBuckets": zod.array(zod.object({
   "bucket": zod.string(),
   "n": zod.number(),
@@ -2016,6 +2028,18 @@ export const RunAuditResponse = zod.object({
   "clv": zod.number().optional(),
   "variance": zod.number().optional()
 })),
+  "perDecileBucket": zod.array(zod.object({
+  "label": zod.string(),
+  "threshold": zod.number(),
+  "n": zod.number(),
+  "pctOfAll": zod.number(),
+  "avgEdge": zod.number(),
+  "hitRate": zod.number(),
+  "predictedROI": zod.number(),
+  "realizedROI": zod.number(),
+  "clv": zod.number(),
+  "variance": zod.number()
+})).optional(),
   "calibrationBuckets": zod.array(zod.object({
   "bucket": zod.string(),
   "n": zod.number(),

@@ -1118,6 +1118,19 @@ export interface AuditFactorRow {
   delta: number;
 }
 
+export interface AuditDecileBucketRow {
+  label: string;
+  threshold: number;
+  n: number;
+  pctOfAll: number;
+  avgEdge: number;
+  hitRate: number;
+  predictedROI: number;
+  realizedROI: number;
+  clv: number;
+  variance: number;
+}
+
 export interface AuditEdgeBucketRow {
   label: string;
   minEdge: number;
@@ -1155,6 +1168,7 @@ export interface AuditResult {
   perSport: AuditSportRow[];
   perFactor: AuditFactorRow[];
   perEdgeBucket: AuditEdgeBucketRow[];
+  perDecileBucket?: AuditDecileBucketRow[];
   calibrationBuckets: AuditCalibrationBucket[];
 }
 
