@@ -15,3 +15,5 @@
 - [Projection signal data availability](projection-data-availability.md) — schema columns exist but spread/total/minutes/home_away/weather are EMPTY; pace ratings seed-only; check coverage before wiring a factor.
 - [PP import performance](pp-import-performance.md) — PP sync writes must be bulk/batched, never per-row, or full imports take minutes; deactivation guard mutates real lines by sport.
 - [Factor engine & backtest](factor-engine-and-backtest.md) — factors return null when context missing (never default a side); backtest lives in api-server (leaf scripts can't import engine); per-factor lift must be isolated counterfactual.
+- [Self-exec scripts in bundled server](self-exec-in-bundle.md) — never put `if(isMain) {...process.exit()}` in a module the server imports; esbuild bundles it and isMain is true for the server entry → job runs and kills the server on boot. Use a separate tsx-only entry file.
+- [Probability calibration source](probability-calibration-source.md) — calibration is self-feeding from player_game_logs walk-forward replay (no manual input); historical PP lines aren't linkable to outcomes (only unplayed games carry gameId).

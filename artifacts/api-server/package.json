@@ -8,7 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "backtest": "tsx ./src/scripts/backtest.ts",
-    "calibrate": "tsx ./src/scripts/calibration-job.ts",
+    "calibrate": "tsx ./src/scripts/run-calibration.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

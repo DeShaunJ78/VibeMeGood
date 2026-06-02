@@ -219,18 +219,3 @@ export const calibrationJob = {
     return { totalLines: seriesUsed, examplesProcessed, calibrationRecords, mae };
   },
 };
-
-// Allow running directly: `pnpm --filter @workspace/api-server run calibrate`
-const isMain = import.meta.url === `file://${process.argv[1]}`;
-if (isMain) {
-  calibrationJob
-    .runHistoricalCalibration()
-    .then((r) => {
-      console.log("Calibration complete:", r);
-      process.exit(0);
-    })
-    .catch((err) => {
-      console.error(err);
-      process.exit(1);
-    });
-}
