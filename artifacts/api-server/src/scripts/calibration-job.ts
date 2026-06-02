@@ -134,10 +134,19 @@ export const calibrationJob = {
         const mu = mean(priorVals);
         if (mu <= 0) continue;
         const std = Math.max(sampleStd(priorVals, mu), mu * STD_FLOOR_PCT);
-        const line = median(priorVals); // pseudo-line (book proxy)
+        // Pseudo-line: trailing median + 0.5 to avoid the "zero-median trap".
+        // For sparse counting stats (Goals, RBIs, TDs, Walks, etc.) the raw
+        // median is 0. Using median=0 as the line combined with the push-
+        // exclusion below selectively removes every value=0 game — exactly the
+        // "under" outcomes — leaving only value>0 games which trivially all hit
+        // "over 0", producing a spurious 100% hit rate. Adding 0.5 mirrors how
+        // PP actually sets counting-stat lines (0.5, 1.5, 2.5…) and ensures
+        // integer values never equal the line, so the push exclusion is a no-op.
+        const line = median(priorVals) + 0.5;
 
-        // Exact ties are pushes (refund), not misses — exclude them so integer
-        // stats don't bias the empirical hit rate toward "under".
+        // Exact ties are pushes (refund), not misses — exclude them so
+        // non-integer real-valued stats don't bias the empirical hit rate.
+        // With the +0.5 offset above, integer-valued stats never reach this path.
         if (curValue === line) continue;
 
         // Raw model probability — same core function production uses.
