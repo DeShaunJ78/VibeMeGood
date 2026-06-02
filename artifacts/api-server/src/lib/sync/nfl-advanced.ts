@@ -206,7 +206,7 @@ export async function getNflUsageMap(playerNames: string[]): Promise<Map<string,
       wopr: nflAdvancedMetricsTable.wopr,
     })
     .from(nflAdvancedMetricsTable)
-    .where(sql`lower(player_name) = ANY(${lowered}) and week is not null`)
+    .where(sql`lower(player_name) = ANY(ARRAY[${sql.join(lowered.map((n) => sql`${n}`), sql`, `)}]) and week is not null`)
     .orderBy(sql`lower(player_name), season desc, week desc`);
 
   for (const r of rows) {

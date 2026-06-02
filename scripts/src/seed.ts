@@ -65,8 +65,9 @@ async function seed() {
     { sport: "NBA", fullName: "Donovan Mitchell", firstName: "Donovan", lastName: "Mitchell", teamId: teamsByAbbr["CLE"].id, position: "SG", status: "active" },
     { sport: "NFL", fullName: "Patrick Mahomes", firstName: "Patrick", lastName: "Mahomes", teamId: teamsByAbbr["KC"].id, position: "QB", status: "active" },
     { sport: "NFL", fullName: "Travis Kelce", firstName: "Travis", lastName: "Kelce", teamId: teamsByAbbr["KC"].id, position: "TE", status: "active" },
-    { sport: "NFL", fullName: "Christian McCaffrey", firstName: "Christian", lastName: "McCaffrey", teamId: teamsByAbbr["SF"].id, position: "RB", status: "active" },
+    { sport: "NFL", fullName: "Christian McCaffrey", firstName: "Christian", lastName: "McCaffrey", teamId: teamsByAbbr["SF"].id, position: "RB", status: "questionable" },
     { sport: "NFL", fullName: "Josh Allen", firstName: "Josh", lastName: "Allen", teamId: teamsByAbbr["BUF"].id, position: "QB", status: "active" },
+    { sport: "NFL", fullName: "CeeDee Lamb", firstName: "CeeDee", lastName: "Lamb", teamId: teamsByAbbr["DAL"].id, position: "WR", status: "active" },
     { sport: "MLB", fullName: "Mookie Betts", firstName: "Mookie", lastName: "Betts", teamId: teamsByAbbr["LAD"].id, position: "SS", status: "active" },
     { sport: "MLB", fullName: "Freddie Freeman", firstName: "Freddie", lastName: "Freeman", teamId: teamsByAbbr["LAD"].id, position: "1B", status: "active" },
     { sport: "MLB", fullName: "Aaron Judge", firstName: "Aaron", lastName: "Judge", teamId: teamsByAbbr["NYY"].id, position: "RF", status: "active" },
@@ -88,32 +89,53 @@ async function seed() {
     { sport: "NBA", homeTeamId: teamsByAbbr["DEN"].id, awayTeamId: teamsByAbbr["PHX"].id, startTime: today, status: "scheduled", spread: "-4.5", total: "220.0" },
     { sport: "NBA", homeTeamId: teamsByAbbr["MIL"].id, awayTeamId: teamsByAbbr["CLE"].id, startTime: todayPlus1, status: "scheduled", spread: "-2.0", total: "218.5" },
     { sport: "NBA", homeTeamId: teamsByAbbr["GSW"].id, awayTeamId: teamsByAbbr["LAL"].id, startTime: todayPlus2, status: "scheduled", spread: "3.5", total: "226.0" },
+    { sport: "NFL", homeTeamId: teamsByAbbr["KC"].id, awayTeamId: teamsByAbbr["BUF"].id, startTime: today, status: "scheduled", spread: "-3.0", total: "52.5" },
+    { sport: "NFL", homeTeamId: teamsByAbbr["DAL"].id, awayTeamId: teamsByAbbr["SF"].id, startTime: todayPlus1, status: "scheduled", spread: "+1.5", total: "48.0" },
   ];
 
   const games = await db.insert(gamesTable).values(gameDefs).returning();
+  // Named references for clarity
+  const nflGame1 = games[4]; // KC vs BUF
+  const nflGame2 = games[5]; // DAL vs SF
   console.log(`Inserted ${games.length} games`);
 
   // ---- PP Lines: Player Picks ----
   const openedAt = new Date(Date.now() - 3600000 * 4);
   const playerLineDefs = [
-    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "points", directionalityType: "over_under", lineValue: "27.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "rebounds", directionalityType: "over_under", lineValue: "8.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "assists", directionalityType: "over_under", lineValue: "4.5", lineType: "demon", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Jaylen Brown"].id, gameId: games[0].id, statType: "points", directionalityType: "over_under", lineValue: "22.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Jimmy Butler"].id, gameId: games[0].id, statType: "points", directionalityType: "over_under", lineValue: "20.5", lineType: "goblin", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "points", directionalityType: "over_under", lineValue: "29.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "rebounds", directionalityType: "over_under", lineValue: "12.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "assists", directionalityType: "over_under", lineValue: "9.5", lineType: "demon", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Kevin Durant"].id, gameId: games[1].id, statType: "points", directionalityType: "over_under", lineValue: "25.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Devin Booker"].id, gameId: games[1].id, statType: "points", directionalityType: "over_under", lineValue: "24.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, statType: "points", directionalityType: "over_under", lineValue: "30.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, statType: "rebounds", directionalityType: "over_under", lineValue: "11.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Donovan Mitchell"].id, gameId: games[2].id, statType: "points", directionalityType: "over_under", lineValue: "26.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "points", directionalityType: "over_under", lineValue: "26.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "threes_made", directionalityType: "over_under", lineValue: "4.5", lineType: "demon", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["LeBron James"].id, gameId: games[3].id, statType: "points", directionalityType: "over_under", lineValue: "23.5", lineType: "goblin", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["LeBron James"].id, gameId: games[3].id, statType: "assists", directionalityType: "over_under", lineValue: "7.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
-    { playerId: playersByName["Jamal Murray"].id, gameId: games[1].id, statType: "points", directionalityType: "over_under", lineValue: "21.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "Points", directionalityType: "over_under", lineValue: "27.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "Rebounds", directionalityType: "over_under", lineValue: "8.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "Assists", directionalityType: "over_under", lineValue: "4.5", lineType: "demon", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Jaylen Brown"].id, gameId: games[0].id, statType: "Points", directionalityType: "over_under", lineValue: "22.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Jimmy Butler"].id, gameId: games[0].id, statType: "Points", directionalityType: "over_under", lineValue: "20.5", lineType: "goblin", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "Points", directionalityType: "over_under", lineValue: "29.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "Rebounds", directionalityType: "over_under", lineValue: "12.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "Assists", directionalityType: "over_under", lineValue: "9.5", lineType: "demon", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Kevin Durant"].id, gameId: games[1].id, statType: "Points", directionalityType: "over_under", lineValue: "25.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Devin Booker"].id, gameId: games[1].id, statType: "Points", directionalityType: "over_under", lineValue: "24.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, statType: "Points", directionalityType: "over_under", lineValue: "30.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, statType: "Rebounds", directionalityType: "over_under", lineValue: "11.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Donovan Mitchell"].id, gameId: games[2].id, statType: "Points", directionalityType: "over_under", lineValue: "26.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "Points", directionalityType: "over_under", lineValue: "26.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "3-PT Made", directionalityType: "over_under", lineValue: "4.5", lineType: "demon", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["LeBron James"].id, gameId: games[3].id, statType: "Points", directionalityType: "over_under", lineValue: "23.5", lineType: "goblin", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["LeBron James"].id, gameId: games[3].id, statType: "Assists", directionalityType: "over_under", lineValue: "7.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Jamal Murray"].id, gameId: games[1].id, statType: "Points", directionalityType: "over_under", lineValue: "21.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    // ---- NFL per-game props (canonical stat_type names matching player_game_logs) ----
+    // KC vs BUF
+    { playerId: playersByName["Patrick Mahomes"].id, gameId: nflGame1.id, statType: "Pass Yards", directionalityType: "over_under", lineValue: "285.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Patrick Mahomes"].id, gameId: nflGame1.id, statType: "Pass TDs", directionalityType: "over_under", lineValue: "2.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Patrick Mahomes"].id, gameId: nflGame1.id, statType: "Rush Yards", directionalityType: "over_under", lineValue: "22.5", lineType: "goblin", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Travis Kelce"].id, gameId: nflGame1.id, statType: "Receiving Yards", directionalityType: "over_under", lineValue: "72.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Travis Kelce"].id, gameId: nflGame1.id, statType: "Rec TDs", directionalityType: "over_under", lineValue: "0.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Josh Allen"].id, gameId: nflGame1.id, statType: "Pass Yards", directionalityType: "over_under", lineValue: "260.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Josh Allen"].id, gameId: nflGame1.id, statType: "Pass TDs", directionalityType: "over_under", lineValue: "2.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Josh Allen"].id, gameId: nflGame1.id, statType: "Rush Yards", directionalityType: "over_under", lineValue: "47.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    // DAL vs SF
+    { playerId: playersByName["Christian McCaffrey"].id, gameId: nflGame2.id, statType: "Rush Yards", directionalityType: "over_under", lineValue: "89.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Christian McCaffrey"].id, gameId: nflGame2.id, statType: "Rush TDs", directionalityType: "over_under", lineValue: "0.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["Christian McCaffrey"].id, gameId: nflGame2.id, statType: "Receiving Yards", directionalityType: "over_under", lineValue: "48.5", lineType: "goblin", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["CeeDee Lamb"].id, gameId: nflGame2.id, statType: "Receiving Yards", directionalityType: "over_under", lineValue: "82.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
+    { playerId: playersByName["CeeDee Lamb"].id, gameId: nflGame2.id, statType: "Rec TDs", directionalityType: "over_under", lineValue: "0.5", lineType: "standard", pickCategory: "player", isActive: true, openedAt },
   ];
 
   // ---- PP Lines: Team Picks (PrizePicks Teams — moneylines, totals, spreads) ----
@@ -154,36 +176,42 @@ async function seed() {
 
   // ---- External Lines ----
   const extLineDefs = [
-    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "points", bookName: "DraftKings", overLine: "27.5", overOdds: -115, underLine: "27.5", underOdds: -105, noVigOverProb: "0.508", noVigUnderProb: "0.492", pulledAt: new Date() },
-    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "points", bookName: "FanDuel", overLine: "28.0", overOdds: -120, underLine: "28.0", underOdds: 100, noVigOverProb: "0.545", noVigUnderProb: "0.455", pulledAt: new Date() },
-    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "points", bookName: "DraftKings", overLine: "29.5", overOdds: -110, underLine: "29.5", underOdds: -110, noVigOverProb: "0.500", noVigUnderProb: "0.500", pulledAt: new Date() },
-    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "rebounds", bookName: "DraftKings", overLine: "12.5", overOdds: -130, underLine: "12.5", underOdds: 110, noVigOverProb: "0.565", noVigUnderProb: "0.435", pulledAt: new Date() },
-    { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, statType: "points", bookName: "DraftKings", overLine: "30.5", overOdds: -115, underLine: "30.5", underOdds: -105, noVigOverProb: "0.523", noVigUnderProb: "0.477", pulledAt: new Date() },
-    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "points", bookName: "FanDuel", overLine: "26.5", overOdds: -108, underLine: "26.5", underOdds: -112, noVigOverProb: "0.510", noVigUnderProb: "0.490", pulledAt: new Date() },
+    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "Points", bookName: "DraftKings", overLine: "27.5", overOdds: -115, underLine: "27.5", underOdds: -105, noVigOverProb: "0.508", noVigUnderProb: "0.492", pulledAt: new Date() },
+    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "Points", bookName: "FanDuel", overLine: "28.0", overOdds: -120, underLine: "28.0", underOdds: 100, noVigOverProb: "0.545", noVigUnderProb: "0.455", pulledAt: new Date() },
+    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "Points", bookName: "DraftKings", overLine: "29.5", overOdds: -110, underLine: "29.5", underOdds: -110, noVigOverProb: "0.500", noVigUnderProb: "0.500", pulledAt: new Date() },
+    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "Rebounds", bookName: "DraftKings", overLine: "12.5", overOdds: -130, underLine: "12.5", underOdds: 110, noVigOverProb: "0.565", noVigUnderProb: "0.435", pulledAt: new Date() },
+    { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, statType: "Points", bookName: "DraftKings", overLine: "30.5", overOdds: -115, underLine: "30.5", underOdds: -105, noVigOverProb: "0.523", noVigUnderProb: "0.477", pulledAt: new Date() },
+    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "Points", bookName: "FanDuel", overLine: "26.5", overOdds: -108, underLine: "26.5", underOdds: -112, noVigOverProb: "0.510", noVigUnderProb: "0.490", pulledAt: new Date() },
+    // NFL external lines
+    { playerId: playersByName["Patrick Mahomes"].id, gameId: nflGame1.id, statType: "Pass Yards", bookName: "DraftKings", overLine: "285.5", overOdds: -112, underLine: "285.5", underOdds: -108, noVigOverProb: "0.505", noVigUnderProb: "0.495", pulledAt: new Date() },
+    { playerId: playersByName["Patrick Mahomes"].id, gameId: nflGame1.id, statType: "Pass Yards", bookName: "FanDuel", overLine: "288.5", overOdds: -115, underLine: "288.5", underOdds: -105, noVigOverProb: "0.520", noVigUnderProb: "0.480", pulledAt: new Date() },
+    { playerId: playersByName["Josh Allen"].id, gameId: nflGame1.id, statType: "Pass Yards", bookName: "DraftKings", overLine: "262.5", overOdds: -110, underLine: "262.5", underOdds: -110, noVigOverProb: "0.500", noVigUnderProb: "0.500", pulledAt: new Date() },
+    { playerId: playersByName["Christian McCaffrey"].id, gameId: nflGame2.id, statType: "Rush Yards", bookName: "DraftKings", overLine: "92.5", overOdds: -118, underLine: "92.5", underOdds: -102, noVigOverProb: "0.536", noVigUnderProb: "0.464", pulledAt: new Date() },
+    { playerId: playersByName["CeeDee Lamb"].id, gameId: nflGame2.id, statType: "Receiving Yards", bookName: "FanDuel", overLine: "82.5", overOdds: -110, underLine: "82.5", underOdds: -110, noVigOverProb: "0.500", noVigUnderProb: "0.500", pulledAt: new Date() },
   ];
   await db.insert(externalLinesTable).values(extLineDefs);
   console.log(`Inserted ${extLineDefs.length} external lines`);
 
   // ---- Projections ----
   const projDefs = [
-    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "points", projectedValue: "29.8", floorValue: "22.0", medianValue: "28.0", ceilingValue: "42.0", confidenceScore: "0.72", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "rebounds", projectedValue: "9.2", floorValue: "6.0", medianValue: "9.0", ceilingValue: "14.0", confidenceScore: "0.68", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "assists", projectedValue: "5.1", floorValue: "3.0", medianValue: "5.0", ceilingValue: "9.0", confidenceScore: "0.61", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Jaylen Brown"].id, gameId: games[0].id, statType: "points", projectedValue: "23.4", floorValue: "16.0", medianValue: "22.0", ceilingValue: "33.0", confidenceScore: "0.70", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Jimmy Butler"].id, gameId: games[0].id, statType: "points", projectedValue: "17.3", floorValue: "10.0", medianValue: "17.0", ceilingValue: "28.0", confidenceScore: "0.52", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "points", projectedValue: "31.2", floorValue: "22.0", medianValue: "30.0", ceilingValue: "48.0", confidenceScore: "0.81", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "rebounds", projectedValue: "14.1", floorValue: "9.0", medianValue: "13.0", ceilingValue: "20.0", confidenceScore: "0.79", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "assists", projectedValue: "8.9", floorValue: "5.0", medianValue: "9.0", ceilingValue: "14.0", confidenceScore: "0.74", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Kevin Durant"].id, gameId: games[1].id, statType: "points", projectedValue: "27.8", floorValue: "19.0", medianValue: "27.0", ceilingValue: "38.0", confidenceScore: "0.75", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Devin Booker"].id, gameId: games[1].id, statType: "points", projectedValue: "22.1", floorValue: "14.0", medianValue: "21.0", ceilingValue: "34.0", confidenceScore: "0.65", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, statType: "points", projectedValue: "33.4", floorValue: "24.0", medianValue: "32.0", ceilingValue: "50.0", confidenceScore: "0.83", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, statType: "rebounds", projectedValue: "12.7", floorValue: "8.0", medianValue: "12.0", ceilingValue: "18.0", confidenceScore: "0.78", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Donovan Mitchell"].id, gameId: games[2].id, statType: "points", projectedValue: "28.5", floorValue: "18.0", medianValue: "27.0", ceilingValue: "40.0", confidenceScore: "0.71", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "points", projectedValue: "29.3", floorValue: "19.0", medianValue: "28.0", ceilingValue: "42.0", confidenceScore: "0.76", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "threes_made", projectedValue: "5.2", floorValue: "2.0", medianValue: "5.0", ceilingValue: "9.0", confidenceScore: "0.69", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["LeBron James"].id, gameId: games[3].id, statType: "points", projectedValue: "24.1", floorValue: "16.0", medianValue: "23.0", ceilingValue: "36.0", confidenceScore: "0.73", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["LeBron James"].id, gameId: games[3].id, statType: "assists", projectedValue: "8.4", floorValue: "5.0", medianValue: "8.0", ceilingValue: "13.0", confidenceScore: "0.71", projectionSource: "internal", generatedAt: new Date() },
-    { playerId: playersByName["Jamal Murray"].id, gameId: games[1].id, statType: "points", projectedValue: "23.9", floorValue: "15.0", medianValue: "23.0", ceilingValue: "35.0", confidenceScore: "0.67", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "Points", projectedValue: "29.8", floorValue: "22.0", medianValue: "28.0", ceilingValue: "42.0", confidenceScore: "0.72", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "Rebounds", projectedValue: "9.2", floorValue: "6.0", medianValue: "9.0", ceilingValue: "14.0", confidenceScore: "0.68", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Jayson Tatum"].id, gameId: games[0].id, statType: "Assists", projectedValue: "5.1", floorValue: "3.0", medianValue: "5.0", ceilingValue: "9.0", confidenceScore: "0.61", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Jaylen Brown"].id, gameId: games[0].id, statType: "Points", projectedValue: "23.4", floorValue: "16.0", medianValue: "22.0", ceilingValue: "33.0", confidenceScore: "0.70", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Jimmy Butler"].id, gameId: games[0].id, statType: "Points", projectedValue: "17.3", floorValue: "10.0", medianValue: "17.0", ceilingValue: "28.0", confidenceScore: "0.52", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "Points", projectedValue: "31.2", floorValue: "22.0", medianValue: "30.0", ceilingValue: "48.0", confidenceScore: "0.81", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "Rebounds", projectedValue: "14.1", floorValue: "9.0", medianValue: "13.0", ceilingValue: "20.0", confidenceScore: "0.79", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, statType: "Assists", projectedValue: "8.9", floorValue: "5.0", medianValue: "9.0", ceilingValue: "14.0", confidenceScore: "0.74", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Kevin Durant"].id, gameId: games[1].id, statType: "Points", projectedValue: "27.8", floorValue: "19.0", medianValue: "27.0", ceilingValue: "38.0", confidenceScore: "0.75", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Devin Booker"].id, gameId: games[1].id, statType: "Points", projectedValue: "22.1", floorValue: "14.0", medianValue: "21.0", ceilingValue: "34.0", confidenceScore: "0.65", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, statType: "Points", projectedValue: "33.4", floorValue: "24.0", medianValue: "32.0", ceilingValue: "50.0", confidenceScore: "0.83", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, statType: "Rebounds", projectedValue: "12.7", floorValue: "8.0", medianValue: "12.0", ceilingValue: "18.0", confidenceScore: "0.78", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Donovan Mitchell"].id, gameId: games[2].id, statType: "Points", projectedValue: "28.5", floorValue: "18.0", medianValue: "27.0", ceilingValue: "40.0", confidenceScore: "0.71", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "Points", projectedValue: "29.3", floorValue: "19.0", medianValue: "28.0", ceilingValue: "42.0", confidenceScore: "0.76", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, statType: "3-PT Made", projectedValue: "5.2", floorValue: "2.0", medianValue: "5.0", ceilingValue: "9.0", confidenceScore: "0.69", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["LeBron James"].id, gameId: games[3].id, statType: "Points", projectedValue: "24.1", floorValue: "16.0", medianValue: "23.0", ceilingValue: "36.0", confidenceScore: "0.73", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["LeBron James"].id, gameId: games[3].id, statType: "Assists", projectedValue: "8.4", floorValue: "5.0", medianValue: "8.0", ceilingValue: "13.0", confidenceScore: "0.71", projectionSource: "internal", generatedAt: new Date() },
+    { playerId: playersByName["Jamal Murray"].id, gameId: games[1].id, statType: "Points", projectedValue: "23.9", floorValue: "15.0", medianValue: "23.0", ceilingValue: "35.0", confidenceScore: "0.67", projectionSource: "internal", generatedAt: new Date() },
   ];
   await db.insert(projectionsTable).values(projDefs);
   console.log(`Inserted ${projDefs.length} projections`);
@@ -222,8 +250,9 @@ async function seed() {
     { playerId: playersByName["Jimmy Butler"].id, gameId: games[0].id, sport: "NBA", status: "questionable", note: "Knee soreness — limited in practice. GTD for tonight.", source: "ESPN", reportedAt: new Date(Date.now() - 3600000 * 2) },
     { playerId: playersByName["Jaylen Brown"].id, gameId: games[0].id, sport: "NBA", status: "healthy", note: "No injury designation. Full practice.", source: "beat_reporter", reportedAt: new Date(Date.now() - 3600000 * 1) },
     { playerId: playersByName["Jamal Murray"].id, gameId: games[1].id, sport: "NBA", status: "gtd", note: "Ankle — missed last two practices, still game-time decision.", source: "team_report", reportedAt: new Date(Date.now() - 3600000 * 3) },
+    { playerId: playersByName["Christian McCaffrey"].id, gameId: nflGame2.id, sport: "NFL", status: "questionable", note: "Ankle — limited Wednesday and Thursday. Expect game-time decision.", source: "ESPN", reportedAt: new Date(Date.now() - 3600000 * 5) },
   ]);
-  console.log("Inserted 3 injuries");
+  console.log("Inserted 4 injuries");
 
   // ---- Lineup Confirmations ----
   await db.insert(lineupConfirmationsTable).values([
@@ -231,14 +260,18 @@ async function seed() {
     { playerId: playersByName["Nikola Jokic"].id, gameId: games[1].id, isStarting: true, expectedMinutes: "35.0", minutesFloor: "30.0", minutesCeiling: "40.0", confirmedAt: new Date(Date.now() - 1800000), source: "rotowire" },
     { playerId: playersByName["Giannis Antetokounmpo"].id, gameId: games[2].id, isStarting: true, expectedMinutes: "33.5", minutesFloor: "28.0", minutesCeiling: "38.0", confirmedAt: new Date(Date.now() - 1800000), source: "rotowire" },
     { playerId: playersByName["Stephen Curry"].id, gameId: games[3].id, isStarting: true, expectedMinutes: "34.0", minutesFloor: "29.0", minutesCeiling: "39.0", confirmedAt: new Date(Date.now() - 1800000), source: "rotowire" },
+    { playerId: playersByName["Patrick Mahomes"].id, gameId: nflGame1.id, isStarting: true, expectedMinutes: null, minutesFloor: null, minutesCeiling: null, confirmedAt: new Date(Date.now() - 3600000), source: "rotowire" },
+    { playerId: playersByName["Josh Allen"].id, gameId: nflGame1.id, isStarting: true, expectedMinutes: null, minutesFloor: null, minutesCeiling: null, confirmedAt: new Date(Date.now() - 3600000), source: "rotowire" },
+    { playerId: playersByName["Travis Kelce"].id, gameId: nflGame1.id, isStarting: true, expectedMinutes: null, minutesFloor: null, minutesCeiling: null, confirmedAt: new Date(Date.now() - 3600000), source: "rotowire" },
+    { playerId: playersByName["CeeDee Lamb"].id, gameId: nflGame2.id, isStarting: true, expectedMinutes: null, minutesFloor: null, minutesCeiling: null, confirmedAt: new Date(Date.now() - 3600000), source: "rotowire" },
   ]);
-  console.log("Inserted 4 lineup confirmations");
+  console.log("Inserted 8 lineup confirmations");
 
   // ---- Watchlist ----
   await db.insert(watchlistItemsTable).values([
-    { playerId: playersByName["Nikola Jokic"].id, statType: "points", directionPreference: "more", note: "Triple-double equity, elite consistency vs PHX" },
-    { playerId: playersByName["Jayson Tatum"].id, statType: "points", directionPreference: "more", note: "Strong matchup vs Butler-less MIA if Butler sits" },
-    { playerId: playersByName["Giannis Antetokounmpo"].id, statType: "rebounds", directionPreference: "more", note: "Volume rebounding vs small CLE front" },
+    { playerId: playersByName["Nikola Jokic"].id, statType: "Points", directionPreference: "more", note: "Triple-double equity, elite consistency vs PHX" },
+    { playerId: playersByName["Jayson Tatum"].id, statType: "Points", directionPreference: "more", note: "Strong matchup vs Butler-less MIA if Butler sits" },
+    { playerId: playersByName["Giannis Antetokounmpo"].id, statType: "Rebounds", directionPreference: "more", note: "Volume rebounding vs small CLE front" },
   ]);
   console.log("Inserted 3 watchlist items");
 
@@ -248,6 +281,7 @@ async function seed() {
     { type: "line_move", severity: "info", title: "Jokic Points Line Up +0.5", message: "DEN-PHX Jokic points moved from 29.0 to 29.5 — sharp money on Over.", isRead: false },
     { type: "lineup_confirmed", severity: "info", title: "Giannis Confirmed Starter", message: "Antetokounmpo confirmed active and starting vs CLE.", isRead: true },
     { type: "sync_success", severity: "info", title: "Lines Refreshed", message: "PP lines snapshot completed. 18 player picks + 8 team picks tracked.", isRead: true },
+    { type: "injury_update", severity: "warning", title: "McCaffrey Questionable", message: "CMC limited in practice Wed+Thu with ankle. Game-time decision vs DAL. Rush Yards line at 89.5 — monitor for lineup scratch.", isRead: false },
   ]);
   console.log("Inserted alerts");
 
@@ -264,21 +298,21 @@ async function seed() {
 
   // ---- Entry Picks ----
   await db.insert(entryPicksTable).values([
-    { entryId: entries[0].id, playerId: playersByName["Nikola Jokic"].id, statType: "points", direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.2", projectionGap: "1.7", result: "hit", closingLine: "29.5", clv: "0.5" },
-    { entryId: entries[0].id, playerId: playersByName["Jayson Tatum"].id, statType: "rebounds", direction: "more", lineValue: "8.5", lineType: "standard", yourProjection: "9.2", projectionGap: "0.7", result: "hit", closingLine: "8.5", clv: "0.0" },
-    { entryId: entries[0].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "points", direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9", result: "hit", closingLine: "31.0", clv: "-0.5" },
-    { entryId: entries[1].id, playerId: playersByName["Jayson Tatum"].id, statType: "points", direction: "more", lineValue: "27.5", lineType: "standard", yourProjection: "29.8", projectionGap: "2.3", result: "hit", closingLine: "27.5", clv: "0.0" },
-    { entryId: entries[1].id, playerId: playersByName["Kevin Durant"].id, statType: "points", direction: "more", lineValue: "25.5", lineType: "standard", yourProjection: "27.8", projectionGap: "2.3", result: "hit", closingLine: "25.5", clv: "0.0" },
-    { entryId: entries[1].id, playerId: playersByName["Jimmy Butler"].id, statType: "points", direction: "more", lineValue: "20.5", lineType: "goblin", yourProjection: "17.3", projectionGap: "-3.2", result: "dnp", closingLine: null, clv: null },
-    { entryId: entries[1].id, playerId: playersByName["Devin Booker"].id, statType: "points", direction: "more", lineValue: "24.5", lineType: "standard", yourProjection: "22.1", projectionGap: "-2.4", result: "miss", closingLine: "24.5", clv: "0.0" },
-    { entryId: entries[2].id, playerId: playersByName["Stephen Curry"].id, statType: "threes_made", direction: "more", lineValue: "4.5", lineType: "demon", yourProjection: "5.2", projectionGap: "0.7", result: "miss", closingLine: "4.5", clv: "0.0" },
-    { entryId: entries[2].id, playerId: playersByName["LeBron James"].id, statType: "assists", direction: "more", lineValue: "7.5", lineType: "standard", yourProjection: "8.4", projectionGap: "0.9", result: "miss", closingLine: "7.5", clv: "0.0" },
-    { entryId: entries[3].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "points", direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9", result: "hit", closingLine: "30.5", clv: "0.0" },
-    { entryId: entries[3].id, playerId: playersByName["Donovan Mitchell"].id, statType: "points", direction: "more", lineValue: "26.5", lineType: "standard", yourProjection: "28.5", projectionGap: "2.0", result: "hit", closingLine: "26.5", clv: "0.0" },
-    { entryId: entries[3].id, playerId: playersByName["Nikola Jokic"].id, statType: "assists", direction: "more", lineValue: "9.5", lineType: "demon", yourProjection: "8.9", projectionGap: "-0.6", result: "hit", closingLine: "9.5", clv: "0.0" },
-    { entryId: entries[4].id, playerId: playersByName["Nikola Jokic"].id, statType: "points", direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.2", projectionGap: "1.7", result: "pending" },
-    { entryId: entries[4].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "points", direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9", result: "pending" },
-    { entryId: entries[4].id, playerId: playersByName["Stephen Curry"].id, statType: "points", direction: "more", lineValue: "26.5", lineType: "standard", yourProjection: "29.3", projectionGap: "2.8", result: "pending" },
+    { entryId: entries[0].id, playerId: playersByName["Nikola Jokic"].id, statType: "Points", direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.2", projectionGap: "1.7", result: "hit", closingLine: "29.5", clv: "0.5" },
+    { entryId: entries[0].id, playerId: playersByName["Jayson Tatum"].id, statType: "Rebounds", direction: "more", lineValue: "8.5", lineType: "standard", yourProjection: "9.2", projectionGap: "0.7", result: "hit", closingLine: "8.5", clv: "0.0" },
+    { entryId: entries[0].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "Points", direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9", result: "hit", closingLine: "31.0", clv: "-0.5" },
+    { entryId: entries[1].id, playerId: playersByName["Jayson Tatum"].id, statType: "Points", direction: "more", lineValue: "27.5", lineType: "standard", yourProjection: "29.8", projectionGap: "2.3", result: "hit", closingLine: "27.5", clv: "0.0" },
+    { entryId: entries[1].id, playerId: playersByName["Kevin Durant"].id, statType: "Points", direction: "more", lineValue: "25.5", lineType: "standard", yourProjection: "27.8", projectionGap: "2.3", result: "hit", closingLine: "25.5", clv: "0.0" },
+    { entryId: entries[1].id, playerId: playersByName["Jimmy Butler"].id, statType: "Points", direction: "more", lineValue: "20.5", lineType: "goblin", yourProjection: "17.3", projectionGap: "-3.2", result: "dnp", closingLine: null, clv: null },
+    { entryId: entries[1].id, playerId: playersByName["Devin Booker"].id, statType: "Points", direction: "more", lineValue: "24.5", lineType: "standard", yourProjection: "22.1", projectionGap: "-2.4", result: "miss", closingLine: "24.5", clv: "0.0" },
+    { entryId: entries[2].id, playerId: playersByName["Stephen Curry"].id, statType: "3-PT Made", direction: "more", lineValue: "4.5", lineType: "demon", yourProjection: "5.2", projectionGap: "0.7", result: "miss", closingLine: "4.5", clv: "0.0" },
+    { entryId: entries[2].id, playerId: playersByName["LeBron James"].id, statType: "Assists", direction: "more", lineValue: "7.5", lineType: "standard", yourProjection: "8.4", projectionGap: "0.9", result: "miss", closingLine: "7.5", clv: "0.0" },
+    { entryId: entries[3].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "Points", direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9", result: "hit", closingLine: "30.5", clv: "0.0" },
+    { entryId: entries[3].id, playerId: playersByName["Donovan Mitchell"].id, statType: "Points", direction: "more", lineValue: "26.5", lineType: "standard", yourProjection: "28.5", projectionGap: "2.0", result: "hit", closingLine: "26.5", clv: "0.0" },
+    { entryId: entries[3].id, playerId: playersByName["Nikola Jokic"].id, statType: "Assists", direction: "more", lineValue: "9.5", lineType: "demon", yourProjection: "8.9", projectionGap: "-0.6", result: "hit", closingLine: "9.5", clv: "0.0" },
+    { entryId: entries[4].id, playerId: playersByName["Nikola Jokic"].id, statType: "Points", direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.2", projectionGap: "1.7", result: "pending" },
+    { entryId: entries[4].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "Points", direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9", result: "pending" },
+    { entryId: entries[4].id, playerId: playersByName["Stephen Curry"].id, statType: "Points", direction: "more", lineValue: "26.5", lineType: "standard", yourProjection: "29.3", projectionGap: "2.8", result: "pending" },
   ]);
   console.log("Inserted 15 entry picks");
 
