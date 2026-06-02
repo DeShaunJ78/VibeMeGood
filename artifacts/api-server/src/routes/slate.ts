@@ -6,7 +6,7 @@ import {
   ppLineHistoryTable, injuriesTable, lineupConfirmationsTable,
   ourProjectionsTable, playerGameLogsTable,
 } from "@workspace/db/schema";
-import { eq, and, inArray, desc, gte, isNull, or } from "drizzle-orm";
+import { eq, and, inArray, desc, gte } from "drizzle-orm";
 import { pOverLineDist, percentileAtLineDist } from "../lib/projection/distributions";
 import { effectivePayoutMultiplier } from "../lib/payout/multiplier";
 
@@ -34,11 +34,14 @@ router.get("/slate", async (req, res) => {
     const { sport, statType, actionTag, lineType, teamId, gameId, minEdgeScore, maxRiskScore, watchlistOnly } =
       req.query as Record<string, string>;
 
-    const cutoff12h = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    // Require a real sync timestamp — excludes seeded/legacy lines that have
+    // lastSyncedAt = NULL. Using 24h so users who haven't synced today still
+    // see yesterday's slate without off-season stale lines leaking in.
+    const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const lineConditions = [
       and(
         eq(ppLinesTable.isActive, true),
-        or(isNull(ppLinesTable.lastSyncedAt), gte(ppLinesTable.lastSyncedAt, cutoff12h)),
+        gte(ppLinesTable.lastSyncedAt, cutoff24h),
       ),
     ];
     if (statType) lineConditions.push(eq(ppLinesTable.statType, statType));
@@ -184,14 +187,14 @@ router.get("/slate", async (req, res) => {
 
 router.get("/slate-sports", async (req, res) => {
   try {
-    const cutoff12h = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const rows = await db
       .select({ sport: playersTable.sport })
       .from(ppLinesTable)
       .innerJoin(playersTable, eq(ppLinesTable.playerId, playersTable.id))
       .where(and(
         eq(ppLinesTable.isActive, true),
-        or(isNull(ppLinesTable.lastSyncedAt), gte(ppLinesTable.lastSyncedAt, cutoff12h)),
+        gte(ppLinesTable.lastSyncedAt, cutoff24h),
       ));
 
     const counts = new Map<string, number>();
