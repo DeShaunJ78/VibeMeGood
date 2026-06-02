@@ -11,4 +11,5 @@
 - [Single-sport lineups](single-sport-lineups.md) — lineup factory must lock each lineup to the first accepted pick's sport in BOTH main loop and relaxed fallback; pool is global cross-sport.
 - [PP PerimeterX block](pp-perimeter-x-block.md) — server-side PP syncs always 403 (PerimeterX CAPTCHA); proxies don't help & were removed. Browser-import is the only ingestion path; no PP cron.
 - [Entry projection snapshot](entry-projection-snapshot.md) — snapshot model projection onto entry_picks server-side at log time (key player+statType, unique); AI entry-analysis prompt must inject player names.
+- [Proxy injects wildcard CORS](proxy-cors-testing.md) — localhost:80 proxy adds `Access-Control-Allow-Origin: *`; test an app's real CORS on its own port, and restart for app.ts middleware changes.
 - [PP import performance](pp-import-performance.md) — PP sync writes must be bulk/batched, never per-row, or full imports take minutes; deactivation guard mutates real lines by sport.

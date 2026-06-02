@@ -11,8 +11,11 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical, Lock } from "lucide-react";
+import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical, Lock, Zap } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useUserSettings, useUpdateUserSettings, type UserSettings } from "@/hooks/use-user-settings";
 
@@ -188,6 +191,7 @@ export default function Settings() {
   const [syncingJob, setSyncingJob] = useState<string | null>(null);
   const [ppPaste, setPpPaste] = useState("");
   const [ppImporting, setPpImporting] = useState<"idle" | "importing" | "done" | "error">("idle");
+  const [ppDialogOpen, setPpDialogOpen] = useState(false);
   const { data: userSettings } = useUserSettings();
   const updateSettings = useUpdateUserSettings();
 
@@ -231,6 +235,25 @@ export default function Settings() {
   const serverOrigin = window.location.origin;
   const importUrl = `${serverOrigin}/api/sync/pp-lines-import`;
   const ppApiUrl = "https://api.prizepicks.com/projections?per_page=25000&single_stat=true&include=new_player,league";
+
+  // One-click sync bookmarklet: runs inside the user's logged-in prizepicks.com tab,
+  // fetches the projections feed (same-site, cookies + PerimeterX pass), then POSTs
+  // straight to our import endpoint (CORS is open). No copy-paste required.
+  const bookmarklet =
+    "javascript:(async()=>{try{const r=await fetch(" + JSON.stringify(ppApiUrl) +
+    ",{credentials:'include'});if(!r.ok)throw new Error('PrizePicks returned '+r.status+' \\u2014 make sure you are logged in at prizepicks.com');" +
+    "const j=await r.json();if(!j||!j.data||!j.included)throw new Error('That was not the projections feed.');" +
+    "const p=await fetch(" + JSON.stringify(importUrl) +
+    ",{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:j.data,included:j.included})});" +
+    "const o=await p.json().catch(()=>({}));if(!p.ok)throw new Error(o.error||('Import failed: '+p.status));" +
+    "alert('\\u2713 PrizePicks synced: '+o.recordsProcessed+' lines imported into your Workstation.');}" +
+    "catch(e){alert('PrizePicks sync failed: '+(e&&e.message?e.message:e));}})();";
+
+  // React sanitizes javascript: hrefs, so set it via the DOM after mount so the
+  // anchor remains draggable to the bookmarks bar.
+  const setBookmarkletRef = (el: HTMLAnchorElement | null) => {
+    if (el) el.setAttribute("href", bookmarklet);
+  };
 
   async function importPpPaste() {
     setPpImporting("importing");
@@ -357,38 +380,20 @@ export default function Settings() {
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            {/* PrizePicks manual paste sync */}
-            <div className="p-3 rounded border border-amber-500/30 bg-amber-500/5 space-y-3">
-              <p className="font-mono text-xs font-bold text-amber-400">
-                PrizePicks Sync — Copy &amp; Paste
-              </p>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">
-                PP blocks automated fetches (bot protection). The reliable way: open their data feed in a normal
-                browser tab using your logged-in session, copy everything, paste it here.
-              </p>
-              <ol className="text-[10px] text-muted-foreground space-y-1 list-none">
-                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">1.</span><span>Be logged in at <span className="font-mono text-slate-300">app.prizepicks.com</span>.</span></li>
-                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">2.</span><span><a href={ppApiUrl} target="_blank" rel="noreferrer" className="text-amber-300 underline hover:text-amber-200">Open the PP data feed →</a> (opens in a new tab).</span></li>
-                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">3.</span><span>Select all (<span className="font-mono text-slate-300">Ctrl+A</span>), copy (<span className="font-mono text-slate-300">Ctrl+C</span>).</span></li>
-                <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">4.</span><span>Paste below, then hit <strong>Import</strong>.</span></li>
-              </ol>
-              <textarea
-                value={ppPaste}
-                onChange={e => setPpPaste(e.target.value)}
-                placeholder="Paste the PrizePicks JSON here…"
-                spellCheck={false}
-                className="w-full h-24 rounded border border-slate-700 bg-slate-950 p-2 font-mono text-[10px] text-slate-300 resize-y focus:outline-none focus:border-amber-500/50"
-              />
+            {/* PrizePicks lines — browser sync (sits inline with the other sync buttons) */}
+            <div className="flex items-center justify-between p-3 bg-slate-950 border border-amber-500/30 rounded">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm">PrizePicks Lines</span>
+                <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">Browser</span>
+              </div>
               <Button
                 size="sm"
-                onClick={importPpPaste}
-                disabled={ppImporting === "importing" || ppPaste.trim().length === 0}
-                className="h-8 font-mono text-xs bg-amber-600 hover:bg-amber-500 text-white border-0"
+                variant="outline"
+                onClick={() => setPpDialogOpen(true)}
+                className="h-7 font-mono text-xs border-amber-600/50 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20"
               >
-                <RefreshCw className={`w-3 h-3 mr-1 ${ppImporting === "importing" ? "animate-spin" : ""}`} />
-                {ppImporting === "importing" ? "Importing…" :
-                 ppImporting === "done"      ? "Done ✓" :
-                 "Import Pasted Lines"}
+                <Zap className="w-3 h-3 mr-1" />
+                Sync
               </Button>
             </div>
 
@@ -608,6 +613,72 @@ export default function Settings() {
           </CardContent>
         </Card>
       </div>
+
+      {/* PrizePicks sync dialog — one-click bookmarklet + paste fallback */}
+      <Dialog open={ppDialogOpen} onOpenChange={setPpDialogOpen}>
+        <DialogContent className="bg-slate-900 border-slate-800 max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-mono flex items-center gap-2 text-amber-300">
+              <Zap className="w-4 h-4" /> Sync PrizePicks Lines
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              PrizePicks blocks server-side fetches, so the sync runs from your own logged-in browser.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* One-click bookmarklet */}
+          <div className="space-y-2 rounded border border-amber-500/30 bg-amber-500/5 p-3">
+            <p className="font-mono text-xs font-bold text-amber-400">One-click sync (recommended)</p>
+            <ol className="text-[11px] text-muted-foreground space-y-2 list-none">
+              <li className="flex gap-2">
+                <span className="text-amber-500 font-mono shrink-0">1.</span>
+                <span>
+                  Drag this button to your browser&apos;s bookmarks bar (one-time setup):
+                  <span className="block mt-2">
+                    <a
+                      ref={setBookmarkletRef}
+                      href="#"
+                      onClick={e => e.preventDefault()}
+                      draggable
+                      className="inline-flex items-center gap-1.5 cursor-grab rounded bg-amber-600 px-3 py-1.5 font-mono text-xs font-bold text-white no-underline hover:bg-amber-500"
+                    >
+                      <Zap className="w-3 h-3" /> PP → Workstation
+                    </a>
+                  </span>
+                </span>
+              </li>
+              <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">2.</span><span>Open and log in at <span className="font-mono text-slate-300">app.prizepicks.com</span>.</span></li>
+              <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">3.</span><span>Click the bookmark. Lines import automatically — no copy-paste. Re-click any time to refresh.</span></li>
+            </ol>
+          </div>
+
+          {/* Manual paste fallback */}
+          <div className="space-y-3 rounded border border-slate-700 bg-slate-950 p-3">
+            <p className="font-mono text-xs font-bold text-slate-300">Manual paste (fallback)</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              If the bookmark is blocked, <a href={ppApiUrl} target="_blank" rel="noreferrer" className="text-amber-300 underline hover:text-amber-200">open the PP data feed →</a>, select all (Ctrl+A), copy (Ctrl+C), paste below, then Import.
+            </p>
+            <textarea
+              value={ppPaste}
+              onChange={e => setPpPaste(e.target.value)}
+              placeholder="Paste the PrizePicks JSON here…"
+              spellCheck={false}
+              className="w-full h-24 rounded border border-slate-700 bg-slate-950 p-2 font-mono text-[10px] text-slate-300 resize-y focus:outline-none focus:border-amber-500/50"
+            />
+            <Button
+              size="sm"
+              onClick={importPpPaste}
+              disabled={ppImporting === "importing" || ppPaste.trim().length === 0}
+              className="h-8 font-mono text-xs bg-amber-600 hover:bg-amber-500 text-white border-0"
+            >
+              <RefreshCw className={`w-3 h-3 mr-1 ${ppImporting === "importing" ? "animate-spin" : ""}`} />
+              {ppImporting === "importing" ? "Importing…" :
+               ppImporting === "done"      ? "Done ✓" :
+               "Import Pasted Lines"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

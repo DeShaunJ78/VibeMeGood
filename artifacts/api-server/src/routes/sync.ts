@@ -244,6 +244,13 @@ router.post("/sync/pp-lines-import", async (req, res) => {
     res.status(400).json({ error: "Request body must have data[] and included[] arrays" });
     return;
   }
+  // Sanity cap: the real PP feed is ~25k projections + included refs. Reject
+  // absurd payloads to limit dataset-poisoning / DoS surface on this open route.
+  const MAX_ITEMS = 200_000;
+  if (body.data.length > MAX_ITEMS || body.included.length > MAX_ITEMS) {
+    res.status(413).json({ error: "Payload too large — not a valid PrizePicks feed" });
+    return;
+  }
 
   const [log] = await db.insert(dataPullLogsTable).values({
     provider: "prizepicks",
