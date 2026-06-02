@@ -302,6 +302,7 @@ export default function Settings() {
   const [ppPaste, setPpPaste] = useState("");
   const [ppImporting, setPpImporting] = useState<"idle" | "importing" | "done" | "error">("idle");
   const [ppDialogOpen, setPpDialogOpen] = useState(false);
+  const [ppFetching, setPpFetching] = useState<"idle" | "fetching" | "done" | "cors-blocked" | "error">("idle");
   const { data: userSettings } = useUserSettings();
   const updateSettings = useUpdateUserSettings();
 
@@ -406,6 +407,52 @@ export default function Settings() {
     }
   }
 
+
+  async function fetchPPDirect() {
+    setPpFetching("fetching");
+    try {
+      // Attempt a direct cross-origin fetch using the user's browser credentials.
+      // Works if PP's CORS headers allow it; throws TypeError if blocked.
+      const ppRes = await fetch(ppApiUrl, { credentials: "include" });
+      if (!ppRes.ok) {
+        throw new Error(`PrizePicks returned ${ppRes.status}. Make sure you're logged in at app.prizepicks.com first.`);
+      }
+      const json = await ppRes.json() as { data?: unknown[]; included?: unknown[] };
+      if (!Array.isArray(json?.data) || !Array.isArray(json?.included)) {
+        throw new Error("Response wasn't the projections feed. Try logging in to PrizePicks first.");
+      }
+      const importRes = await fetch(importUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: json.data, included: json.included }),
+      });
+      if (!importRes.ok) {
+        const err = await importRes.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `Import failed: ${importRes.status}`);
+      }
+      const result = await importRes.json() as { recordsProcessed: number };
+      setPpFetching("done");
+      toast({ title: "PrizePicks synced", description: `${result.recordsProcessed} lines imported.` });
+      setTimeout(() => {
+        setPpFetching("idle");
+        setPpDialogOpen(false);
+        qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
+        refetch();
+      }, 2000);
+    } catch (e) {
+      // TypeError = CORS block (browser won't say which, security spec).
+      // Any other error = actual fetch/import failure.
+      const isCors = e instanceof TypeError;
+      setPpFetching(isCors ? "cors-blocked" : "error");
+      if (!isCors) {
+        toast({
+          title: "Fetch failed",
+          description: e instanceof Error ? e.message : "Unknown error",
+          variant: "destructive",
+        });
+      }
+    }
+  }
 
   async function preLockSync() {
     setSyncingPreLock(true);
@@ -729,82 +776,123 @@ export default function Settings() {
       </div>
 
       {/* PrizePicks sync dialog */}
-      <Dialog open={ppDialogOpen} onOpenChange={setPpDialogOpen}>
+      <Dialog open={ppDialogOpen} onOpenChange={(open) => { setPpDialogOpen(open); if (!open) setPpFetching("idle"); }}>
         <DialogContent className="bg-slate-900 border-slate-800 max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-mono flex items-center gap-2 text-amber-300">
               <Zap className="w-4 h-4" /> Sync PrizePicks Lines
             </DialogTitle>
             <DialogDescription className="text-slate-400 text-xs">
-              PrizePicks blocks automated server fetches. Your own logged-in browser can reach it — use either method below.
+              Make sure you&apos;re already logged in at <span className="text-slate-300 font-mono">app.prizepicks.com</span> in this browser, then tap below.
             </DialogDescription>
           </DialogHeader>
 
-          {/* Step 1 — open the feed (works on phone and desktop) */}
-          <div className="space-y-2 rounded border border-amber-500/40 bg-amber-500/5 p-3">
-            <p className="font-mono text-xs font-bold text-amber-300 flex items-center gap-1.5">
-              <span className="bg-amber-500 text-black rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-black shrink-0">1</span>
-              Open the live data feed while logged in to PrizePicks
-            </p>
-            <a
-              href={ppApiUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-center gap-2 w-full rounded bg-amber-600 hover:bg-amber-500 px-3 py-2.5 font-mono text-xs font-bold text-white no-underline transition-colors"
-            >
-              <Zap className="w-3.5 h-3.5 shrink-0" />
-              Open PrizePicks Feed →
-            </a>
-            <p className="text-[10px] text-muted-foreground">
-              A JSON page opens. Select all the text (Ctrl+A / Cmd+A on desktop, or long-press → Select All on mobile), copy it, then come back here.
-            </p>
-          </div>
-
-          {/* Step 2 — paste and import */}
-          <div className="space-y-2 rounded border border-slate-700 bg-slate-950 p-3">
-            <p className="font-mono text-xs font-bold text-slate-300 flex items-center gap-1.5">
-              <span className="bg-slate-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-black shrink-0">2</span>
-              Paste the copied text here and import
-            </p>
-            <textarea
-              value={ppPaste}
-              onChange={e => setPpPaste(e.target.value)}
-              placeholder="Paste the PrizePicks JSON here…"
-              spellCheck={false}
-              className="w-full h-24 rounded border border-slate-700 bg-slate-900 p-2 font-mono text-[10px] text-slate-300 resize-y focus:outline-none focus:border-amber-500/50"
-            />
-            <Button
-              onClick={importPpPaste}
-              disabled={ppImporting === "importing" || ppPaste.trim().length === 0}
-              className="w-full h-9 font-mono text-xs bg-amber-600 hover:bg-amber-500 text-white border-0 disabled:opacity-40"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${ppImporting === "importing" ? "animate-spin" : ""}`} />
-              {ppImporting === "importing" ? "Importing…" :
-               ppImporting === "done"      ? "✓ Import complete" :
-               "Import Lines"}
-            </Button>
-          </div>
-
-          {/* Desktop shortcut — bookmarklet */}
-          <details className="group">
-            <summary className="cursor-pointer text-[10px] font-mono text-muted-foreground hover:text-slate-300 select-none list-none flex items-center gap-1">
-              <span className="group-open:rotate-90 inline-block transition-transform">▶</span>
-              Desktop shortcut: one-click bookmarklet (skip the copy-paste forever)
-            </summary>
-            <div className="mt-2 space-y-1.5 rounded border border-slate-700 bg-slate-950 p-3 text-[10px] text-muted-foreground">
-              <p>Drag this button to your browser bookmarks bar once:</p>
-              <a
-                ref={setBookmarkletRef}
-                href="#"
-                onClick={e => e.preventDefault()}
-                draggable
-                className="inline-flex items-center gap-1.5 cursor-grab rounded bg-amber-700 px-3 py-1.5 font-mono text-xs font-bold text-white no-underline hover:bg-amber-600"
+          {/* Primary: one-tap auto-fetch */}
+          {ppFetching !== "cors-blocked" && (
+            <div className="space-y-2">
+              <Button
+                onClick={fetchPPDirect}
+                disabled={ppFetching === "fetching" || ppFetching === "done"}
+                className="w-full h-12 font-mono text-sm bg-amber-600 hover:bg-amber-500 text-white border-0 disabled:opacity-60"
               >
-                <Zap className="w-3 h-3" /> PP → Workstation
-              </a>
-              <p className="mt-1.5">Then whenever you&apos;re on <span className="text-slate-300 font-mono">app.prizepicks.com</span>, click it once — lines import automatically with no copy-paste.</p>
+                <RefreshCw className={`w-4 h-4 mr-2 ${ppFetching === "fetching" ? "animate-spin" : ""}`} />
+                {ppFetching === "fetching" ? "Fetching lines…" :
+                 ppFetching === "done"     ? "✓ Lines imported!" :
+                 ppFetching === "error"    ? "Retry fetch" :
+                 "Fetch PrizePicks Lines"}
+              </Button>
+              {ppFetching === "idle" && (
+                <p className="text-[10px] text-center text-muted-foreground">
+                  Pulls directly from PrizePicks using your login session.
+                </p>
+              )}
+              {ppFetching === "error" && (
+                <p className="text-[10px] text-center text-rose-400 font-mono">
+                  Fetch failed — see toast. Check you&apos;re logged in at app.prizepicks.com and try again.
+                </p>
+              )}
             </div>
-          </details>
+          )}
+
+          {/* CORS-blocked fallback — shown only after a CORS failure */}
+          {ppFetching === "cors-blocked" && (
+            <div className="space-y-3">
+              <div className="rounded border border-rose-500/30 bg-rose-500/5 p-3 text-[11px] text-rose-300 font-mono">
+                PrizePicks blocked the direct fetch (CORS restriction). Use one of the methods below instead.
+              </div>
+
+              {/* Bookmarklet — works on desktop + iOS Safari */}
+              <div className="rounded border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+                <p className="font-mono text-xs font-bold text-amber-300">Desktop / iOS Safari — one-click bookmarklet</p>
+                <ol className="text-[11px] text-muted-foreground space-y-1.5 list-none">
+                  <li className="flex gap-2">
+                    <span className="text-amber-500 font-mono shrink-0 font-bold">Desktop:</span>
+                    <span>Drag the button below to your bookmarks bar. Then go to <span className="text-slate-300 font-mono">app.prizepicks.com</span> and click it — done.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-amber-500 font-mono shrink-0 font-bold">iPhone:</span>
+                    <span>Bookmark any page in Safari, then edit that bookmark and replace the URL with the bookmarklet code. Tap &quot;Copy code&quot; below first.</span>
+                  </li>
+                </ol>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <a
+                    ref={setBookmarkletRef}
+                    href="#"
+                    onClick={e => e.preventDefault()}
+                    draggable
+                    className="inline-flex items-center gap-1.5 cursor-grab rounded bg-amber-700 px-3 py-1.5 font-mono text-xs font-bold text-white no-underline hover:bg-amber-600"
+                  >
+                    <Zap className="w-3 h-3" /> PP → Workstation
+                  </a>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => { navigator.clipboard.writeText(bookmarklet); toast({ title: "Bookmarklet code copied", description: "Paste it as the URL of a new Safari bookmark." }); }}
+                    className="h-7 font-mono text-xs border-slate-600 text-slate-300"
+                  >
+                    Copy code
+                  </Button>
+                </div>
+              </div>
+
+              {/* Manual paste — last resort */}
+              <details className="group">
+                <summary className="cursor-pointer text-[10px] font-mono text-muted-foreground hover:text-slate-300 select-none list-none flex items-center gap-1">
+                  <span className="group-open:rotate-90 inline-block transition-transform">▶</span>
+                  Manual paste fallback (Android Chrome / last resort)
+                </summary>
+                <div className="mt-2 space-y-2 rounded border border-slate-700 bg-slate-950 p-3">
+                  <p className="text-[10px] text-muted-foreground">
+                    Open the <a href={ppApiUrl} target="_blank" rel="noreferrer" className="text-amber-300 underline">PP data feed</a>, then in Chrome on Android tap ⋮ → <strong className="text-slate-300">Share → Copy text</strong> (not Copy link). Paste below.
+                  </p>
+                  <textarea
+                    value={ppPaste}
+                    onChange={e => setPpPaste(e.target.value)}
+                    placeholder="Paste the PrizePicks JSON here…"
+                    spellCheck={false}
+                    className="w-full h-20 rounded border border-slate-700 bg-slate-900 p-2 font-mono text-[10px] text-slate-300 resize-y focus:outline-none focus:border-amber-500/50"
+                  />
+                  <Button
+                    onClick={importPpPaste}
+                    disabled={ppImporting === "importing" || ppPaste.trim().length === 0}
+                    className="w-full h-8 font-mono text-xs bg-amber-600 hover:bg-amber-500 text-white border-0 disabled:opacity-40"
+                  >
+                    <RefreshCw className={`w-3 h-3 mr-1.5 ${ppImporting === "importing" ? "animate-spin" : ""}`} />
+                    {ppImporting === "importing" ? "Importing…" : ppImporting === "done" ? "✓ Done" : "Import Pasted Lines"}
+                  </Button>
+                </div>
+              </details>
+
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setPpFetching("idle")}
+                className="w-full h-7 font-mono text-xs text-muted-foreground"
+              >
+                ← Try auto-fetch again
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
