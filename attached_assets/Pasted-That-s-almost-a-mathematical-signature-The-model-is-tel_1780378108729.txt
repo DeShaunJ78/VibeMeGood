@@ -1,0 +1,127 @@
+That’s almost a mathematical signature.
+
+The model is telling you exactly where it’s wrong.
+
+⸻
+
+If this were my roadmap
+
+I’d prioritize it like this:
+
+Phase 1 (Current)
+
+✅ Data integrity
+
+You’ve mostly completed this.
+
+⸻
+
+Phase 2
+
+✅ Calibration
+
+Current ECE:
+
+* 9.34%
+
+Good enough to trust.
+Not good enough to stop.
+
+⸻
+
+Phase 3
+
+🔥 Distribution engine
+
+This is where I’d spend development resources next.
+
+Not because calibration is broken.
+
+Because calibration is currently compensating for a projection model that’s making the same mistake over and over.
+
+⸻
+
+What excites me most
+
+This line:
+
+25+ Under bucket → 408,977 samples → 88.5% actual
+
+That’s a giant sample.
+
+Not 500 observations.
+
+Not 5,000.
+
+Over 400,000.
+
+When you see a signal persist through that much data, you pay attention.
+
+That suggests the platform may ultimately find its strongest edges in:
+
+* Sparse-stat unders
+* Touchdown unders
+* Goal unders
+* Home-run unders
+* RBI unders
+* Similar low-frequency events
+
+That’s exactly where sportsbooks and DFS operators often struggle because humans naturally gravitate toward overs.
+
+⸻
+
+One thing I’d tell your developer
+
+Don’t replace everything at once.
+
+Implement distribution routing incrementally.
+
+For example:
+
+Stage 1
+
+* Home Runs → Poisson
+* Goals → Poisson
+* TDs → Poisson
+
+Run replay.
+
+Measure:
+
+* ECE
+* Brier
+* CLV
+* Calibration curve
+
+Then compare against the normal model.
+
+If improvement is real, continue.
+
+Stage 2
+
+* RBIs
+* Hits
+* Walks
+* Assists
+
+Move to Negative Binomial.
+
+Replay again.
+
+Measure.
+
+The advantage is you’ll know exactly which distribution changes are creating value instead of doing a massive rewrite and hoping for the best.
+
+⸻
+
+Where I’d rate the project today
+
+For a betting product in active development:
+
+* Data Integrity: 8.5/10
+* Probability Calibration: 7.5/10
+* Projection Engine: 6.5–7/10
+* Transparency/Diagnostics: 9/10
+* Production Readiness: 8/10
+
+The reason I’m relatively bullish on it now is that you’re no longer discovering random landmines. You’re uncovering expected modeling limitations. That’s a much healthier place to be. The next gains likely come from better probability distributions, not from hunting hidden bugs.

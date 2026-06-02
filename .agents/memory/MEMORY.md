@@ -11,6 +11,7 @@
 - [Single-sport lineups](single-sport-lineups.md) — lineup factory must lock each lineup to the first accepted pick's sport in BOTH main loop and relaxed fallback; pool is global cross-sport.
 - [PP PerimeterX block](pp-perimeter-x-block.md) — server-side PP syncs always 403 (PerimeterX CAPTCHA); proxies don't help & were removed. Browser-import is the only ingestion path; no PP cron.
 - [Calibration pseudo-line fix](calibration-pseudo-line-fix.md) — median=0 for sparse stats + push-exclusion = 100% hit rate artifact; fix is +0.5; TRUNCATE calibration table before re-running after any line change.
+- [Distribution engine roadmap](distribution-roadmap.md) — next major upgrade: Poisson/NegBin/ZIP per stat family; incremental 4-stage rollout; sparse-stat unders are expected strongest edge.
 - [Priors key mismatch → DEFAULT inflation](priors-key-mismatch.md) — 17+ stat types fell to DEFAULT_PRIOR(mean=20) via key mismatch; inflated pOver 96–99% via Bayesian shrinkage; fixed with canonical DB stat_type names.
 - [Entry projection snapshot](entry-projection-snapshot.md) — snapshot model projection onto entry_picks server-side at log time (key player+statType, unique); AI entry-analysis prompt must inject player names.
 - [Proxy injects wildcard CORS](proxy-cors-testing.md) — localhost:80 proxy adds `Access-Control-Allow-Origin: *`; test an app's real CORS on its own port, and restart for app.ts middleware changes.
