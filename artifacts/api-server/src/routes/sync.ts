@@ -99,8 +99,10 @@ router.post("/sync/historical-stats", async (req, res) => {
     const { backfillHistoricalStats } = await import("../lib/sync/historical-stats");
     const result = await backfillHistoricalStats({ nba, mlb, nhl, nfl });
     logger.info(result, "Historical backfill complete");
+    broadcastSyncStatus("historical-stats", "success", `${result.total} records`);
   } catch (e) {
     logger.error({ err: e }, "Historical backfill failed");
+    broadcastSyncStatus("historical-stats", "error", e instanceof Error ? e.message : "Unknown error");
   }
 });
 
@@ -206,8 +208,10 @@ router.post("/sync/calibration", async (req, res) => {
     const { calibrationJob } = await import("../scripts/calibration-job");
     const result = await calibrationJob.runHistoricalCalibration(limit);
     logger.info(result, "Calibration complete");
+    broadcastSyncStatus("calibration", "success", "Calibration complete");
   } catch (e) {
     logger.error({ err: e }, "Calibration failed");
+    broadcastSyncStatus("calibration", "error", e instanceof Error ? e.message : "Unknown error");
   }
 });
 
@@ -373,12 +377,14 @@ router.post("/admin/sync/nfl-advanced", async (req, res) => {
       .set({ status: "success", recordsProcessed: totalUpserted, finishedAt: new Date() })
       .where(eq(dataPullLogsTable.id, log.id));
     req.log.info({ totalUpserted }, "NFL advanced metrics sync OK");
+    broadcastSyncStatus("nfl-advanced-metrics", "success", `${totalUpserted} records`);
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
     req.log.error({ err }, "NFL advanced metrics sync failed");
     await db.update(dataPullLogsTable)
       .set({ status: "error", errorMessage, finishedAt: new Date() })
       .where(eq(dataPullLogsTable.id, log.id));
+    broadcastSyncStatus("nfl-advanced-metrics", "error", errorMessage);
   }
 });
 

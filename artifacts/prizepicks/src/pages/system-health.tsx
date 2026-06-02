@@ -54,12 +54,34 @@ async function triggerSync(action: string): Promise<Response | null> {
     "backfill-game-ids":      "/api/sync/backfill-game-ids",
     "matchup-history":        "/api/sync/matchup-history",
     "game-logs":              "/api/sync/game-logs",
+    "game-schedule":          "/api/sync/game-schedule",
     "game-schedule-history":  "/api/sync/game-schedule-history",
   };
   const path = map[action];
   if (!path) return null;
   return fetch(`${BASE}${path}`, { method: "POST" });
 }
+
+// Maps a Fix action to the jobName the server broadcasts on the `sync_status`
+// SSE channel when the job actually finishes. This lets us resolve the right
+// button the moment *its* job completes instead of guessing with a fixed delay.
+// Actions not listed are synchronous (resolve from the HTTP response) or fall
+// back to a safety timeout.
+const JOB_NAME_BY_ACTION: Record<string, string> = {
+  "external-odds":     "external-odds",
+  "prop-scores":       "external-odds",
+  "projections":       "projections",
+  "injuries":          "sync-injuries",
+  "variance":          "variance",
+  "game-schedule":     "game-schedule",
+  "matchup-history":   "matchup-history",
+  "backfill-game-ids": "backfill-game-ids",
+  "game-logs":             "game-logs",
+  "game-schedule-history": "game-schedule-history",
+  "historical-stats":  "historical-stats",
+  "calibration":       "calibration",
+  "nfl-advanced":      "nfl-advanced-metrics",
+};
 
 function StatusIcon({ status, size = 16 }: { status: CheckStatus; size?: number }) {
   if (status === "green")  return <CheckCircle2  size={size} className="text-emerald-400 shrink-0" />;
@@ -102,7 +124,7 @@ function CheckRow({ check, onFix, fixing }: { check: CheckResult; onFix: (a: str
           variant="outline"
           className="h-6 text-[10px] font-mono px-2 border-red-800/50 text-red-400 hover:bg-red-950/40 shrink-0"
           onClick={() => onFix(check.fixAction!)}
-          disabled={isFixing}
+          disabled={fixing !== null}
         >
           {isFixing ? <RefreshCw size={10} className="animate-spin" /> : "Fix"}
         </Button>
@@ -193,8 +215,88 @@ export default function SystemHealth() {
     staleTime: Infinity,
   });
 
+  // The in-flight "Fix". Syncs run async on the server (the POST returns
+  // "started" instantly, then the job works for seconds/minutes), so we resolve
+  // the button when its job's `sync_status` completion event arrives over SSE —
+  // never with a fixed delay. Refs keep the SSE handler stable across renders.
+  const pendingFix = useRef<{
+    action: string;
+    jobName: string | null;
+    label: string;
+    timer: ReturnType<typeof setTimeout> | null;
+  } | null>(null);
+
+  const refetchRef = useRef(refetch);
+  refetchRef.current = refetch;
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+
+  const settleFix = (ok: boolean) => {
+    const p = pendingFix.current;
+    if (!p) return;
+    if (p.timer) clearTimeout(p.timer);
+    pendingFix.current = null;
+    setFixStatus(s => ({ ...s, [p.action]: ok ? "done" : "error" }));
+    setFixing(null);
+    toastRef.current(ok
+      ? { title: "Sync complete", description: `${p.label} finished successfully` }
+      : { title: "Sync failed", description: `${p.label} returned an error — check server logs`, variant: "destructive" });
+    refetchRef.current();
+  };
+  const settleFixRef = useRef(settleFix);
+  settleFixRef.current = settleFix;
+
+  // Safety-timeout path. We have NO proof of completion (the SSE event never
+  // arrived), so we must not claim success or failure — that's exactly the
+  // false-green that caused this bug. Clear the spinner to a neutral state and
+  // refetch; the real freshness state comes from the health check itself.
+  const fixTimedOut = () => {
+    const p = pendingFix.current;
+    if (!p) return;
+    if (p.timer) clearTimeout(p.timer);
+    pendingFix.current = null;
+    setFixing(null);
+    setFixStatus(s => {
+      const next = { ...s };
+      delete next[p.action];
+      return next;
+    });
+    toastRef.current({
+      title: "Still working",
+      description: `${p.label} is taking longer than expected — this row updates automatically when it finishes.`,
+    });
+    refetchRef.current();
+  };
+  const fixTimedOutRef = useRef(fixTimedOut);
+  fixTimedOutRef.current = fixTimedOut;
+
   useEffect(() => {
     refetch();
+  }, []);
+
+  // Live job completion. The server broadcasts `sync_status` the instant a job
+  // truly finishes; we re-run the health check then so freshness rows flip to
+  // green at the right moment — for every job, present and future. This is the
+  // single source of "is it done", replacing brittle per-button timers.
+  useEffect(() => {
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const es = new EventSource(`${base}/api/events`);
+    es.addEventListener("sync_status", (e) => {
+      let d: { job?: string; status?: string };
+      try { d = JSON.parse((e as MessageEvent).data); } catch { return; }
+      if (d.status !== "success" && d.status !== "error") return;
+      refetchRef.current();
+      // Strict match only: settle the in-flight Fix when ITS job finishes.
+      // Never wildcard-settle on an unrelated job (that flips the wrong button).
+      const p = pendingFix.current;
+      if (p && p.jobName !== null && p.jobName === d.job) {
+        settleFixRef.current(d.status === "success");
+      }
+    });
+    return () => {
+      es.close();
+      if (pendingFix.current?.timer) clearTimeout(pendingFix.current.timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -208,34 +310,31 @@ export default function SystemHealth() {
 
   const handleFix = async (action: string) => {
     const label = QUICK_FIXES.find(f => f.action === action)?.label ?? action;
+    if (pendingFix.current?.timer) clearTimeout(pendingFix.current.timer);
+    pendingFix.current = { action, jobName: JOB_NAME_BY_ACTION[action] ?? null, label, timer: null };
     setFixing(action);
     setFixStatus(s => ({ ...s, [action]: "running" }));
+
     try {
       const res = await triggerSync(action);
-      if (res && !res.ok) {
-        setFixStatus(s => ({ ...s, [action]: "error" }));
-        toast({
-          title: "Sync failed",
-          description: `${label} returned an error — check server logs`,
-          variant: "destructive",
-        });
-      } else {
-        setFixStatus(s => ({ ...s, [action]: "done" }));
-        toast({
-          title: "Sync complete",
-          description: `${label} finished successfully`,
-        });
+      // Unknown action (no route mapping) — nothing ran; never fake a success.
+      if (!res) { settleFix(false); return; }
+      if (!res.ok) { settleFix(false); return; }
+
+      // Synchronous routes (e.g. pace, sharp) return their result directly and
+      // are already done. Async routes return { status: "started" } and finish
+      // later — wait for their `sync_status` SSE event (with a safety timeout).
+      const body = await res.json().catch(() => null) as { status?: string } | null;
+      const started = body?.status === "started";
+      if (!started) { settleFix(true); return; }
+
+      // Safety net: if a completion event never arrives, stop spinning after
+      // 4 min and re-check the real state anyway. (Already settled? no-op.)
+      if (pendingFix.current && pendingFix.current.action === action) {
+        pendingFix.current.timer = setTimeout(() => fixTimedOutRef.current(), 240000);
       }
     } catch {
-      setFixStatus(s => ({ ...s, [action]: "error" }));
-      toast({
-        title: "Sync failed",
-        description: `${label} returned an error — check server logs`,
-        variant: "destructive",
-      });
-    } finally {
-      setFixing(null);
-      setTimeout(() => refetch(), 2000);
+      settleFix(false);
     }
   };
 
