@@ -8,7 +8,10 @@ const router = Router();
 // All providers that write to data_pull_logs (provider column).
 // Keep this in sync with cron.ts / sync.ts.
 const PROVIDERS = [
-  { id: "prizepicks",   label: "PrizePicks Lines",       critical: true },
+  // PP lines require a manual browser import (server-side fetches always 403
+  // from PerimeterX). Marking it non-critical prevents a permanent DEGRADED
+  // alarm just because no import has been done since the last server restart.
+  { id: "prizepicks",   label: "PrizePicks Lines",       critical: false },
   { id: "injury-news",  label: "Injuries (ESPN)",         critical: true },
   { id: "the-odds-api", label: "External Odds",           critical: false },
   { id: "nba-stats",    label: "Model Projections",       critical: false },

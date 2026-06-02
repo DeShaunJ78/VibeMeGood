@@ -365,14 +365,19 @@ async function checkApiConnectivity(): Promise<CheckResult[]> {
         const res = await fetchWithTimeout(c.url, {
           headers: { "User-Agent": "VibeMeGood/1.0 Health Check" },
         }, 4000);
+        // PP API always 403 server-side (PerimeterX). Treat as amber (known
+        // limitation, not a breakage) so it never drives the overall red status.
+        const ppBlock = !res.ok && res.status === 403 && c.name === "PrizePicks API";
         return {
           name: c.name,
-          status: res.ok ? "green" : res.status === 429 ? "amber" : "red",
+          status: res.ok ? "green" : ppBlock ? "amber" : res.status === 429 ? "amber" : "red",
           detail: res.ok
             ? `HTTP ${res.status} OK`
-            : res.status === 429
-              ? "HTTP 429 — rate limited (transient)"
-              : `HTTP ${res.status} error`,
+            : ppBlock
+              ? "HTTP 403 — PerimeterX (expected). Use the browser import in Settings."
+              : res.status === 429
+                ? "HTTP 429 — rate limited (transient)"
+                : `HTTP ${res.status} error`,
           lastUpdated: null,
           fixAction: null,
         };
@@ -479,10 +484,11 @@ async function checkFeatureStatus(): Promise<CheckResult[]> {
     },
     {
       name: "Market Intel",
-      status: miN > 0 ? "green" : "red",
+      // amber (not red) when no lines — PP import requires manual browser action,
+      // so zero lines is expected after a restart, not a system error.
+      status: miN > 0 ? "green" : "amber",
       detail: miN === 0 ? "No active lines — run the PrizePicks import in Settings" : `${miN} active lines in index`,
       lastUpdated: null,
-      // No automatable fix — PP lines come from the browser copy-paste import.
       fixAction: null,
     },
     {

@@ -728,69 +728,83 @@ export default function Settings() {
         </Card>
       </div>
 
-      {/* PrizePicks sync dialog — one-click bookmarklet + paste fallback */}
+      {/* PrizePicks sync dialog */}
       <Dialog open={ppDialogOpen} onOpenChange={setPpDialogOpen}>
         <DialogContent className="bg-slate-900 border-slate-800 max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-mono flex items-center gap-2 text-amber-300">
               <Zap className="w-4 h-4" /> Sync PrizePicks Lines
             </DialogTitle>
-            <DialogDescription className="text-slate-400">
-              PrizePicks blocks server-side fetches, so the sync runs from your own logged-in browser.
+            <DialogDescription className="text-slate-400 text-xs">
+              PrizePicks blocks automated server fetches. Your own logged-in browser can reach it — use either method below.
             </DialogDescription>
           </DialogHeader>
 
-          {/* One-click bookmarklet */}
-          <div className="space-y-2 rounded border border-amber-500/30 bg-amber-500/5 p-3">
-            <p className="font-mono text-xs font-bold text-amber-400">One-click sync (recommended)</p>
-            <ol className="text-[11px] text-muted-foreground space-y-2 list-none">
-              <li className="flex gap-2">
-                <span className="text-amber-500 font-mono shrink-0">1.</span>
-                <span>
-                  Drag this button to your browser&apos;s bookmarks bar (one-time setup):
-                  <span className="block mt-2">
-                    <a
-                      ref={setBookmarkletRef}
-                      href="#"
-                      onClick={e => e.preventDefault()}
-                      draggable
-                      className="inline-flex items-center gap-1.5 cursor-grab rounded bg-amber-600 px-3 py-1.5 font-mono text-xs font-bold text-white no-underline hover:bg-amber-500"
-                    >
-                      <Zap className="w-3 h-3" /> PP → Workstation
-                    </a>
-                  </span>
-                </span>
-              </li>
-              <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">2.</span><span>Open and log in at <span className="font-mono text-slate-300">app.prizepicks.com</span>.</span></li>
-              <li className="flex gap-2"><span className="text-amber-500 font-mono shrink-0">3.</span><span>Click the bookmark. Lines import automatically — no copy-paste. Re-click any time to refresh.</span></li>
-            </ol>
+          {/* Step 1 — open the feed (works on phone and desktop) */}
+          <div className="space-y-2 rounded border border-amber-500/40 bg-amber-500/5 p-3">
+            <p className="font-mono text-xs font-bold text-amber-300 flex items-center gap-1.5">
+              <span className="bg-amber-500 text-black rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-black shrink-0">1</span>
+              Open the live data feed while logged in to PrizePicks
+            </p>
+            <a
+              href={ppApiUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-center gap-2 w-full rounded bg-amber-600 hover:bg-amber-500 px-3 py-2.5 font-mono text-xs font-bold text-white no-underline transition-colors"
+            >
+              <Zap className="w-3.5 h-3.5 shrink-0" />
+              Open PrizePicks Feed →
+            </a>
+            <p className="text-[10px] text-muted-foreground">
+              A JSON page opens. Select all the text (Ctrl+A / Cmd+A on desktop, or long-press → Select All on mobile), copy it, then come back here.
+            </p>
           </div>
 
-          {/* Manual paste fallback */}
-          <div className="space-y-3 rounded border border-slate-700 bg-slate-950 p-3">
-            <p className="font-mono text-xs font-bold text-slate-300">Manual paste (fallback)</p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
-              If the bookmark is blocked, <a href={ppApiUrl} target="_blank" rel="noreferrer" className="text-amber-300 underline hover:text-amber-200">open the PP data feed →</a>, select all (Ctrl+A), copy (Ctrl+C), paste below, then Import.
+          {/* Step 2 — paste and import */}
+          <div className="space-y-2 rounded border border-slate-700 bg-slate-950 p-3">
+            <p className="font-mono text-xs font-bold text-slate-300 flex items-center gap-1.5">
+              <span className="bg-slate-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-black shrink-0">2</span>
+              Paste the copied text here and import
             </p>
             <textarea
               value={ppPaste}
               onChange={e => setPpPaste(e.target.value)}
               placeholder="Paste the PrizePicks JSON here…"
               spellCheck={false}
-              className="w-full h-24 rounded border border-slate-700 bg-slate-950 p-2 font-mono text-[10px] text-slate-300 resize-y focus:outline-none focus:border-amber-500/50"
+              className="w-full h-24 rounded border border-slate-700 bg-slate-900 p-2 font-mono text-[10px] text-slate-300 resize-y focus:outline-none focus:border-amber-500/50"
             />
             <Button
-              size="sm"
               onClick={importPpPaste}
               disabled={ppImporting === "importing" || ppPaste.trim().length === 0}
-              className="h-8 font-mono text-xs bg-amber-600 hover:bg-amber-500 text-white border-0"
+              className="w-full h-9 font-mono text-xs bg-amber-600 hover:bg-amber-500 text-white border-0 disabled:opacity-40"
             >
-              <RefreshCw className={`w-3 h-3 mr-1 ${ppImporting === "importing" ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${ppImporting === "importing" ? "animate-spin" : ""}`} />
               {ppImporting === "importing" ? "Importing…" :
-               ppImporting === "done"      ? "Done ✓" :
-               "Import Pasted Lines"}
+               ppImporting === "done"      ? "✓ Import complete" :
+               "Import Lines"}
             </Button>
           </div>
+
+          {/* Desktop shortcut — bookmarklet */}
+          <details className="group">
+            <summary className="cursor-pointer text-[10px] font-mono text-muted-foreground hover:text-slate-300 select-none list-none flex items-center gap-1">
+              <span className="group-open:rotate-90 inline-block transition-transform">▶</span>
+              Desktop shortcut: one-click bookmarklet (skip the copy-paste forever)
+            </summary>
+            <div className="mt-2 space-y-1.5 rounded border border-slate-700 bg-slate-950 p-3 text-[10px] text-muted-foreground">
+              <p>Drag this button to your browser bookmarks bar once:</p>
+              <a
+                ref={setBookmarkletRef}
+                href="#"
+                onClick={e => e.preventDefault()}
+                draggable
+                className="inline-flex items-center gap-1.5 cursor-grab rounded bg-amber-700 px-3 py-1.5 font-mono text-xs font-bold text-white no-underline hover:bg-amber-600"
+              >
+                <Zap className="w-3 h-3" /> PP → Workstation
+              </a>
+              <p className="mt-1.5">Then whenever you&apos;re on <span className="text-slate-300 font-mono">app.prizepicks.com</span>, click it once — lines import automatically with no copy-paste.</p>
+            </div>
+          </details>
         </DialogContent>
       </Dialog>
     </div>
