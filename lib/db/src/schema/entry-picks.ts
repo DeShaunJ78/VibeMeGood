@@ -20,6 +20,10 @@ export const entryPicksTable = pgTable("entry_picks", {
   result: text("result").notNull().default("pending"), // pending | hit | miss | dnp | push
   closingLine: numeric("closing_line"),
   clv: numeric("clv"),
+  // Edge + tier snapshot — frozen at log time so Journal/Review analysis
+  // reflects the model's confidence at the moment the bet was made.
+  snapshotEdgeScore: numeric("snapshot_edge_score"),
+  snapshotTier: text("snapshot_tier"), // A | B | C | D
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

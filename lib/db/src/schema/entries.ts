@@ -19,6 +19,11 @@ export const entriesTable = pgTable("entries", {
   earlyExitEligible: boolean("early_exit_eligible").notNull().default(false),
   earlyExitValue: numeric("early_exit_value"),
   earlyExitUsed: boolean("early_exit_used").notNull().default(false),
+  // Bankroll snapshot — frozen at log time so historical analysis is
+  // independent of future Settings changes.
+  snapshotBankroll: numeric("snapshot_bankroll"),
+  snapshotUnitSize: numeric("snapshot_unit_size"),
+  snapshotSuggestedStake: numeric("snapshot_suggested_stake"),
 });
 
 export const insertEntrySchema = createInsertSchema(entriesTable).omit({ id: true });

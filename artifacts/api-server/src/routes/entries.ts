@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@workspace/db";
 import {
   entriesTable, entryPicksTable, playersTable, ppLinesTable, clvRecordsTable,
-  ppLineHistoryTable, ourProjectionsTable,
+  ppLineHistoryTable, ourProjectionsTable, propScoresTable,
   behavioralLogsTable, userSettingsTable, type InsertEntry,
 } from "@workspace/db/schema";
 import { eq, and, gte, lte, inArray, desc, type SQL } from "drizzle-orm";
@@ -79,6 +79,47 @@ async function settlePickCLV(pick: {
     .update(entryPicksTable)
     .set({ closingLine: closingLine.toString(), clv: clv.toString() })
     .where(eq(entryPicksTable.id, pick.id));
+}
+
+// ── Tier classification — mirrors the client-side logic in slate-board.tsx ──
+function edgeToTier(edge: number): string {
+  if (edge >= 43) return "A";
+  if (edge >= 30) return "B";
+  if (edge >= 20) return "C";
+  return "D";
+}
+
+// Snapshot the current edge score and tier for each pick that references a
+// ppLineId. Picks without a ppLineId (manual slips) or with no prop_scores row
+// get null — that is correct, not a missing-data bug.
+async function enrichPicksWithEdgeSnapshot<T extends {
+  ppLineId?: number | null;
+  snapshotEdgeScore?: number | null;
+  snapshotTier?: string | null;
+}>(picks: T[]): Promise<T[]> {
+  const ppLineIds = [...new Set(
+    picks.filter(p => p.ppLineId != null && p.snapshotEdgeScore == null).map(p => p.ppLineId as number),
+  )];
+  if (ppLineIds.length === 0) return picks;
+
+  const rows = await db
+    .select({ ppLineId: propScoresTable.ppLineId, edgeScore: propScoresTable.edgeScore })
+    .from(propScoresTable)
+    .where(inArray(propScoresTable.ppLineId, ppLineIds));
+
+  const edgeByLine = new Map<number, number>();
+  for (const r of rows) {
+    if (r.ppLineId != null && r.edgeScore != null) {
+      edgeByLine.set(r.ppLineId, Number(r.edgeScore));
+    }
+  }
+
+  return picks.map(p => {
+    if (p.ppLineId == null || p.snapshotEdgeScore != null) return p;
+    const edge = edgeByLine.get(p.ppLineId);
+    if (edge == null) return p;
+    return { ...p, snapshotEdgeScore: edge, snapshotTier: edgeToTier(edge) };
+  });
 }
 
 function getTimeOfDay(): string {
@@ -282,25 +323,59 @@ router.post("/entries", async (req, res): Promise<void> => {
     // numbers the Slate Board showed — bulletproof against a client that omits them.
     picksToInsert = await enrichPicksWithProjections(picksToInsert);
 
+    // Snapshot edge scores + tiers at log time — independent of future rescore runs.
+    picksToInsert = await enrichPicksWithEdgeSnapshot(picksToInsert);
+
+    // Freeze bankroll + unit size at log time. Settings can change; historical
+    // records must reflect what the system recommended when the bet was made.
+    const [settingsRow] = await db
+      .select({ bankroll: userSettingsTable.bankroll, unitSize: userSettingsTable.unitSize })
+      .from(userSettingsTable)
+      .where(eq(userSettingsTable.userId, userId))
+      .limit(1);
+    const snapshotBankroll  = settingsRow?.bankroll  ? Number(settingsRow.bankroll)  : 500;
+    const snapshotUnitSize  = settingsRow?.unitSize   ? Number(settingsRow.unitSize)  : 5;
+
+    // Suggested stake = highest-tier pick's multiplier × unit size.
+    // Tier A=5u, B=2u, C=1u, D=0 → default to 1u if all D.
+    const tierUnits: Record<string, number> = { A: 5, B: 2, C: 1, D: 0 };
+    const dominantTier = picksToInsert.reduce<string>((best, p) => {
+      const t = (p as { snapshotTier?: string | null }).snapshotTier ?? "D";
+      const bestOrder = ["A", "B", "C", "D"].indexOf(best);
+      const thisOrder = ["A", "B", "C", "D"].indexOf(t);
+      return thisOrder < bestOrder ? t : best;
+    }, "D");
+    const suggestedUnits = tierUnits[dominantTier] ?? 1;
+    const snapshotSuggestedStake = Math.max(snapshotUnitSize, suggestedUnits * snapshotUnitSize);
+
     // Entry + legs are created in a single transaction so a leg failure rolls back
     // the whole entry — never leaves an ungradeable entry with zero picks.
     const entry = await db.transaction(async (tx) => {
-      const [created] = await tx.insert(entriesTable).values(entryBody as InsertEntry).returning();
+      const [created] = await tx.insert(entriesTable).values({
+        ...(entryBody as InsertEntry),
+        snapshotBankroll:       String(snapshotBankroll),
+        snapshotUnitSize:       String(snapshotUnitSize),
+        snapshotSuggestedStake: String(snapshotSuggestedStake),
+      }).returning();
       if (picksToInsert.length > 0) {
         await tx.insert(entryPicksTable).values(
           picksToInsert.map(p => ({
-            entryId:        created.id,
-            ppLineId:       p.ppLineId ?? null,
-            playerId:       p.playerId ?? null,
-            playerName:     p.playerName ?? null,
-            gameId:         p.gameId ?? null,
-            statType:       p.statType,
-            direction:      p.direction,
-            lineValue:      String(p.lineValue),
-            lineType:       p.lineType,
-            result:         p.result ?? "pending",
-            yourProjection: p.yourProjection != null ? String(p.yourProjection) : null,
-            projectionGap:  p.projectionGap != null ? String(p.projectionGap) : null,
+            entryId:            created.id,
+            ppLineId:           p.ppLineId ?? null,
+            playerId:           p.playerId ?? null,
+            playerName:         p.playerName ?? null,
+            gameId:             p.gameId ?? null,
+            statType:           p.statType,
+            direction:          p.direction,
+            lineValue:          String(p.lineValue),
+            lineType:           p.lineType,
+            result:             p.result ?? "pending",
+            yourProjection:     p.yourProjection != null ? String(p.yourProjection) : null,
+            projectionGap:      p.projectionGap != null ? String(p.projectionGap) : null,
+            snapshotEdgeScore:  (p as { snapshotEdgeScore?: number | null }).snapshotEdgeScore != null
+              ? String((p as { snapshotEdgeScore?: number | null }).snapshotEdgeScore)
+              : null,
+            snapshotTier:       (p as { snapshotTier?: string | null }).snapshotTier ?? null,
           })),
         );
       }
