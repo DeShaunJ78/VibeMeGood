@@ -131,6 +131,10 @@ export const calibrationJob = {
         const std = Math.max(sampleStd(priorVals, mu), mu * STD_FLOOR_PCT);
         const line = median(priorVals); // pseudo-line (book proxy)
 
+        // Exact ties are pushes (refund), not misses — exclude them so integer
+        // stats don't bias the empirical hit rate toward "under".
+        if (curValue === line) continue;
+
         // Raw model probability — same core function production uses.
         const pOver = pOverLine(mu, std, line); // 0–100
         const edgePct = Math.abs(pOver - 50);
