@@ -286,6 +286,17 @@ const SYNC_JOBS = [
   { label: "Backfill History",  endpoint: "/api/sync/historical-stats" },
 ];
 
+// Maps a manual sync job to the data_pull_logs provider it refreshes, so each
+// row can show live status instead of a static button.
+const JOB_PROVIDER: Record<string, string> = {
+  "/api/sync/injuries":      "injury-news",
+  "/api/sync/external-odds": "the-odds-api",
+  "/api/sync/projections":   "nba-stats",
+  "/api/sync/scores":        "espn",
+  "/api/sync/variance":      "internal",
+  "/api/sync/game-schedule": "espn",
+};
+
 function StatusDot({ status }: { status: string }) {
   if (status === "success") return <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />;
   if (status === "error")   return <span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />;
@@ -470,6 +481,17 @@ export default function Settings() {
     }
   }
 
+  const providerByName: Record<string, any> = {};
+  for (const p of ((data?.providers ?? []) as any[])) providerByName[p.name] = p;
+
+  // PrizePicks freshness is driven by actual pp_lines age (boardAgeHours), the
+  // most reliable "is the board current" signal — turns green right after import.
+  const ppProvider = providerByName["prizepicks"];
+  const ppAge = data?.boardAgeHours ?? null;
+  const ppNever = !data?.boardFreshnessAt || ppAge == null;
+  const ppFresh = !ppNever && ppAge <= 6;
+  const ppLineCount = ppProvider?.recordsLastSync ?? null;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-4">
@@ -541,41 +563,84 @@ export default function Settings() {
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            {/* PrizePicks lines — browser sync (sits inline with the other sync buttons) */}
-            <div className="flex items-center justify-between p-3 bg-slate-950 border border-amber-500/30 rounded">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm">PrizePicks Lines</span>
-                <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">Browser</span>
+            {/* PrizePicks lines — browser sync; row reflects real board freshness */}
+            <div className={`flex items-center justify-between p-3 bg-slate-950 border rounded ${
+              ppFresh ? "border-emerald-500/30" : ppNever ? "border-slate-800" : "border-amber-500/30"
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <span className={`w-2 h-2 rounded-full inline-block shrink-0 ${
+                  ppFresh ? "bg-emerald-400" : ppNever ? "bg-slate-600" : "bg-amber-400"
+                }`} />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm">PrizePicks Lines</span>
+                    <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">Browser</span>
+                  </div>
+                  <span className={`text-[10px] font-mono ${ppFresh ? "text-emerald-400/80" : ppNever ? "text-slate-500" : "text-amber-400/80"}`}>
+                    {ppNever
+                      ? "Never imported"
+                      : `${ppFresh ? "Fresh" : "Stale"}${ppLineCount != null ? ` · ${ppLineCount} lines` : ""} · ${
+                          data?.boardFreshnessAt ? formatDistanceToNow(new Date(data.boardFreshnessAt), { addSuffix: true }) : ""
+                        }`}
+                  </span>
+                </div>
               </div>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => setPpDialogOpen(true)}
-                className="h-7 font-mono text-xs border-amber-600/50 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20"
+                className={`h-7 font-mono text-xs ${
+                  ppFresh
+                    ? "border-emerald-600/50 bg-emerald-600/10 text-emerald-300 hover:bg-emerald-600/20"
+                    : "border-amber-600/50 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20"
+                }`}
               >
-                <Zap className="w-3 h-3 mr-1" />
-                Sync
+                {ppFresh ? <CheckCircle2 className="w-3 h-3 mr-1" /> : <Zap className="w-3 h-3 mr-1" />}
+                {ppFresh ? "Re-sync" : "Sync"}
               </Button>
             </div>
 
-            {SYNC_JOBS.map(job => (
-              <div
-                key={job.endpoint}
-                className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded"
-              >
-                <span className="font-mono text-sm">{job.label}</span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => triggerSync(job.endpoint, job.label)}
-                  disabled={syncingJob === job.endpoint || syncingAll}
-                  className="h-7 font-mono text-xs border-slate-700 bg-slate-800 hover:bg-slate-700"
+            {SYNC_JOBS.map(job => {
+              const prov = JOB_PROVIDER[job.endpoint] ? providerByName[JOB_PROVIDER[job.endpoint]] : undefined;
+              const isRunning = syncingJob === job.endpoint;
+              const ok = prov?.status === "success";
+              const failed = prov?.status === "error";
+              const dotClass = isRunning ? "bg-amber-400 animate-pulse"
+                : ok ? "bg-emerald-400"
+                : failed ? "bg-rose-400"
+                : "bg-slate-600";
+              const borderClass = failed ? "border-rose-500/30" : ok ? "border-slate-800" : "border-slate-800";
+              return (
+                <div
+                  key={job.endpoint}
+                  className={`flex items-center justify-between p-3 bg-slate-950 border rounded ${borderClass}`}
                 >
-                  <RefreshCw className={`w-3 h-3 mr-1 ${syncingJob === job.endpoint ? "animate-spin" : ""}`} />
-                  {syncingJob === job.endpoint ? "Running" : "Sync"}
-                </Button>
-              </div>
-            ))}
+                  <div className="flex items-center gap-2.5">
+                    <span className={`w-2 h-2 rounded-full inline-block shrink-0 ${dotClass}`} />
+                    <div>
+                      <span className="font-mono text-sm block">{job.label}</span>
+                      {prov && (
+                        <span className={`text-[10px] font-mono ${failed ? "text-rose-400/80" : ok ? "text-muted-foreground" : "text-slate-500"}`}>
+                          {prov.lastSuccessAt
+                            ? `${prov.recordsLastSync != null ? `${prov.recordsLastSync} · ` : ""}${formatDistanceToNow(new Date(prov.lastSuccessAt), { addSuffix: true })}`
+                            : "Never run"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => triggerSync(job.endpoint, job.label)}
+                    disabled={isRunning || syncingAll}
+                    className="h-7 font-mono text-xs border-slate-700 bg-slate-800 hover:bg-slate-700"
+                  >
+                    <RefreshCw className={`w-3 h-3 mr-1 ${isRunning ? "animate-spin" : ""}`} />
+                    {isRunning ? "Running" : "Sync"}
+                  </Button>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
 

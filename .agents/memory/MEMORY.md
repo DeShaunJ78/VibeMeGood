@@ -22,3 +22,4 @@
 - [Probability calibration source](probability-calibration-source.md) — calibration is self-feeding from player_game_logs walk-forward replay (no manual input); historical PP lines aren't linkable to outcomes (only unplayed games carry gameId).
 - [Cross-tier EV best-value](cross-tier-ev-best-value.md) — EV=pHit×M per tier; two traps that spuriously crown demon: mixed raw/calibrated prob basis, and synthetic-default multipliers (gate on multiplierTrustworthy).
 - [Shark knowledge injection](shark-knowledge-injection.md) — Shark prompt also pulls EVERY *.md in its knowledge folders; editing prompt+UI alone leaves stale framing; grep all of knowledge/.
+- [Settings data-health UI freshness](data-health-ui-freshness.md) — PP sync row greens off boardFreshnessAt (pp_lines age), generic rows off provider aggregation; don't use lastPullLogs (only 30).
