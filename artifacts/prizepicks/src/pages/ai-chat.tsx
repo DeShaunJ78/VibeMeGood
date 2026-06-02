@@ -94,6 +94,9 @@ export default function AiChat() {
   const [sending, setSending] = useState(false);
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
+  // Mobile: show either sidebar (conversation list) or the chat panel, not both.
+  // On sm+ both are always visible side-by-side.
+  const [showSidebar, setShowSidebar] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -111,6 +114,7 @@ export default function AiChat() {
     setActiveId(id);
     setMessages([]);
     setLoadingMsgs(true);
+    setShowSidebar(false); // on mobile: switch to chat view
     const data = await apiGet(`/anthropic/conversations/${id}/messages`);
     setMessages(Array.isArray(data) ? data : []);
     setLoadingMsgs(false);
@@ -121,13 +125,14 @@ export default function AiChat() {
     setConversations(prev => [conv, ...prev]);
     setActiveId(conv.id);
     setMessages([]);
+    setShowSidebar(false); // on mobile: switch to chat view
   }
 
   async function deleteConversation(id: number, e: React.MouseEvent) {
     e.stopPropagation();
     await apiDelete(`/anthropic/conversations/${id}`);
     setConversations(prev => prev.filter(c => c.id !== id));
-    if (activeId === id) { setActiveId(null); setMessages([]); }
+    if (activeId === id) { setActiveId(null); setMessages([]); setShowSidebar(true); }
   }
 
   async function sendMessage() {
@@ -162,9 +167,10 @@ export default function AiChat() {
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-[240px_1fr] gap-0 min-h-0 border border-slate-800 rounded-lg overflow-hidden mt-2">
-        {/* Sidebar */}
-        <div className="bg-slate-950 border-r border-slate-800 flex flex-col">
+      {/* Mobile: one panel at a time. sm+: both panels side-by-side. */}
+      <div className="flex-1 min-h-0 border border-slate-800 rounded-lg overflow-hidden mt-2 flex flex-col sm:grid sm:grid-cols-[240px_1fr]">
+        {/* Sidebar — full-width on mobile when showSidebar=true, hidden otherwise */}
+        <div className={`bg-slate-950 border-r border-slate-800 flex-col sm:flex ${showSidebar ? "flex" : "hidden"}`}>
           <div className="p-3 border-b border-slate-800 shrink-0">
             <Button onClick={newConversation} className="w-full font-mono text-xs bg-slate-800 hover:bg-slate-700 text-foreground" variant="outline">
               <Plus className="w-3.5 h-3.5 mr-2" /> New Conversation
@@ -201,8 +207,15 @@ export default function AiChat() {
           </div>
         </div>
 
-        {/* Chat area */}
-        <div className="flex flex-col bg-slate-900 min-h-0">
+        {/* Chat area — full-width on mobile when showSidebar=false, hidden otherwise */}
+        <div className={`flex-col bg-slate-900 min-h-0 sm:flex ${!showSidebar ? "flex" : "hidden"}`}>
+          {/* Mobile back button */}
+          <button
+            onClick={() => setShowSidebar(true)}
+            className="sm:hidden flex items-center gap-1.5 px-3 py-2 border-b border-slate-800 text-xs font-mono text-muted-foreground hover:text-foreground shrink-0"
+          >
+            ← Conversations
+          </button>
           {!activeId ? (
             <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6">
               <div className="text-center">

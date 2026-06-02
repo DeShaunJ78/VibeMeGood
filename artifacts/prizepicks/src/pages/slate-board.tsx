@@ -1065,7 +1065,7 @@ export default function SlateBoard() {
         {/* Row 1: title + tabs (left) · status badges / mobile controls (right) */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-1">
-            <h1 className="text-2xl font-bold tracking-tight mr-4">Slates</h1>
+            <h1 className="hidden sm:block text-2xl font-bold tracking-tight mr-4">Slates</h1>
             <button
               onClick={() => setTab("player")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-mono transition-colors ${tab === "player" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground bg-slate-800/50"}`}
