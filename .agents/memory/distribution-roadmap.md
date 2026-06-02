@@ -1,46 +1,57 @@
 ---
 name: Distribution engine roadmap
-description: Strategic decision to replace normal distribution with stat-appropriate distributions (Poisson/NegBin/ZIP) for sparse counting stats. Stage 1 and Stage 2 complete.
+description: Replacing normal distribution with stat-appropriate distributions. Stage 1–3 complete. All changes isolated to distributions.ts.
 ---
 
-## Decision
-Replace normal distribution pOver calculation with stat-appropriate distributions. Architecture supports this cleanly — `pOverLineDist()` in `distributions.ts` is the single swap point; compute.ts, slate.ts, and backtest.ts all route through it.
+## Architecture
+Single swap point: `distributions.ts`. Consumers (`compute.ts`, `slate.ts`, `backtest.ts`) call `pOverLineDist(mean, sigma, line, statType)` — no changes needed when adding new distributions.
 
-## Why
-Calibration audit showed consistent directional bias: overs over-predicted ~10–15% across all buckets, unders under-predicted ~7–9%. Mathematical signature of distribution misspecification (right-skewed counting stats forced into symmetric normal), not data error or sampling noise.
+`DistributionFamily = "normal" | "poisson" | "negbin" | "zip"` — add "lognormal" for Stage 4.
 
-## Implementation architecture
-- `distributions.ts` — single file for all CDF math and routing. Only file that changes per stage.
-- `DistributionFamily = "normal" | "poisson" | "negbin"` (add "zip" for Stage 3)
-- NegBin dispersion r = mean²/(sigma²−mean), computed dynamically at runtime from blended (mean, sigma). Auto-falls back to Poisson when sigma²≤mean (underdispersed per blended estimate).
-- Calibration layer stays on top unchanged.
+## Measured progression
 
-## Rollout — measured results
+| Stage | Description | Brier | Confident HR | Δ Brier | Δ HR |
+|-------|-------------|-------|-------------|---------|------|
+| 0 | All Normal | ~0.28+ | ~50% | — | — |
+| 1 | + Poisson | 0.2626 | 55.6% | −0.02+ | +5pp |
+| 2 | + NegBin | 0.2354 | 66.6% | −0.0272 | +11pp |
+| 3 | + ZIP | **0.2286** | **69.6%** | −0.0068 | +3pp |
 
-### Stage 1 (complete): Poisson
-Stats: Home Runs, Goals, Pass/Rush/Rec TDs, Stolen Bases, 3-PT Made
-- Home Runs under calibration gap: 9pp → 3pp (two-thirds reduction)
-- Backtest Brier: 0.2626 → baseline after Stage 1
+**Key driver of Stage 2 (−0.0272):** RBIs at line=1.5 shifted Normal 89.6% → NegBin 16.2%.
+**Key drivers of Stage 3 (−0.0068):** PPP and Blocked Shots moved from Normal (wildly wrong) to ZIP.
 
-### Stage 2 (complete): Negative Binomial
+## Stage 1 — Poisson
+Stats: Home Runs, Goals, Pass/Rush/Rec TDs, 3-PT Made
+Home Runs under gap: 9pp → 3pp.
+
+## Stage 2 — Negative Binomial
 Stats: RBIs, Hits, Walks, NHL Assists, Doubles, Runs, Singles
-- Backtest Brier: 0.2626 → **0.2354** (−0.0272)
-- Confident hit rate: 55.6% → **66.6%** (+11pp)
-- Key driver: RBIs at line=1.5 shifted from Normal 89.6% → NegBin 16.2%
+r = mean²/(sigma²−mean), dynamic. Falls back to Poisson when sigma²≤mean.
+Note: Hits and NHL Assists often fall back to Poisson because prior std is conservative.
 
-**Fallback behavior observed:** Hits and NHL Assists with prior std produce sigma²<mean → auto-fall to Poisson. Will express true NegBin behavior once real game-log stds blend in (r computed from sample, not prior).
+## Stage 3 — Zero-Inflated Poisson
+Stats: Stolen Bases (π=0.15), Power Play Points (π=0.20), Blocked Shots (π=0.10)
+Stolen Bases MOVED from Poisson set to ZIP set.
+λ_eff = mean/(1−π) preserves E[X]=mean.
+CDF: P(X≤k) = π + (1−π)·PoissonCDF(λ_eff, k)
 
-### Stage 3 (next): Zero-Inflated Poisson
-Stats: Power Play Points, Blocked Shots
-- Structural zero excess — player often has true "not in role today" game state
-- Stolen Bases residual (92.9% actual vs 83% Poisson) also a ZIP candidate
-- Need p_zero per player+stat (estimated from fraction of zero-games in sample)
+**ZIP p_zero tuning note:** ZIP vs Poisson delta for SB is tiny (~0.3pp) because mean=0.18 is very low.
+The real SB residual (92.9% actual vs 83% model) likely reflects prior mean being too high
+for PP-eligible SB players — the actual eligible population mean is closer to 0.07–0.10.
+Future fix: lower SB prior mean or compute per-player ZIP pZero from game-log zero fraction.
 
-### Stage 4 (future): Yards stats
-Pass Yards, Rush Yards, Receiving Yards — continuous-ish, hard floor > 0 for active players. Log-normal or NegBin with large r.
+## Stage 4 (future)
+Pass Yards, Rush Yards, Receiving Yards — continuous with hard floor > 0 for active players.
+Log-normal or NegBin with large r.
 
-## Expected edge implications
-Sparse-stat UNDERS are the platform's strongest edges:
-1. Model now better-calibrated for under probability
-2. Human bettors gravitate toward overs (survivorship/highlight bias)
-3. Books/DFS operators least sharp on rare-event unders
+## Calibration pattern after Stage 3
+- 0-10%: pred 5.9%, actual 6.9% (n=1004) — nearly perfect
+- 10-20%: pred 16.5%, actual 16.5% (n=4248) — PERFECT
+- 20-30%: pred 25.3%, actual 24.4% (n=3086) — near-perfect
+- 30-40%: 33.0% actual vs 35.8% pred — 2.8pp residual
+- 50%+ range: systematic over-prediction remains (calibration layer handles this)
+
+## Edge implications
+Sparse-stat UNDERS are the platform's strongest signals. The under probability is now well-calibrated
+for Home Runs, Power Play Points, and Blocked Shots. Stolen Bases under still has a ~9pp residual
+(prior mean mismatch, not distribution mismatch — ZIP is the right model, needs better prior).
