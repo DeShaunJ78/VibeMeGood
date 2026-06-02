@@ -662,6 +662,39 @@ export interface ReviewStats {
   hitRateByEntryType?: unknown;
 }
 
+export interface CalibrationBucket {
+  edgeBucket: string;
+  direction: string;
+  predictedProb: number;
+  actualRate: number;
+  sampleSize: number;
+  calibrationError: number;
+  bucketBrier: number;
+  ecContrib: number;
+  brierContrib: number;
+}
+
+export type CalibrationDiagnosticsSummary = {
+  ece: number;
+  brierScore: number;
+  totalSamples: number;
+  avgCalibrationError: number;
+  maxCalibrationError: number;
+};
+
+export type CalibrationDiagnosticsFilters = {
+  sports: string[];
+  statTypes: string[];
+};
+
+export interface CalibrationDiagnostics {
+  buckets: CalibrationBucket[];
+  summary: CalibrationDiagnosticsSummary;
+  filters: CalibrationDiagnosticsFilters;
+  sport?: string | null;
+  statType?: string | null;
+}
+
 export interface DataHealth {
   providers: unknown[];
   lastPullLogs: DataPullLog[];
@@ -1167,6 +1200,11 @@ limit?: number;
 export type GetReviewStatsParams = {
 since?: string;
 until?: string;
+};
+
+export type GetCalibrationDiagnosticsParams = {
+sport?: string;
+statType?: string;
 };
 
 export type PpLinesBrowserImportBody = {

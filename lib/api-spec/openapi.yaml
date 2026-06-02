@@ -967,6 +967,22 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/DataHealth" }
 
+  # ─── CALIBRATION ──────────────────────────────────────────────────
+  /calibration/diagnostics:
+    get:
+      operationId: getCalibrationDiagnostics
+      tags: [calibration]
+      summary: Calibration diagnostics — reliability table + ECE + Brier score per bucket
+      parameters:
+        - { name: sport,    in: query, schema: { type: string } }
+        - { name: statType, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Calibration diagnostics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CalibrationDiagnostics" }
+
   # ─── SYNC ─────────────────────────────────────────────────────────
   /sync/pp-lines-import:
     post:
@@ -1985,6 +2001,45 @@ components:
         hitRateByPickCount: {}
         hitRateByEntryType: {}
       required: [totalEntries, totalPnl]
+
+    CalibrationBucket:
+      type: object
+      properties:
+        edgeBucket:       { type: string }
+        direction:        { type: string }
+        predictedProb:    { type: number }
+        actualRate:       { type: number }
+        sampleSize:       { type: integer }
+        calibrationError: { type: number }
+        bucketBrier:      { type: number }
+        ecContrib:        { type: number }
+        brierContrib:     { type: number }
+      required: [edgeBucket, direction, predictedProb, actualRate, sampleSize, calibrationError, bucketBrier, ecContrib, brierContrib]
+
+    CalibrationDiagnostics:
+      type: object
+      properties:
+        buckets:
+          type: array
+          items: { $ref: "#/components/schemas/CalibrationBucket" }
+        summary:
+          type: object
+          properties:
+            ece:                  { type: number }
+            brierScore:           { type: number }
+            totalSamples:         { type: integer }
+            avgCalibrationError:  { type: number }
+            maxCalibrationError:  { type: number }
+          required: [ece, brierScore, totalSamples, avgCalibrationError, maxCalibrationError]
+        filters:
+          type: object
+          properties:
+            sports:    { type: array, items: { type: string } }
+            statTypes: { type: array, items: { type: string } }
+          required: [sports, statTypes]
+        sport:    { type: string, nullable: true }
+        statType: { type: string, nullable: true }
+      required: [buckets, summary, filters]
 
     DataHealth:
       type: object

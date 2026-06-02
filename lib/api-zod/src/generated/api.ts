@@ -1346,6 +1346,42 @@ export const GetDataHealthResponse = zod.object({
 
 
 /**
+ * @summary Calibration diagnostics — reliability table + ECE + Brier score per bucket
+ */
+export const GetCalibrationDiagnosticsQueryParams = zod.object({
+  "sport": zod.coerce.string().optional(),
+  "statType": zod.coerce.string().optional()
+})
+
+export const GetCalibrationDiagnosticsResponse = zod.object({
+  "buckets": zod.array(zod.object({
+  "edgeBucket": zod.string(),
+  "direction": zod.string(),
+  "predictedProb": zod.number(),
+  "actualRate": zod.number(),
+  "sampleSize": zod.number(),
+  "calibrationError": zod.number(),
+  "bucketBrier": zod.number(),
+  "ecContrib": zod.number(),
+  "brierContrib": zod.number()
+})),
+  "summary": zod.object({
+  "ece": zod.number(),
+  "brierScore": zod.number(),
+  "totalSamples": zod.number(),
+  "avgCalibrationError": zod.number(),
+  "maxCalibrationError": zod.number()
+}),
+  "filters": zod.object({
+  "sports": zod.array(zod.string()),
+  "statTypes": zod.array(zod.string())
+}),
+  "sport": zod.string().nullish(),
+  "statType": zod.string().nullish()
+})
+
+
+/**
  * @summary Import PP lines from browser-fetched payload (bypasses server IP block)
  */
 export const PpLinesBrowserImportBody = zod.object({

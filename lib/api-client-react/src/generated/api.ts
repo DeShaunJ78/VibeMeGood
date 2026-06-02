@@ -28,6 +28,7 @@ import type {
   AnthropicMessage,
   AnthropicMessageInput,
   BetterLineEntry,
+  CalibrationDiagnostics,
   ClearAllAlerts200,
   ClearReadAlerts200,
   DashboardSummary,
@@ -44,6 +45,7 @@ import type {
   ExternalLine,
   Game,
   GameInput,
+  GetCalibrationDiagnosticsParams,
   GetHistoricalHitRatesParams,
   GetPlatformLinesByPropParams,
   GetReviewStatsParams,
@@ -4372,6 +4374,90 @@ export function useGetDataHealth<TData = Awaited<ReturnType<typeof getDataHealth
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetDataHealthQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCalibrationDiagnosticsUrl = (params?: GetCalibrationDiagnosticsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/calibration/diagnostics?${stringifiedParams}` : `/api/calibration/diagnostics`
+}
+
+/**
+ * @summary Calibration diagnostics — reliability table + ECE + Brier score per bucket
+ */
+export const getCalibrationDiagnostics = async (params?: GetCalibrationDiagnosticsParams, options?: RequestInit): Promise<CalibrationDiagnostics> => {
+
+  return customFetch<CalibrationDiagnostics>(getGetCalibrationDiagnosticsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCalibrationDiagnosticsQueryKey = (params?: GetCalibrationDiagnosticsParams,) => {
+    return [
+    `/api/calibration/diagnostics`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCalibrationDiagnosticsQueryOptions = <TData = Awaited<ReturnType<typeof getCalibrationDiagnostics>>, TError = ErrorType<unknown>>(params?: GetCalibrationDiagnosticsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCalibrationDiagnostics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCalibrationDiagnosticsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCalibrationDiagnostics>>> = ({ signal }) => getCalibrationDiagnostics(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCalibrationDiagnostics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCalibrationDiagnosticsQueryResult = NonNullable<Awaited<ReturnType<typeof getCalibrationDiagnostics>>>
+export type GetCalibrationDiagnosticsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Calibration diagnostics — reliability table + ECE + Brier score per bucket
+ */
+
+export function useGetCalibrationDiagnostics<TData = Awaited<ReturnType<typeof getCalibrationDiagnostics>>, TError = ErrorType<unknown>>(
+ params?: GetCalibrationDiagnosticsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCalibrationDiagnostics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCalibrationDiagnosticsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

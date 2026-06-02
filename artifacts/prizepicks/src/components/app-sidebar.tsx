@@ -19,6 +19,7 @@ import {
   Factory,
   Zap,
   MessageSquare,
+  Crosshair,
 } from "lucide-react";
 import {
   Sidebar,
@@ -52,6 +53,7 @@ const INTEL_ITEMS = [
   { title: "Streak Tracker", url: "/streaks", icon: Flame },
   { title: "CLV Tracker", url: "/clv", icon: TrendingUp },
   { title: "Matchup Analysis", url: "/matchup", icon: Swords },
+  { title: "Model Calibration", url: "/calibration", icon: Crosshair },
   { title: "User Guide", url: "/guide", icon: HelpCircle },
 ];
 
