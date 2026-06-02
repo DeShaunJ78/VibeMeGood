@@ -27,7 +27,7 @@
 import { db } from "@workspace/db";
 import { playerGameLogsTable, playersTable, probabilityCalibrationTable } from "@workspace/db/schema";
 import { asc } from "drizzle-orm";
-import { pOverLine } from "../lib/projection/normal-dist";
+import { pOverLineDist } from "../lib/projection/distributions.js";
 import { getEdgeBucket, normalizeSport } from "../lib/projection/calibration";
 import { logger } from "../lib/logger";
 
@@ -149,8 +149,8 @@ export const calibrationJob = {
         // With the +0.5 offset above, integer-valued stats never reach this path.
         if (curValue === line) continue;
 
-        // Raw model probability — same core function production uses.
-        const pOver = pOverLine(mu, std, line); // 0–100
+        // Raw model probability — same distribution-aware function production uses.
+        const pOver = pOverLineDist(mu, std, line, s.statType); // 0–100
         const edgePct = Math.abs(pOver - 50);
         const direction = pOver >= 50 ? "over" : "under";
         const edgeBucket = getEdgeBucket(edgePct);

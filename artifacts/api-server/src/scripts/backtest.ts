@@ -62,13 +62,12 @@ function daysBetween(a: string, b: string): number {
 /** Accumulators for a probabilistic model's calibration & accuracy. */
 class Stats {
   n = 0;
-  brierSum = 0; // mean squared error of P(over) vs actual {0,1}
-  confidentN = 0; // predictions where |p-0.5| >= 0.1
-  confidentHits = 0; // confident predictions that were directionally correct
-  // 10 calibration buckets by predicted probability
+  brierSum = 0;
+  confidentN = 0;
+  confidentHits = 0;
   bucketPredSum = new Array(10).fill(0);
-  bucketActSum = new Array(10).fill(0);
-  bucketN = new Array(10).fill(0);
+  bucketActSum  = new Array(10).fill(0);
+  bucketN       = new Array(10).fill(0);
 
   add(pOver01: number, actualOver: boolean) {
     const y = actualOver ? 1 : 0;
@@ -76,20 +75,48 @@ class Stats {
     this.brierSum += (pOver01 - y) ** 2;
     if (Math.abs(pOver01 - 0.5) >= 0.1) {
       this.confidentN++;
-      const pickOver = pOver01 > 0.5;
-      if (pickOver === actualOver) this.confidentHits++;
+      if ((pOver01 > 0.5) === actualOver) this.confidentHits++;
     }
     const b = Math.min(9, Math.max(0, Math.floor(pOver01 * 10)));
     this.bucketPredSum[b] += pOver01;
-    this.bucketActSum[b] += y;
+    this.bucketActSum[b]  += y;
     this.bucketN[b]++;
   }
 
   brier(): number {
     return this.n ? this.brierSum / this.n : NaN;
   }
+
   hitRate(): number {
     return this.confidentN ? this.confidentHits / this.confidentN : NaN;
+  }
+
+  /**
+   * Expected Calibration Error — probability-weighted mean absolute gap
+   * between predicted and empirical over-rate across all filled buckets.
+   */
+  ece(): number {
+    if (!this.n) return NaN;
+    let wsum = 0;
+    for (let b = 0; b < 10; b++) {
+      if (!this.bucketN[b]) continue;
+      const pred = this.bucketPredSum[b] / this.bucketN[b];
+      const act  = this.bucketActSum[b]  / this.bucketN[b];
+      wsum += this.bucketN[b] * Math.abs(pred - act);
+    }
+    return wsum / this.n;
+  }
+
+  /** Maximum absolute calibration gap across all filled buckets. */
+  maxCalError(): number {
+    let max = 0;
+    for (let b = 0; b < 10; b++) {
+      if (!this.bucketN[b]) continue;
+      const pred = this.bucketPredSum[b] / this.bucketN[b];
+      const act  = this.bucketActSum[b]  / this.bucketN[b];
+      max = Math.max(max, Math.abs(pred - act));
+    }
+    return max;
   }
 }
 
@@ -97,11 +124,11 @@ async function main() {
   console.log("Loading player game logs…");
   const rows = await db
     .select({
-      playerId: playerGameLogsTable.playerId,
-      statType: playerGameLogsTable.statType,
-      gameDate: playerGameLogsTable.gameDate,
-      value: playerGameLogsTable.value,
-      homeAway: playerGameLogsTable.homeAway,
+      playerId:  playerGameLogsTable.playerId,
+      statType:  playerGameLogsTable.statType,
+      gameDate:  playerGameLogsTable.gameDate,
+      value:     playerGameLogsTable.value,
+      homeAway:  playerGameLogsTable.homeAway,
     })
     .from(playerGameLogsTable)
     .orderBy(
@@ -118,26 +145,32 @@ async function main() {
     const logs = existing?.logs ?? [];
     logs.push({
       gameDate: r.gameDate,
-      value: Number(r.value),
+      value:    Number(r.value),
       homeAway: r.homeAway,
     });
     series.set(key, { statType: r.statType, logs });
   }
 
-  const base = new Stats();
+  const base     = new Stats();
   const adjusted = new Stats();
+
   // per-factor: rows where the factor was applied, base vs adjusted brier/hits
   const perFactor = new Map<string, { base: Stats; adj: Stats }>();
   const ensureFactor = (k: string) => {
     let f = perFactor.get(k);
-    if (!f) {
-      f = { base: new Stats(), adj: new Stats() };
-      perFactor.set(k, f);
-    }
+    if (!f) { f = { base: new Stats(), adj: new Stats() }; perFactor.set(k, f); }
     return f;
   };
 
-  let seriesUsed = 0;
+  // per-stat-type breakdown
+  const perStat = new Map<string, Stats>();
+  const ensureStat = (st: string) => {
+    let s = perStat.get(st);
+    if (!s) { s = new Stats(); perStat.set(st, s); }
+    return s;
+  };
+
+  let seriesUsed  = 0;
   let predictions = 0;
 
   for (const [, { statType, logs }] of series) {
@@ -145,30 +178,28 @@ async function main() {
     seriesUsed++;
 
     for (let i = MIN_PRIOR; i < logs.length; i++) {
-      const prior = logs.slice(0, i);
-      const cur = logs[i];
+      const prior     = logs.slice(0, i);
+      const cur       = logs[i];
       const priorVals = prior.map((p) => p.value);
 
       const mu = mean(priorVals);
       if (mu <= 0) continue;
-      const std = Math.max(sampleStd(priorVals, mu), mu * STD_FLOOR_PCT);
-      const line = median(priorVals); // pseudo-line
+      const std  = Math.max(sampleStd(priorVals, mu), mu * STD_FLOOR_PCT);
+      const line = median(priorVals);
       const actualOver = cur.value > line;
 
       // ── base projection ──
       const basePOver = pOverLineDist(mu, std, line, statType) / 100;
       base.add(basePOver, actualOver);
+      ensureStat(statType).add(basePOver, actualOver);
 
       // ── derive log-only factor inputs ──
-      const prevDate = prior[prior.length - 1].gameDate;
-      const daysRest = daysBetween(prevDate, cur.gameDate);
-      const isBackToBack = daysRest <= 1;
-      // 3-in-4: count current + prior games whose date is within 3 days of cur
-      const windowStart = new Date(cur.gameDate).getTime() - 3 * 86_400_000;
+      const prevDate      = prior[prior.length - 1].gameDate;
+      const daysRest      = daysBetween(prevDate, cur.gameDate);
+      const isBackToBack  = daysRest <= 1;
+      const windowStart   = new Date(cur.gameDate).getTime() - 3 * 86_400_000;
       const gamesInWindow =
-        1 +
-        prior.filter((p) => new Date(p.gameDate).getTime() >= windowStart)
-          .length;
+        1 + prior.filter((p) => new Date(p.gameDate).getTime() >= windowStart).length;
       const isThreeInFour = gamesInWindow >= 3;
 
       const isHome =
@@ -189,19 +220,15 @@ async function main() {
         }),
       ];
 
-      const { combinedFactor, applied: appliedFactors } =
-        combineFactors(applied);
-      const adjMu = mu * combinedFactor;
+      const { combinedFactor, applied: appliedFactors } = combineFactors(applied);
+      const adjMu    = mu * combinedFactor;
       const adjPOver = pOverLineDist(adjMu, std, line, statType) / 100;
       adjusted.add(adjPOver, actualOver);
 
-      // True per-factor marginal lift: apply ONLY that one factor (isolated
-      // counterfactual) so rows with multiple factors don't credit the joint
-      // effect to each. base = no factors; +factor = just this factor.
       for (const f of appliedFactors) {
-        const solo = combineFactors([f]).combinedFactor;
+        const solo      = combineFactors([f]).combinedFactor;
         const soloPOver = pOverLineDist(mu * solo, std, line, statType) / 100;
-        const slot = ensureFactor(f.key);
+        const slot      = ensureFactor(f.key);
         slot.base.add(basePOver, actualOver);
         slot.adj.add(soloPOver, actualOver);
       }
@@ -210,7 +237,7 @@ async function main() {
     }
   }
 
-  const pct = (x: number) => (isNaN(x) ? "  n/a" : (x * 100).toFixed(1) + "%");
+  const pct = (x: number) => (isNaN(x) ? "   n/a" : (x * 100).toFixed(1).padStart(5) + "%");
   const num = (x: number) => (isNaN(x) ? "n/a" : x.toFixed(4));
 
   console.log("\n══════════════════════════════════════════════════════════");
@@ -227,34 +254,58 @@ async function main() {
     return;
   }
 
-  console.log("\n── Overall accuracy (lower Brier better) ──");
+  // ── Overall accuracy ──
+  console.log("\n── Overall accuracy ──");
+  console.log(`                Brier    Conf-HR (|p-0.5|≥0.1)   ECE     MaxCalErr`);
   console.log(
-    `              Brier      Confident hit-rate (|p-0.5|≥0.1)`,
+    `base model      ${num(base.brier())}   ${pct(base.hitRate())}  (n=${base.confidentN})   ${pct(base.ece())}  ${pct(base.maxCalError())}`,
   );
   console.log(
-    `base model    ${num(base.brier())}     ${pct(base.hitRate())}  (n=${base.confidentN})`,
-  );
-  console.log(
-    `+ factors     ${num(adjusted.brier())}     ${pct(adjusted.hitRate())}  (n=${adjusted.confidentN})`,
+    `+ factors       ${num(adjusted.brier())}   ${pct(adjusted.hitRate())}  (n=${adjusted.confidentN})   ${pct(adjusted.ece())}  ${pct(adjusted.maxCalError())}`,
   );
   const brierLift = base.brier() - adjusted.brier();
   console.log(
-    `Brier delta   ${brierLift >= 0 ? "+" : ""}${num(brierLift)}  (${brierLift >= 0 ? "improvement" : "REGRESSION"})`,
+    `Brier delta     ${brierLift >= 0 ? "+" : ""}${num(brierLift)}  (${brierLift >= 0 ? "improvement" : "REGRESSION"})`,
   );
 
+  // ── Calibration buckets ──
   console.log("\n── Calibration (base model): predicted vs empirical over-rate ──");
-  console.log("bucket   n     pred    actual");
+  console.log("bucket   n     pred    actual  gap");
   for (let b = 0; b < 10; b++) {
     if (!base.bucketN[b]) continue;
     const pred = base.bucketPredSum[b] / base.bucketN[b];
-    const act = base.bucketActSum[b] / base.bucketN[b];
+    const act  = base.bucketActSum[b]  / base.bucketN[b];
+    const gap  = act - pred;
     console.log(
-      `${(b * 10).toString().padStart(2)}-${b * 10 + 10}%  ${base.bucketN[b]
-        .toString()
-        .padStart(5)}  ${pct(pred)}  ${pct(act)}`,
+      `${(b * 10).toString().padStart(2)}-${b * 10 + 10}%` +
+      `  ${base.bucketN[b].toString().padStart(5)}` +
+      `  ${pct(pred)}  ${pct(act)}` +
+      `  ${gap >= 0 ? "+" : ""}${(gap * 100).toFixed(1).padStart(5)}pp`,
     );
   }
 
+  // ── Per-stat-type breakdown ──
+  const MIN_STAT_N = 50;
+  const statEntries = [...perStat.entries()]
+    .filter(([, s]) => s.n >= MIN_STAT_N)
+    .sort((a, b) => b[1].brier() - a[1].brier()); // worst Brier first
+
+  if (statEntries.length > 0) {
+    console.log(
+      `\n── Per-stat breakdown (base model, n≥${MIN_STAT_N}, worst Brier first) ──`,
+    );
+    console.log(
+      "stat-type                     n    Brier   Conf-HR   ECE    MaxCalErr",
+    );
+    for (const [st, s] of statEntries) {
+      console.log(
+        `${st.padEnd(28)}  ${s.n.toString().padStart(5)}  ${num(s.brier())}` +
+        `  ${pct(s.hitRate())}  ${pct(s.ece())}  ${pct(s.maxCalError())}`,
+      );
+    }
+  }
+
+  // ── Per-factor marginal lift ──
   console.log("\n── Per-factor marginal lift (only rows where factor applied) ──");
   console.log("factor        rows    base Brier   +factor Brier   delta");
   for (const [key, { base: b, adj: a }] of perFactor) {
