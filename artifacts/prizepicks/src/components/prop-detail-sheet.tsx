@@ -79,7 +79,7 @@ interface OurProjection {
   isStale: boolean;
   reasoning: Record<string, unknown> | null;
   vor: number | null;
-  ensembleBlendPct: 0 | 30 | 70;
+  ensembleBlendPct: number;
   calSampleSize: number;
   adjustments?: ProjectionAdjustment[];
   paceFactor?: number | null;
@@ -720,7 +720,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                     {op.isStale && <span className="text-amber-400">stale</span>}
                     {op.ensembleBlendPct > 0 && (
                       <span className="text-indigo-400">
-                        Model blending: CAL {op.ensembleBlendPct}% / FP {100 - op.ensembleBlendPct}%
+                        Calibrated: {op.ensembleBlendPct}% empirical / {100 - op.ensembleBlendPct}% model
                         {op.calSampleSize > 0 && ` (${op.calSampleSize} settled results)`}
                       </span>
                     )}

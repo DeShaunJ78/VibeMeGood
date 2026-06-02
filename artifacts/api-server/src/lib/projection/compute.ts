@@ -2,7 +2,7 @@ import { db } from "@workspace/db";
 import {
   playerGameLogsTable, ourProjectionsTable, ppLinesTable, playersTable,
   injuriesTable, matchupHistoryTable, gamesTable, teamsTable,
-  probabilityCalibrationTable, fatigueDataTable, teamPaceRatingsTable,
+  fatigueDataTable, teamPaceRatingsTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray, isNotNull, sql } from "drizzle-orm";
 import { getNflUsageMap } from "../sync/nfl-advanced";
@@ -13,6 +13,7 @@ import {
   MIN_GAMES_FOR_PLAY, SHRINKAGE_K, DQ_PLAY_THRESHOLD,
   PROJECTION_TTL_HOURS, LINE_TYPE_STD_ADJ,
 } from "./priors";
+import { calibratePOver, loadCalibrationMap, type CalibrationMap } from "./calibration";
 import {
   restFactor, paceFactor, dvpFactor, impliedTotalFactor, weatherFactor,
   homeAwayFactor, nflAdvancedFactor, snapFactor, parkFactor, combineFactors,
@@ -25,7 +26,8 @@ export interface ProjectionOutput {
   mean: number;
   stdDev: number;
   p99: number | null;       // mean + 2.33σ — 99th percentile ceiling (null when prior_only)
-  pOver: number;            // 0–100
+  pOver: number;            // 0–100 (calibrated when a calibration map is supplied)
+  pOverRaw: number;         // 0–100 raw normal-CDF P(over), pre-calibration
   percentileAtLine: number; // 0–100, where line sits in distribution
   dataQualityScore: number; // 0–100 gate score
   shrinkageFactor: number;  // 0=no shrinkage, 1=full prior
@@ -34,8 +36,8 @@ export interface ProjectionOutput {
   noPlayReason: string | null;
   opponentAdj: number;
   volatilityPct: number;    // σ/line * 100 — how wide the band is
-  ensembleBlendPct: 0 | 30 | 70; // calibration blend ratio (Addition 9)
-  calSampleSize: number;         // calibration row count used for blending
+  ensembleBlendPct: number;      // calibration blend weight % (empirical rate weight)
+  calSampleSize: number;         // settled results behind the calibration bucket used
   vor: number | null;            // Value Over Replacement = (mean − line) / σ (Addition 13)
   expiresAt: Date;
   // Explanation breakdowns for the UI
@@ -44,6 +46,7 @@ export interface ProjectionOutput {
     shrinkageExplain: string;
     opponentExplain: string;
     lineTypeExplain: string;
+    calibrationExplain: string;
     qualityDeductions: string[];
   };
 }
@@ -55,6 +58,7 @@ export async function computeProjection(
   lineType: string,
   sport: string,
   opponentTeamId?: number | null,
+  calibrationMap?: CalibrationMap | null,
 ): Promise<ProjectionOutput> {
   const prior = getPrior(sport, statType);
   const deductions: string[] = [];
@@ -176,36 +180,13 @@ export async function computeProjection(
     }
   }
 
-  // --- 2b. Ensemble blending with calibration data (Addition 9) ---
-  let ensembleBlendPct: 0 | 30 | 70 = 0;
-  let calSampleSize = 0;
-  try {
-    const [calRow] = await db
-      .select()
-      .from(probabilityCalibrationTable)
-      .where(and(
-        eq(probabilityCalibrationTable.sport, sport),
-        eq(probabilityCalibrationTable.statType, statType),
-      ))
-      .orderBy(desc(probabilityCalibrationTable.sampleSize))
-      .limit(1);
-
-    const calCount = Number(calRow?.sampleSize ?? 0);
-    const calHitRate = calRow?.hitRate != null ? Number(calRow.hitRate) : null;
-    calSampleSize = calCount;
-
-    if (calCount >= 300 && calHitRate !== null) {
-      const calMeanEstimate = ppLine * (calHitRate / 0.55);
-      mean = (mean * 0.30) + (calMeanEstimate * 0.70);
-      ensembleBlendPct = 70;
-      sourceLabel = "ensemble_70";
-    } else if (calCount >= 100 && calHitRate !== null) {
-      const calMeanEstimate = ppLine * (calHitRate / 0.55);
-      mean = (mean * 0.70) + (calMeanEstimate * 0.30);
-      ensembleBlendPct = 30;
-      sourceLabel = "ensemble_30";
-    }
-  } catch { /* non-fatal */ }
+  // --- 2b. Probability calibration is applied AFTER P(over) is computed (see step 9).
+  //         We blend the raw P(over) toward the empirical bucket hit rate rather than
+  //         nudging the mean, which keeps the calibration self-consistent and avoids
+  //         edge-bucket drift. Declared here so they're in scope for the return. ---
+  let ensembleBlendPct = 0; // repurposed: empirical-rate blend weight %
+  let calSampleSize = 0;    // settled results behind the bucket used
+  let calibrationExplain = "";
 
   // --- 3. Opponent adjustment ---
   let opponentAdj = 1.0;
@@ -285,9 +266,21 @@ export async function computeProjection(
   const effectiveStd = stdDev * stdAdj;
 
   // --- 7. Compute distribution outputs ---
-  const pOver = pOverLine(mean, effectiveStd, ppLine);
+  const pOverRaw = pOverLine(mean, effectiveStd, ppLine);
   const pctAtLine = percentileAtLine(mean, effectiveStd, ppLine);
   const volPct = volatilityPct(effectiveStd, ppLine);
+
+  // --- 7b. Probability calibration: blend raw P(over) toward the empirical bucket
+  //         hit rate (only when a calibration map is supplied — the calibration job
+  //         passes none so it always sees raw P(over) and stays self-consistent). ---
+  let pOver = pOverRaw;
+  if (sourceLabel !== "prior_only") {
+    const cal = calibratePOver(pOverRaw, sport, statType, lineType, calibrationMap);
+    pOver = cal.pOver;
+    ensembleBlendPct = cal.weightPct;
+    calSampleSize = cal.sampleSize;
+    if (cal.explain) calibrationExplain = cal.explain;
+  }
   // Fix 10: p99 ceiling is meaningless for prior-only projections (no real game data).
   const p99 = sourceLabel === "prior_only" ? null : Math.round((mean + 2.33 * effectiveStd) * 100) / 100;
 
@@ -323,6 +316,7 @@ export async function computeProjection(
     stdDev: Math.round(effectiveStd * 100) / 100,
     p99,
     pOver: Math.round(pOver * 10) / 10,
+    pOverRaw: Math.round(pOverRaw * 10) / 10,
     percentileAtLine: Math.round(pctAtLine * 10) / 10,
     dataQualityScore: finalDQ,
     shrinkageFactor: Math.round(shrinkageFactor * 1000) / 1000,
@@ -342,6 +336,7 @@ export async function computeProjection(
       shrinkageExplain,
       opponentExplain,
       lineTypeExplain,
+      calibrationExplain: calibrationExplain || "No calibration applied (insufficient settled results for this bucket)",
       qualityDeductions: deductions,
     },
   };
@@ -462,6 +457,9 @@ export async function computeAllProjections(): Promise<number> {
     splitMap.set(key, cur);
   }
 
+  // Load the calibration table once and reuse it for every projection this run.
+  const calibrationMap = await loadCalibrationMap();
+
   let computed = 0;
 
   for (const { line, player } of activeLines) {
@@ -484,6 +482,7 @@ export async function computeAllProjections(): Promise<number> {
         line.lineType,
         player.sport,
         opponentTeamId,
+        calibrationMap,
       );
 
       // ── Build the factor stack ──────────────────────────────────────────

@@ -5,6 +5,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, isNotNull } from "drizzle-orm";
 import { computeProjection } from "../lib/projection/compute";
+import { getEdgeBucket, normalizeSport } from "../lib/projection/calibration";
 import { logger } from "../lib/logger";
 
 interface CalibrationBucket {
@@ -22,24 +23,6 @@ export interface CalibrationResult {
   examplesProcessed: number;
   calibrationRecords: number;
   mae: number | null;
-}
-
-function normalizeSport(s: string): string {
-  if (s.startsWith("NBA"))  return "NBA";
-  if (s.startsWith("MLB"))  return "MLB";
-  if (s.startsWith("NHL"))  return "NHL";
-  if (s.startsWith("NFL"))  return "NFL";
-  if (s.startsWith("WNBA")) return "WNBA";
-  return s;
-}
-
-function getEdgeBucket(edgePct: number): string {
-  if (edgePct < 5)  return "0-5";
-  if (edgePct < 10) return "5-10";
-  if (edgePct < 15) return "10-15";
-  if (edgePct < 20) return "15-20";
-  if (edgePct < 25) return "20-25";
-  return "25+";
 }
 
 function toDateStr(d: Date): string {
@@ -133,7 +116,10 @@ export const calibrationJob = {
         // Skip prior_only rows — no real model signal to calibrate
         if (proj.sourceLabel === "prior_only") continue;
 
-        const pOver    = proj.pOver;                   // 0–100
+        // Bucket on the RAW (pre-calibration) probability. The job passes no
+        // calibration map so pOver === pOverRaw here, but we read pOverRaw
+        // explicitly to guarantee re-runs never calibrate on calibrated values.
+        const pOver    = proj.pOverRaw;                // 0–100
         const edgePct  = Math.abs(pOver - 50);
         const direction = pOver >= 50 ? "over" : "under";
         const edgeBucket = getEdgeBucket(edgePct);
@@ -220,3 +206,18 @@ export const calibrationJob = {
     return { totalLines, examplesProcessed, calibrationRecords, mae };
   },
 };
+
+// Allow running directly: `pnpm --filter @workspace/api-server run calibrate`
+const isMain = import.meta.url === `file://${process.argv[1]}`;
+if (isMain) {
+  calibrationJob
+    .runHistoricalCalibration()
+    .then((r) => {
+      console.log("Calibration complete:", r);
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}

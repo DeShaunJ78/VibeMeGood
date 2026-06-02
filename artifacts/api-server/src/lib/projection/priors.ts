@@ -30,6 +30,25 @@ export const PROJECTION_TTL_HOURS = 6;
  * We don't adjust the mean — we let the math produce the right P(over).
  * The stdAdj widens variance slightly for exotic line types (less certainty about the line itself).
  */
+/**
+ * Probability calibration (Addition 9, reworked).
+ *
+ * The raw normal-CDF P(over) from (mean, std) is over-confident — its tails are
+ * too thin because player stats aren't perfectly normal and small samples
+ * underestimate true variance. The `probability_calibration` table records the
+ * EMPIRICAL hit rate for each (sport, statType, lineType, edgeBucket, direction)
+ * bucket from settled historical lines. We blend the raw probability toward that
+ * empirical rate — bounded, conservative, transparent, tunable.
+ */
+export const PROBABILITY_CALIBRATION = {
+  /** Don't calibrate unless the matching bucket has at least this many settled results. */
+  minSampleSize: 40,
+  /** Hard cap on how much the empirical rate can override the model (keeps it conservative). */
+  maxBlendWeight: 0.5,
+  /** Shrinkage constant: blend weight = min(maxBlendWeight, sampleSize / (sampleSize + K)). */
+  weightK: 200,
+} as const;
+
 export const LINE_TYPE_STD_ADJ: Record<string, number> = {
   goblin: 1.05,
   demon: 1.05,

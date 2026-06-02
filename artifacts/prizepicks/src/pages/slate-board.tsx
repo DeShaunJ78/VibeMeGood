@@ -38,7 +38,7 @@ type OurProjection = {
   shrinkageFactor: number | null;
   isStale: boolean;
   vor: number | null;
-  ensembleBlendPct: 0 | 30 | 70;
+  ensembleBlendPct: number;
   calSampleSize: number;
 };
 

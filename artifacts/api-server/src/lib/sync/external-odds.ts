@@ -7,6 +7,7 @@ import { eq, and, desc, inArray } from "drizzle-orm";
 import { logger } from "../logger";
 import { twoWayHold, noVigProbs } from "../analytics/odds-math";
 import { pOverLine } from "../projection/normal-dist";
+import { calibratePOver, loadCalibrationMap } from "../projection/calibration";
 
 const ODDS_BASE = process.env.ODDS_API_BASE || "https://api.the-odds-api.com/v4";
 const ODDS_KEY = process.env.ODDS_API_KEY || "";
@@ -368,6 +369,9 @@ export async function recalcPropScores(): Promise<void> {
     projByPlayerStat.set(`${p.playerId}:${p.statType}`, p);
   }
 
+  // Calibration table loaded once — used to temper each line's raw P(over).
+  const calibrationMap = await loadCalibrationMap();
+
   // Computed scores are accumulated here, then written in one batched swap.
   const scorePayloads: (typeof propScoresTable.$inferInsert)[] = [];
 
@@ -404,13 +408,18 @@ export async function recalcPropScores(): Promise<void> {
       // active line (.limit(1)) and is wrong for the other goblin/demon/standard tiers.
       const projMean = proj?.projectedValue ? parseFloat(proj.projectedValue.toString()) : null;
       const projStdDev = proj?.stdDev ? parseFloat(proj.stdDev.toString()) : null;
-      const pOver = (projMean !== null && projStdDev !== null)
-        ? pOverLine(projMean, projStdDev, parseFloat(line.lineValue.toString()))
-        : null;
       const dataQualityScore = proj?.dataQualityScore ?? null;
       const confidence = proj?.confidence ?? null;
       const sourceLabel = proj?.sourceLabel ?? "prior_only";
       const ppLine = parseFloat(line.lineValue.toString());
+      // Raw distribution probability for THIS line, then calibrated toward the
+      // empirical bucket hit rate (skip prior-only — no real model signal).
+      const pOverRaw = (projMean !== null && projStdDev !== null)
+        ? pOverLine(projMean, projStdDev, ppLine)
+        : null;
+      const pOver = (pOverRaw !== null && sourceLabel !== "prior_only")
+        ? calibratePOver(pOverRaw, player.sport, line.statType, line.lineType, calibrationMap).pOver
+        : pOverRaw;
 
       // --- Gate 1: Edge Score ---
       const edgeScore = Math.min(100,

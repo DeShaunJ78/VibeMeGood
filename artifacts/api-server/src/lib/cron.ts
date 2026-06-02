@@ -19,6 +19,7 @@ import { syncGameOdds } from "./sync/game-odds";
 import { syncWeather } from "./sync/weather";
 import { computeMatchupHistory } from "./sync/matchup-history";
 import { backfillHistoricalStats } from "./sync/historical-stats";
+import { calibrationJob } from "../scripts/calibration-job";
 
 export let preLockActive = false;
 export function isPreLockActive(): boolean { return preLockActive; }
@@ -281,6 +282,16 @@ export function startCronJobs() {
   // Nightly matchup history rebuild at 4 AM (after game logs are updated)
   cron.schedule("0 4 * * *", () =>
     logPull("internal", "matchup-history", computeMatchupHistory)
+  );
+
+  // Weekly probability calibration on Sunday at 5 AM — rebuilds the empirical
+  // edge→hit-rate table from settled lines so the morning projection runs blend
+  // toward real outcomes. Runs after nightly game logs (2 AM) are fresh.
+  cron.schedule("0 5 * * 0", () =>
+    logPull("internal", "calibration", async () => {
+      const r = await calibrationJob.runHistoricalCalibration();
+      return r.calibrationRecords;
+    })
   );
 
   // Nightly cleanup at 3 AM — prune transient tables, keep permanent data
