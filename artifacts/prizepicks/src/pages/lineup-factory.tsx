@@ -658,7 +658,7 @@ export default function LineupFactory() {
   const profileInfo = PROFILE_LABELS[cfg.varianceProfile];
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden">
+    <div className="flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
       {/* ── Header ── */}
       <div className="flex items-center gap-3 px-6 py-4 border-b border-border/50 shrink-0">
         <Factory className="h-5 w-5 text-primary" />
@@ -678,14 +678,14 @@ export default function LineupFactory() {
       </div>
 
       {/* ── Two-column layout ── */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Config panel — scrollable */}
-        <div className="w-72 shrink-0 border-r border-border/50 overflow-y-auto p-4">
+      <div className="flex flex-col lg:flex-row lg:flex-1 lg:min-h-0 lg:overflow-hidden">
+        {/* Config panel — fixed width on desktop, full width on mobile */}
+        <div className="w-full lg:w-72 shrink-0 border-b lg:border-b-0 lg:border-r border-border/50 lg:overflow-y-auto p-4">
           <ConfigPanel cfg={cfg} onChange={setCfg} onGenerate={handleGenerate} loading={generate.isPending} />
         </div>
 
         {/* Results panel — scrollable */}
-        <div className="flex-1 min-w-0 overflow-y-auto p-4">
+        <div className="lg:flex-1 lg:min-w-0 lg:overflow-y-auto p-4">
           {generate.isPending && (
             <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-3">
               <RefreshCw className="h-8 w-8 text-primary animate-spin" />

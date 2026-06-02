@@ -76,8 +76,9 @@ const PP_STALE_HOURS = 4; // show warning after this many hours without a sync
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { state } = useSidebar();
+  const { state, setOpenMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
+  const closeOnMobile = () => setOpenMobile(false);
   const { picks } = useEntry();
   const { data: userSettings } = useUserSettings();
 
@@ -144,7 +145,7 @@ export function AppSidebar() {
                       : "text-yellow-400/80 hover:text-yellow-300 hover:bg-yellow-950/30 border border-transparent"
                   )}
                 >
-                  <Link href="/health">
+                  <Link href="/health" onClick={closeOnMobile}>
                     <Zap size={14} />
                     <span>⚡ System Status</span>
                   </Link>
@@ -176,7 +177,7 @@ export function AppSidebar() {
                         isActive ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-slate-800/50"
                       )}
                     >
-                      <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                      <Link href={item.url} onClick={closeOnMobile} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
                         <item.icon />
                         <span>{item.title}</span>
                         {isEntryBuilder && picks.length > 0 && (
@@ -214,7 +215,7 @@ export function AppSidebar() {
                         isActive ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-slate-800/50"
                       )}
                     >
-                      <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                      <Link href={item.url} onClick={closeOnMobile} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
                         <item.icon />
                         <span>{item.title}</span>
                       </Link>
@@ -248,7 +249,7 @@ export function AppSidebar() {
                           isActive ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-slate-800/50"
                         )}
                       >
-                        <Link href={item.url}>
+                        <Link href={item.url} onClick={closeOnMobile}>
                           <item.icon className="w-4 h-4" />
                           <span>{item.title}</span>
                           {item.isLab && !isCollapsed && (
@@ -282,7 +283,7 @@ export function AppSidebar() {
                         isActive ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-slate-800/50"
                       )}
                     >
-                      <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                      <Link href={item.url} onClick={closeOnMobile} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
                         <div className="relative shrink-0">
                           <item.icon />
                           {showStaleBadge && (
