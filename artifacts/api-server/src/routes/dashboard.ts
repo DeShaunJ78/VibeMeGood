@@ -81,12 +81,13 @@ router.get("/dashboard/summary", async (req, res) => {
         if (!score || score.actionTag !== "PLAY") return null;
         const player = playerMap[line.playerId];
         const teamId = player?.teamId ?? null;
-        const teamAbbr = teamId ? (teamMap[teamId]?.abbreviation ?? null) : null;
         const game = teamId ? gamesByTeam[teamId] : null;
-        const opponentTeamId = game
-          ? (game.homeTeamId === teamId ? game.awayTeamId : game.homeTeamId)
-          : null;
-        const opponentAbbr = opponentTeamId ? (teamMap[opponentTeamId]?.abbreviation ?? null) : null;
+        // Hard gate: player must have a game today. This eliminates off-season
+        // and stale lines from any sport regardless of lastSyncedAt.
+        if (!game) return null;
+        const teamAbbr = teamId ? (teamMap[teamId]?.abbreviation ?? null) : null;
+        const opponentTeamId = game.homeTeamId === teamId ? game.awayTeamId : game.homeTeamId;
+        const opponentAbbr = teamMap[opponentTeamId]?.abbreviation ?? null;
         return {
           ppLineId: line.id,
           playerName: player?.fullName ?? "Unknown",
@@ -187,23 +188,23 @@ router.get("/dashboard/summary", async (req, res) => {
       .filter(l => !l.pickCategory || l.pickCategory === "player")
       .map(line => {
         // Skip stale seed lines (lastSyncedAt IS NULL = never actually synced).
-        // Real slate lines always receive a lastSyncedAt timestamp on sync.
         if (!line.lastSyncedAt) return null;
         const proj = projLookup.get(`${line.playerId}:${line.statType}`);
         if (!proj?.pOver) return null;
         const player = playerMap[line.playerId];
         const teamId = player?.teamId ?? null;
-        // Opponent is populated when a game record exists for today; optional.
         const game = teamId ? gamesByTeam[teamId] : null;
+        // Hard gate: player must have a game TODAY. Eliminates off-season props,
+        // stale NFL lines, and any sport not currently in-season — regardless of
+        // lastSyncedAt. This is the definitive fix for stale lines in top picks.
+        if (!game) return null;
         const score = scoreByLineId[line.id];
         // Drop gated and NO-PLAY props — Top Picks must be actionable.
         if (proj.noPlayReason || score?.actionTag === "NO-PLAY") return null;
         const pOverPct = Math.round(parseFloat(proj.pOver.toString()) * 10) / 10;
         const teamAbbr = teamId ? (teamMap[teamId]?.abbreviation ?? null) : null;
-        const opponentTeamId = game
-          ? (game.homeTeamId === teamId ? game.awayTeamId : game.homeTeamId)
-          : null;
-        const opponentAbbr = opponentTeamId ? (teamMap[opponentTeamId]?.abbreviation ?? null) : null;
+        const opponentTeamId = game.homeTeamId === teamId ? game.awayTeamId : game.homeTeamId;
+        const opponentAbbr = teamMap[opponentTeamId]?.abbreviation ?? null;
         return {
           ppLineId: line.id,
           playerName: player?.fullName ?? "Unknown",
