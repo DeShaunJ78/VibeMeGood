@@ -10,6 +10,8 @@
 - [Atomic entry+picks](entry-creation-atomic.md) — createEntry takes inline `picks[]`, inserts entry+legs in one txn; never create-then-loop addEntryPick (orphan ungradeable entries). Drizzle numeric needs String().
 - [Single-sport lineups](single-sport-lineups.md) — lineup factory must lock each lineup to the first accepted pick's sport in BOTH main loop and relaxed fallback; pool is global cross-sport.
 - [PP PerimeterX block](pp-perimeter-x-block.md) — server-side PP syncs always 403 (PerimeterX CAPTCHA); proxies don't help & were removed. Browser-import is the only ingestion path; no PP cron.
+- [Calibration pseudo-line fix](calibration-pseudo-line-fix.md) — median=0 for sparse stats + push-exclusion = 100% hit rate artifact; fix is +0.5; TRUNCATE calibration table before re-running after any line change.
+- [Priors key mismatch → DEFAULT inflation](priors-key-mismatch.md) — 17+ stat types fell to DEFAULT_PRIOR(mean=20) via key mismatch; inflated pOver 96–99% via Bayesian shrinkage; fixed with canonical DB stat_type names.
 - [Entry projection snapshot](entry-projection-snapshot.md) — snapshot model projection onto entry_picks server-side at log time (key player+statType, unique); AI entry-analysis prompt must inject player names.
 - [Proxy injects wildcard CORS](proxy-cors-testing.md) — localhost:80 proxy adds `Access-Control-Allow-Origin: *`; test an app's real CORS on its own port, and restart for app.ts middleware changes.
 - [Projection signal data availability](projection-data-availability.md) — schema columns exist but spread/total/minutes/home_away/weather are EMPTY; pace ratings seed-only; check coverage before wiring a factor.
