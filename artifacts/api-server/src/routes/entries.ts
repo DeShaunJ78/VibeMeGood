@@ -3,11 +3,57 @@ import { z } from "zod";
 import { db } from "@workspace/db";
 import {
   entriesTable, entryPicksTable, playersTable, ppLinesTable, clvRecordsTable,
-  ppLineHistoryTable,
+  ppLineHistoryTable, ourProjectionsTable,
   behavioralLogsTable, userSettingsTable, type InsertEntry,
 } from "@workspace/db/schema";
 import { eq, and, gte, lte, inArray, desc, type SQL } from "drizzle-orm";
 import { broadcast } from "../lib/sse";
+
+// Snapshot the current model projection onto each pick at log time. The model
+// projection (our_projections.projectedValue) is exactly what the Slate Board and
+// Lineup Factory use live; capturing it here means the Journal, AI entry analysis,
+// and CLV/review math all run off the same numbers — and it does NOT depend on the
+// client remembering to send a projection. our_projections is unique per
+// (playerId, statType), so the lookup is unambiguous. Picks that already carry an
+// explicit projection, or have no matching player+stat row, are left untouched.
+async function enrichPicksWithProjections<T extends {
+  playerId?: number | null;
+  statType: string;
+  lineValue: number;
+  yourProjection?: number | null;
+  projectionGap?: number | null;
+}>(picks: T[]): Promise<T[]> {
+  const playerIds = [...new Set(
+    picks.filter(p => p.playerId != null && p.yourProjection == null).map(p => p.playerId as number),
+  )];
+  if (playerIds.length === 0) return picks;
+
+  const rows = await db
+    .select({
+      playerId: ourProjectionsTable.playerId,
+      statType: ourProjectionsTable.statType,
+      projectedValue: ourProjectionsTable.projectedValue,
+    })
+    .from(ourProjectionsTable)
+    .where(inArray(ourProjectionsTable.playerId, playerIds));
+
+  const projByKey = new Map<string, number>();
+  for (const r of rows) {
+    if (r.playerId == null || r.projectedValue == null) continue;
+    projByKey.set(`${r.playerId}|${r.statType}`, Number(r.projectedValue));
+  }
+
+  return picks.map(p => {
+    if (p.yourProjection != null || p.playerId == null) return p;
+    const projected = projByKey.get(`${p.playerId}|${p.statType}`);
+    if (projected == null) return p;
+    return {
+      ...p,
+      yourProjection: projected,
+      projectionGap: Math.round((projected - p.lineValue) * 100) / 100,
+    };
+  });
+}
 
 async function settlePickCLV(pick: {
   id: number;
@@ -231,6 +277,10 @@ router.post("/entries", async (req, res): Promise<void> => {
         return;
       }
     }
+
+    // Snapshot model projections server-side so every logged leg carries the same
+    // numbers the Slate Board showed — bulletproof against a client that omits them.
+    picksToInsert = await enrichPicksWithProjections(picksToInsert);
 
     // Entry + legs are created in a single transaction so a leg failure rolls back
     // the whole entry — never leaves an ungradeable entry with zero picks.

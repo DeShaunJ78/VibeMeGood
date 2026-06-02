@@ -1,0 +1,85 @@
+# PrizePicks Entry Analysis
+
+## Entry Overview
+| Metric | Value |
+|--------|-------|
+| Type | Power (6-pick) |
+| Stake | $25 |
+| Potential Payout | $3,500 |
+| Implied Odds | 140:1 |
+
+---
+
+## 1. Overall Entry Construction Quality
+
+**Rating: Poor**
+
+This entry has fundamental structural problems:
+
+- **No projections recorded** — All `yourProjection` and `projectionGap` fields are null. This suggests the picks weren't made using a quantitative model; they're either gut calls or copied from somewhere.
+- **Heavy demon/goblin concentration** — 4 demons + 1 goblin out of 6 picks. These boosted lines exist because PrizePicks knows they're harder to hit. You're chasing payout multipliers, not value.
+- **Redundant picks** — Two identical "Home Runs more 0.5 (demon)" picks. Either this is a data entry error or you're doubling down on the same low-probability event.
+
+---
+
+## 2. Correlation Risks
+
+**Critical Issue: Likely Correlated Legs**
+
+Without player names, I can't confirm, but the structure screams single-player or single-game stacking:
+
+| Pick | Correlation Concern |
+|------|---------------------|
+| Doubles 0.5+ | If same player: H+R+RBI legs are dependent |
+| Singles 0.5+ | Same as above |
+| H+R+RBI 2.5+ (demon) | Requires multi-stat performance |
+| H+R+RBI 0.5+ (goblin) | Auto-correlated with 2.5+ line |
+| HR 0.5+ (demon) x2 | Duplicates = 100% correlated |
+
+**The H+R+RBI 0.5 goblin is mathematically nested inside the H+R+RBI 2.5 demon.** If a player fails to reach 2.5, they could still clear 0.5 — but if they fail 0.5, both die. This isn't diversification; it's concentration.
+
+---
+
+## 3. Best and Weakest Legs
+
+### Strongest Leg
+**H+R+RBI more 0.5 (goblin)**
+- Lowest threshold; any single productive plate appearance clears it
+- "Goblin" designation suggests reduced boost — PrizePicks sees this as hittable
+- Still risky if player sits or goes 0-fer with no walks
+
+### Weakest Legs
+**Home Runs more 0.5 (demon) — both of them**
+- League-wide HR rate is ~3-4% per PA
+- Even elite sluggers hit HR in only ~25-30% of *games*
+- Demon line confirms PrizePicks knows this is a sucker bet
+- Duplicating it doubles your exposure to the same low-probability outcome
+
+---
+
+## 4. What This Reveals About the Analyst's Approach
+
+| Signal | Interpretation |
+|--------|----------------|
+| No projections | Not model-driven; likely narrative/hunch-based |
+| Demon-heavy | Chasing multipliers over edge |
+| Duplicate picks | Sloppy construction or misunderstanding of correlation |
+| 6-pick power play | Lottery ticket mentality |
+| $25 stake, $3,500 target | Risk tolerance suggests recreational, not professional |
+
+**Diagnosis:** This is a "hope parlay" — constructed around a player popping off rather than systematic value identification.
+
+---
+
+## 5. Actionable Notes (Pending Entry)
+
+### Before Placing Future Entries:
+1. **Log your projections** — If you can't assign a probability, you can't identify edge
+2. **Calculate implied probabilities** — A 6-pick power play needs each leg at ~72%+ to break even
+3. **Eliminate duplicate legs** — Literal correlation is 1.0; you gain no diversification
+4. **Treat demons skeptically** — The boost exists because the line is unfavorable
+5. **Build uncorrelated** — Mix sports, games, or truly independent stat types
+
+### For This Specific Entry:
+- If you haven't locked it: **remove one HR leg and the nested H+R+RBI 0.5**
+- If locked: Track which

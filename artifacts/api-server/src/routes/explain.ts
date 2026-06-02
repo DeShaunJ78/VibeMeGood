@@ -6,7 +6,7 @@ import {
   lineupConfirmationsTable, entriesTable, entryPicksTable,
   varianceScoresTable,
 } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 
 const router = Router();
@@ -155,6 +155,12 @@ router.post("/explain/entry/:id", async (req: Request, res: Response): Promise<v
     }
 
     const picks = await db.select().from(entryPicksTable).where(eq(entryPicksTable.entryId, entryId));
+    const playerIds = [...new Set(picks.map(p => p.playerId).filter((x): x is number => x != null))];
+    const players = playerIds.length
+      ? await db.select({ id: playersTable.id, fullName: playersTable.fullName })
+          .from(playersTable).where(inArray(playersTable.id, playerIds))
+      : [];
+    const playerMap = Object.fromEntries(players.map(p => [p.id, p.fullName]));
 
     const context = {
       entry: {
@@ -163,10 +169,11 @@ router.post("/explain/entry/:id", async (req: Request, res: Response): Promise<v
         result: entry.result, notes: entry.notes,
       },
       picks: picks.map(p => ({
+        player: (p.playerId != null ? playerMap[p.playerId] : null) ?? p.playerName ?? "Unknown",
         statType: p.statType, direction: p.direction, lineValue: Number(p.lineValue), lineType: p.lineType,
-        yourProjection: p.yourProjection ? Number(p.yourProjection) : null,
-        projectionGap: p.projectionGap ? Number(p.projectionGap) : null,
-        result: p.result, clv: p.clv ? Number(p.clv) : null,
+        yourProjection: p.yourProjection != null ? Number(p.yourProjection) : null,
+        projectionGap: p.projectionGap != null ? Number(p.projectionGap) : null,
+        result: p.result, clv: p.clv != null ? Number(p.clv) : null,
       })),
     };
 
