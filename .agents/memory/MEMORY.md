@@ -12,4 +12,5 @@
 - [PP PerimeterX block](pp-perimeter-x-block.md) — server-side PP syncs always 403 (PerimeterX CAPTCHA); proxies don't help & were removed. Browser-import is the only ingestion path; no PP cron.
 - [Entry projection snapshot](entry-projection-snapshot.md) — snapshot model projection onto entry_picks server-side at log time (key player+statType, unique); AI entry-analysis prompt must inject player names.
 - [Proxy injects wildcard CORS](proxy-cors-testing.md) — localhost:80 proxy adds `Access-Control-Allow-Origin: *`; test an app's real CORS on its own port, and restart for app.ts middleware changes.
+- [Projection signal data availability](projection-data-availability.md) — schema columns exist but spread/total/minutes/home_away/weather are EMPTY; pace ratings seed-only; check coverage before wiring a factor.
 - [PP import performance](pp-import-performance.md) — PP sync writes must be bulk/batched, never per-row, or full imports take minutes; deactivation guard mutates real lines by sport.
