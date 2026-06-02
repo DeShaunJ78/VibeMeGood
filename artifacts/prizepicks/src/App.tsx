@@ -27,6 +27,7 @@ import UsageSignals from "@/pages/variance/usage";
 import ExperimentalLab from "@/pages/variance/lab";
 import SystemHealth from "@/pages/system-health";
 import SharkChat from "@/pages/shark-chat";
+import ModelAudit from "@/pages/audit";
 import { EntryProvider } from "@/lib/entry-context";
 import { SharkChatProvider } from "@/contexts/SharkChatContext";
 
@@ -114,6 +115,7 @@ function Router() {
         <Route path="/variance/lab" component={ExperimentalLab} />
         <Route path="/health" component={SystemHealth} />
         <Route path="/shark" component={SharkChat} />
+        <Route path="/audit" component={ModelAudit} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

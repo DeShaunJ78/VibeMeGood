@@ -1083,6 +1083,84 @@ export interface LineupFactoryResult {
   generationConfig: unknown;
 }
 
+export interface AuditSummaryMetrics {
+  brier: number;
+  confHitRate: number;
+  ece: number;
+  maxCalError: number;
+  n: number;
+  confidentN: number;
+}
+
+export interface AuditStatRow {
+  statType: string;
+  n: number;
+  brier: number;
+  confHitRate: number;
+  ece: number;
+  maxCalError: number;
+}
+
+export interface AuditSportRow {
+  sport: string;
+  n: number;
+  brier: number;
+  confHitRate: number;
+  ece: number;
+  maxCalError: number;
+}
+
+export interface AuditFactorRow {
+  factor: string;
+  rows: number;
+  baseBrier: number;
+  adjBrier: number;
+  delta: number;
+}
+
+export interface AuditEdgeBucketRow {
+  label: string;
+  minEdge: number;
+  maxEdge: number;
+  n: number;
+  avgPredicted: number;
+  actualHitRate: number;
+}
+
+export interface AuditCalibrationBucket {
+  bucket: string;
+  n: number;
+  predicted: number;
+  actual: number;
+  gap: number;
+}
+
+export type AuditResultSummary = {
+  base: AuditSummaryMetrics;
+  adjusted: AuditSummaryMetrics;
+  brierDelta: number;
+};
+
+export interface AuditResult {
+  id?: number;
+  runAt: string;
+  series: number;
+  predictions: number;
+  summary: AuditResultSummary;
+  perStat: AuditStatRow[];
+  perSport: AuditSportRow[];
+  perFactor: AuditFactorRow[];
+  perEdgeBucket: AuditEdgeBucketRow[];
+  calibrationBuckets: AuditCalibrationBucket[];
+}
+
+export interface AuditRunMeta {
+  id: number;
+  runAt: string;
+  series: number;
+  predictions: number;
+}
+
 export type ListPlayersParams = {
 sport?: string;
 teamId?: number;

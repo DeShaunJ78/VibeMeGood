@@ -40,6 +40,7 @@ import paceRouter from "./pace";
 import sharpRouter from "./sharp";
 import nflAdvancedRouter from "./nfl-advanced";
 import portfolioRouter from "./portfolio";
+import auditRouter from "./audit";
 
 const router: IRouter = Router();
 
@@ -84,5 +85,6 @@ router.use(paceRouter);
 router.use(sharpRouter);
 router.use(nflAdvancedRouter);
 router.use(portfolioRouter);
+router.use(auditRouter);
 
 export default router;

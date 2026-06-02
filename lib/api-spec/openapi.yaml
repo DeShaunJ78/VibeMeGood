@@ -1390,6 +1390,46 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LineupFactoryResult" }
 
+  /audit/latest:
+    get:
+      operationId: getAuditLatest
+      summary: Get the most recent backtest result
+      tags: [audit]
+      responses:
+        "200":
+          description: Latest backtest result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditResult" }
+        "404":
+          description: No results yet
+
+  /audit/runs:
+    get:
+      operationId: getAuditRuns
+      summary: List recent backtest run metadata
+      tags: [audit]
+      responses:
+        "200":
+          description: List of runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AuditRunMeta" }
+
+  /audit/run:
+    post:
+      operationId: runAudit
+      summary: Trigger a new backtest run (30-60s)
+      tags: [audit]
+      responses:
+        "200":
+          description: Completed backtest result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditResult" }
+
 components:
   schemas:
     HealthStatus:
@@ -2395,3 +2435,99 @@ components:
         filteredPropCount: { type: integer }
         generationConfig: {}
       required: [lineups, portfolioStats, scoredProps, eligiblePropCount, filteredPropCount, generationConfig]
+
+    # ─── AUDIT ───────────────────────────────────────────────────────────────
+
+    AuditSummaryMetrics:
+      type: object
+      properties:
+        brier:       { type: number }
+        confHitRate: { type: number }
+        ece:         { type: number }
+        maxCalError: { type: number }
+        n:           { type: integer }
+        confidentN:  { type: integer }
+      required: [brier, confHitRate, ece, maxCalError, n, confidentN]
+
+    AuditStatRow:
+      type: object
+      properties:
+        statType:    { type: string }
+        n:           { type: integer }
+        brier:       { type: number }
+        confHitRate: { type: number }
+        ece:         { type: number }
+        maxCalError: { type: number }
+      required: [statType, n, brier, confHitRate, ece, maxCalError]
+
+    AuditSportRow:
+      type: object
+      properties:
+        sport:       { type: string }
+        n:           { type: integer }
+        brier:       { type: number }
+        confHitRate: { type: number }
+        ece:         { type: number }
+        maxCalError: { type: number }
+      required: [sport, n, brier, confHitRate, ece, maxCalError]
+
+    AuditFactorRow:
+      type: object
+      properties:
+        factor:    { type: string }
+        rows:      { type: integer }
+        baseBrier: { type: number }
+        adjBrier:  { type: number }
+        delta:     { type: number }
+      required: [factor, rows, baseBrier, adjBrier, delta]
+
+    AuditEdgeBucketRow:
+      type: object
+      properties:
+        label:         { type: string }
+        minEdge:       { type: number }
+        maxEdge:       { type: number }
+        n:             { type: integer }
+        avgPredicted:  { type: number }
+        actualHitRate: { type: number }
+      required: [label, minEdge, maxEdge, n, avgPredicted, actualHitRate]
+
+    AuditCalibrationBucket:
+      type: object
+      properties:
+        bucket:    { type: string }
+        n:         { type: integer }
+        predicted: { type: number }
+        actual:    { type: number }
+        gap:       { type: number }
+      required: [bucket, n, predicted, actual, gap]
+
+    AuditResult:
+      type: object
+      properties:
+        id:          { type: integer }
+        runAt:       { type: string }
+        series:      { type: integer }
+        predictions: { type: integer }
+        summary:
+          type: object
+          properties:
+            base:       { $ref: "#/components/schemas/AuditSummaryMetrics" }
+            adjusted:   { $ref: "#/components/schemas/AuditSummaryMetrics" }
+            brierDelta: { type: number }
+          required: [base, adjusted, brierDelta]
+        perStat:            { type: array, items: { $ref: "#/components/schemas/AuditStatRow" } }
+        perSport:           { type: array, items: { $ref: "#/components/schemas/AuditSportRow" } }
+        perFactor:          { type: array, items: { $ref: "#/components/schemas/AuditFactorRow" } }
+        perEdgeBucket:      { type: array, items: { $ref: "#/components/schemas/AuditEdgeBucketRow" } }
+        calibrationBuckets: { type: array, items: { $ref: "#/components/schemas/AuditCalibrationBucket" } }
+      required: [runAt, series, predictions, summary, perStat, perSport, perFactor, perEdgeBucket, calibrationBuckets]
+
+    AuditRunMeta:
+      type: object
+      properties:
+        id:          { type: integer }
+        runAt:       { type: string }
+        series:      { type: integer }
+        predictions: { type: integer }
+      required: [id, runAt, series, predictions]

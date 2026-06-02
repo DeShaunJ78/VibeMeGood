@@ -27,6 +27,8 @@ import type {
   AnthropicError,
   AnthropicMessage,
   AnthropicMessageInput,
+  AuditResult,
+  AuditRunMeta,
   BetterLineEntry,
   CalibrationDiagnostics,
   ClearAllAlerts200,
@@ -6384,5 +6386,229 @@ export const useGenerateLineupFactory = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getGenerateLineupFactoryMutationOptions(options));
+    }
+
+export const getGetAuditLatestUrl = () => {
+
+
+
+
+  return `/api/audit/latest`
+}
+
+/**
+ * @summary Get the most recent backtest result
+ */
+export const getAuditLatest = async ( options?: RequestInit): Promise<AuditResult> => {
+
+  return customFetch<AuditResult>(getGetAuditLatestUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAuditLatestQueryKey = () => {
+    return [
+    `/api/audit/latest`
+    ] as const;
+    }
+
+
+export const getGetAuditLatestQueryOptions = <TData = Awaited<ReturnType<typeof getAuditLatest>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAuditLatest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAuditLatestQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAuditLatest>>> = ({ signal }) => getAuditLatest({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAuditLatest>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAuditLatestQueryResult = NonNullable<Awaited<ReturnType<typeof getAuditLatest>>>
+export type GetAuditLatestQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get the most recent backtest result
+ */
+
+export function useGetAuditLatest<TData = Awaited<ReturnType<typeof getAuditLatest>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAuditLatest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAuditLatestQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetAuditRunsUrl = () => {
+
+
+
+
+  return `/api/audit/runs`
+}
+
+/**
+ * @summary List recent backtest run metadata
+ */
+export const getAuditRuns = async ( options?: RequestInit): Promise<AuditRunMeta[]> => {
+
+  return customFetch<AuditRunMeta[]>(getGetAuditRunsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAuditRunsQueryKey = () => {
+    return [
+    `/api/audit/runs`
+    ] as const;
+    }
+
+
+export const getGetAuditRunsQueryOptions = <TData = Awaited<ReturnType<typeof getAuditRuns>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAuditRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAuditRunsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAuditRuns>>> = ({ signal }) => getAuditRuns({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAuditRuns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAuditRunsQueryResult = NonNullable<Awaited<ReturnType<typeof getAuditRuns>>>
+export type GetAuditRunsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List recent backtest run metadata
+ */
+
+export function useGetAuditRuns<TData = Awaited<ReturnType<typeof getAuditRuns>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAuditRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAuditRunsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getRunAuditUrl = () => {
+
+
+
+
+  return `/api/audit/run`
+}
+
+/**
+ * @summary Trigger a new backtest run (30-60s)
+ */
+export const runAudit = async ( options?: RequestInit): Promise<AuditResult> => {
+
+  return customFetch<AuditResult>(getRunAuditUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRunAuditMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runAudit>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runAudit>>, TError,void, TContext> => {
+
+const mutationKey = ['runAudit'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runAudit>>, void> = () => {
+
+
+          return  runAudit(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunAuditMutationResult = NonNullable<Awaited<ReturnType<typeof runAudit>>>
+
+    export type RunAuditMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Trigger a new backtest run (30-60s)
+ */
+export const useRunAudit = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runAudit>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runAudit>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRunAuditMutationOptions(options));
     }
 

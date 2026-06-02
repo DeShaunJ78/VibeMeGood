@@ -1870,3 +1870,151 @@ export const GenerateLineupFactoryResponse = zod.object({
 })
 
 
+/**
+ * @summary Get the most recent backtest result
+ */
+export const GetAuditLatestResponse = zod.object({
+  "id": zod.number().optional(),
+  "runAt": zod.string(),
+  "series": zod.number(),
+  "predictions": zod.number(),
+  "summary": zod.object({
+  "base": zod.object({
+  "brier": zod.number(),
+  "confHitRate": zod.number(),
+  "ece": zod.number(),
+  "maxCalError": zod.number(),
+  "n": zod.number(),
+  "confidentN": zod.number()
+}),
+  "adjusted": zod.object({
+  "brier": zod.number(),
+  "confHitRate": zod.number(),
+  "ece": zod.number(),
+  "maxCalError": zod.number(),
+  "n": zod.number(),
+  "confidentN": zod.number()
+}),
+  "brierDelta": zod.number()
+}),
+  "perStat": zod.array(zod.object({
+  "statType": zod.string(),
+  "n": zod.number(),
+  "brier": zod.number(),
+  "confHitRate": zod.number(),
+  "ece": zod.number(),
+  "maxCalError": zod.number()
+})),
+  "perSport": zod.array(zod.object({
+  "sport": zod.string(),
+  "n": zod.number(),
+  "brier": zod.number(),
+  "confHitRate": zod.number(),
+  "ece": zod.number(),
+  "maxCalError": zod.number()
+})),
+  "perFactor": zod.array(zod.object({
+  "factor": zod.string(),
+  "rows": zod.number(),
+  "baseBrier": zod.number(),
+  "adjBrier": zod.number(),
+  "delta": zod.number()
+})),
+  "perEdgeBucket": zod.array(zod.object({
+  "label": zod.string(),
+  "minEdge": zod.number(),
+  "maxEdge": zod.number(),
+  "n": zod.number(),
+  "avgPredicted": zod.number(),
+  "actualHitRate": zod.number()
+})),
+  "calibrationBuckets": zod.array(zod.object({
+  "bucket": zod.string(),
+  "n": zod.number(),
+  "predicted": zod.number(),
+  "actual": zod.number(),
+  "gap": zod.number()
+}))
+})
+
+
+/**
+ * @summary List recent backtest run metadata
+ */
+export const GetAuditRunsResponseItem = zod.object({
+  "id": zod.number(),
+  "runAt": zod.string(),
+  "series": zod.number(),
+  "predictions": zod.number()
+})
+export const GetAuditRunsResponse = zod.array(GetAuditRunsResponseItem)
+
+
+/**
+ * @summary Trigger a new backtest run (30-60s)
+ */
+export const RunAuditResponse = zod.object({
+  "id": zod.number().optional(),
+  "runAt": zod.string(),
+  "series": zod.number(),
+  "predictions": zod.number(),
+  "summary": zod.object({
+  "base": zod.object({
+  "brier": zod.number(),
+  "confHitRate": zod.number(),
+  "ece": zod.number(),
+  "maxCalError": zod.number(),
+  "n": zod.number(),
+  "confidentN": zod.number()
+}),
+  "adjusted": zod.object({
+  "brier": zod.number(),
+  "confHitRate": zod.number(),
+  "ece": zod.number(),
+  "maxCalError": zod.number(),
+  "n": zod.number(),
+  "confidentN": zod.number()
+}),
+  "brierDelta": zod.number()
+}),
+  "perStat": zod.array(zod.object({
+  "statType": zod.string(),
+  "n": zod.number(),
+  "brier": zod.number(),
+  "confHitRate": zod.number(),
+  "ece": zod.number(),
+  "maxCalError": zod.number()
+})),
+  "perSport": zod.array(zod.object({
+  "sport": zod.string(),
+  "n": zod.number(),
+  "brier": zod.number(),
+  "confHitRate": zod.number(),
+  "ece": zod.number(),
+  "maxCalError": zod.number()
+})),
+  "perFactor": zod.array(zod.object({
+  "factor": zod.string(),
+  "rows": zod.number(),
+  "baseBrier": zod.number(),
+  "adjBrier": zod.number(),
+  "delta": zod.number()
+})),
+  "perEdgeBucket": zod.array(zod.object({
+  "label": zod.string(),
+  "minEdge": zod.number(),
+  "maxEdge": zod.number(),
+  "n": zod.number(),
+  "avgPredicted": zod.number(),
+  "actualHitRate": zod.number()
+})),
+  "calibrationBuckets": zod.array(zod.object({
+  "bucket": zod.string(),
+  "n": zod.number(),
+  "predicted": zod.number(),
+  "actual": zod.number(),
+  "gap": zod.number()
+}))
+})
+
+

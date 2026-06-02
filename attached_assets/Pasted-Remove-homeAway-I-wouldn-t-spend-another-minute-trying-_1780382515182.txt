@@ -1,0 +1,166 @@
+Remove homeAway
+
+I wouldn’t spend another minute trying to rescue it.
+
+You’ve now tested it multiple ways:
+
+* Original implementation → negative
+* Generic adjustment removed → negative
+* Historical split only → negative
+
+The data has voted.
+
+Twice.
+
+Possibly three times.
+
+Retire it.
+
+Keep the code.
+
+Turn it off.
+
+Move on.
+
+⸻
+
+What I would do next
+
+1. Investigate the Blocked Shots anomaly FIRST
+
+Not because it’s the biggest source of error.
+
+Because it’s the least understood.
+
+A 90.5% MaxCalError should immediately trigger curiosity.
+
+Questions:
+
+* How many samples?
+* Which bucket?
+* Which line?
+* Which players?
+* Is it a ZIP issue?
+* Is it a data issue?
+* Is it one weird season?
+
+If it turns out to be:
+
+8 samples
+
+then who cares.
+
+If it turns out to be:
+
+2,000 samples
+
+then that’s a major discovery.
+
+Before changing NBA assists or turnovers, I’d find out which it is.
+
+⸻
+
+2. NBA Turnovers and Assists
+
+These are the next obvious candidates.
+
+Why?
+
+Because they’re exactly the kind of stat that tends to violate Normal assumptions.
+
+Especially turnovers.
+
+A player can:
+
+* have 1
+* have 2
+* have 3
+* suddenly have 8
+
+That’s classic overdispersion.
+
+Negative Binomial is a natural fit.
+
+⸻
+
+3. Rebounds
+
+I’d put rebounds behind turnovers and assists.
+
+Rebounds tend to be more stable.
+
+Not perfect.
+
+But less obviously broken.
+
+⸻
+
+4. Ignore combination stats for now
+
+I would not touch:
+
+* PRA
+* Points + Rebounds
+* Assists + Rebounds
+* Hits + Runs + RBIs
+
+Yet.
+
+Those are second-order problems.
+
+You’re talking about sums of correlated variables.
+
+The complexity jumps dramatically.
+
+The payoff may not.
+
+⸻
+
+The surprising winner
+
+Honestly?
+
+The biggest lesson from this whole exercise may be:
+
+Routing accuracy mattered more than model complexity.
+
+You didn’t build a transformer.
+
+You didn’t build an ensemble.
+
+You didn’t add 50 factors.
+
+You simply stopped forcing the wrong distributions onto the wrong stats.
+
+And the model got dramatically better.
+
+That’s a great sign because it means the improvements are grounded in probability theory rather than curve fitting.
+
+⸻
+
+My recommended order
+
+Immediate
+
+✅ Remove homeAway from production
+
+⸻
+
+Next
+
+🔍 Investigate Blocked Shots anomaly
+
+⸻
+
+Then
+
+🏀 Test Negative Binomial on:
+
+* Turnovers
+* NBA Assists
+
+Measure.
+
+Replay.
+
+Compare.
