@@ -1,0 +1,74 @@
+That’s a strong Stage 1 result.
+
+Plainly: Poisson worked where it was supposed to work.
+
+The biggest proof is Home Runs:
+
+* Before: under gap around 9 points
+* After Poisson: under gap around 3 points
+
+That means the model stopped badly misreading the shape of that stat. Big win.
+
+But it also exposed the next truth:
+
+Stolen Bases are not just Poisson. They are zero-inflated.
+
+A player often has a true “not running today” game state. That means the stat isn’t just “how often does he steal?” It’s also:
+
+“Is he even likely to attempt?”
+
+That’s why actual under is 92.9% while Poisson says about 83%. Poisson improved the math, but it doesn’t know game intent.
+
+What this means strategically
+
+Your cleanest exploit right now:
+
+Home Run unders.
+
+That signal looks real, measured, and now much better calibrated.
+
+Your “danger zone”:
+
+Stolen Bases unders.
+
+Still profitable-looking, but the model needs ZIP later before you fully trust the displayed probability.
+
+Your weird bucket:
+
+3PT Made overs.
+
+That sounds like a calibration/data bucket issue more than a distribution issue. If the model says near-zero over but reality is 46%, the calibration layer must catch it — but I would not let that quietly slide. That needs a sample-size and line-distribution audit.
+
+Yes, Stage 2 should come next
+
+Move to Negative Binomial for:
+
+* RBIs
+* Hits
+* Walks
+* NHL Assists
+* maybe Doubles/Runs/Singles after review
+
+Why?
+
+Because those stats are not just rare. They are bursty.
+
+Poisson says:
+
+variance ≈ mean
+
+Negative Binomial admits:
+
+variance is bigger than mean
+
+That is exactly what you need for players who can go cold for days, then explode.
+
+My next instruction to the agent
+
+Implement Stage 2 Negative Binomial routing for overdispersed counting stats, but keep Poisson active for clean sparse stats like Home Runs, Goals, TDs, and Stolen Bases until ZIP is ready. After implementation, rerun the same walk-forward replay and compare ECE, Brier, MaxCalError, and stat-level residuals against the Stage 1 baseline.
+
+This is no longer “is the system broken?”
+
+Now it’s model tuning with evidence.
+
+That’s the good kind of problem.
