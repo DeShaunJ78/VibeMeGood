@@ -968,18 +968,6 @@ paths:
               schema: { $ref: "#/components/schemas/DataHealth" }
 
   # ─── SYNC ─────────────────────────────────────────────────────────
-  /sync/pp-lines:
-    post:
-      operationId: syncPpLines
-      tags: [sync]
-      summary: Manually trigger PP line sync
-      responses:
-        "200":
-          description: Sync result
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/SyncResult" }
-
   /sync/pp-lines-import:
     post:
       operationId: ppLinesBrowserImport

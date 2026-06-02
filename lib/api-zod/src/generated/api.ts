@@ -1336,19 +1336,6 @@ export const GetDataHealthResponse = zod.object({
 
 
 /**
- * @summary Manually trigger PP line sync
- */
-export const SyncPpLinesResponse = zod.object({
-  "success": zod.boolean(),
-  "provider": zod.string(),
-  "jobName": zod.string(),
-  "recordsProcessed": zod.number(),
-  "message": zod.string(),
-  "logId": zod.number().optional()
-})
-
-
-/**
  * @summary Import PP lines from browser-fetched payload (bypasses server IP block)
  */
 export const PpLinesBrowserImportBody = zod.object({

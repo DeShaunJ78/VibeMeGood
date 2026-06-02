@@ -1,4 +1,3 @@
-import { ProxyAgent, fetch as undiciFetch } from "undici";
 import { db } from "@workspace/db";
 import {
   ppLinesTable, ppLineHistoryTable, playersTable, teamsTable, gamesTable,
@@ -7,73 +6,15 @@ import { eq, and, or, isNull, lt, gte, lte, count, inArray } from "drizzle-orm";
 import { broadcastNewGoblin } from "../sse";
 import { logger } from "../logger";
 
-const PP_BASE = process.env.PP_API_BASE || "https://api.prizepicks.com";
-
-// Single-page fetch cap. If a response ever returns this many rows we must assume it
-// was truncated (PP handed us a full page with more behind it) and refuse to run
-// deactivation, since the missing tail would otherwise be mass-deactivated.
+// Single-page cap from the PrizePicks feed. If an imported payload ever contains
+// this many rows we assume it was truncated (a full page with more behind it) and
+// refuse to run deactivation, since the missing tail would be mass-deactivated.
 const PER_PAGE = 25000;
 
-export const PP_PROJECTIONS_URL =
-  `${PP_BASE}/projections?per_page=${PER_PAGE}&single_stat=true&include=new_player,league`;
-
-// PP_PROXY_URL accepts one URL or a comma-separated list.
-// A random agent is picked each call so load is spread across all IPs and
-// a flagged IP doesn't take down the whole sync.
-// Accepts two formats per entry (comma-separated list of either):
-//   Standard URL:  http://user:pass@host:port
-//   Webshare list: host:port:user:pass  (auto-converted)
-function normalizeProxyUrl(raw: string): string {
-  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
-  const parts = raw.split(":");
-  if (parts.length === 4) {
-    const [host, port, user, pass] = parts;
-    return `http://${user}:${pass}@${host}:${port}`;
-  }
-  throw new Error(`Unrecognized proxy format: ${raw}`);
-}
-
-const proxyAgents: ProxyAgent[] = (process.env.PP_PROXY_URL ?? "")
-  .split(",")
-  .map(u => u.trim())
-  .filter(Boolean)
-  .map(u => new ProxyAgent(normalizeProxyUrl(u)));
-
-if (proxyAgents.length > 0) {
-  logger.info({ count: proxyAgents.length }, "PP proxy pool ready");
-} else {
-  logger.warn("PP_PROXY_URL not set — PrizePicks syncs will fail on cloud IPs");
-}
-
-function pickAgent(): ProxyAgent | undefined {
-  if (proxyAgents.length === 0) return undefined;
-  return proxyAgents[Math.floor(Math.random() * proxyAgents.length)];
-}
-
-async function fetchPP(url: string): Promise<Response> {
-  const delays = [0, 2000, 5000];
-  for (let i = 0; i < delays.length; i++) {
-    if (delays[i] > 0) await new Promise(r => setTimeout(r, delays[i]));
-    const res = await undiciFetch(url, {
-      dispatcher: pickAgent(),
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        "Accept": "application/json",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://app.prizepicks.com/",
-        "Origin": "https://app.prizepicks.com",
-      },
-    });
-    if (res.status !== 429) return res;
-    logger.warn({ attempt: i + 1 }, "PP API 429 — retrying");
-  }
-  throw new Error("PP API rate limited after 3 attempts");
-}
-
 // ── Core processing logic ────────────────────────────────────────────────────
-// Separated from the fetch step so it can be called by:
-//   1. The server-side cron/manual sync (fetchPP → processPpData)
-//   2. The browser-import endpoint (user fetches from their home IP → POST raw JSON here)
+// Called by the browser-import endpoint only: the user fetches the PP feed from
+// their own logged-in browser (home IP passes PerimeterX) and POSTs the raw JSON
+// here. There is no server-side PP fetch — cloud IPs are always 403'd.
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -377,16 +318,4 @@ export async function processPpData(data: { data: any[]; included: any[] }): Pro
   }
 
   return processed;
-}
-
-// ── Server-side sync (cron + manual "PrizePicks Lines" button) ───────────────
-export async function syncPpLines(): Promise<number> {
-  const res = await fetchPP(PP_PROJECTIONS_URL);
-  if (!res.ok) {
-    const body = await res.text().catch(() => "(unreadable)");
-    logger.error({ status: res.status, body: body.slice(0, 500) }, "PrizePicks fetch failed");
-    throw new Error(`PrizePicks API error: ${res.status}`);
-  }
-  const data = await res.json() as { data: any[]; included: any[] };
-  return processPpData(data);
 }

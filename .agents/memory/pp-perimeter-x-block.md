@@ -16,10 +16,7 @@ PrizePicks API (`api.prizepicks.com/projections`) is protected by **PerimeterX**
 - Settings page has an amber "Sync PP Now" button that runs the full flow
 - Sidebar shows a pulsing red dot + "Xh stale" badge on the Settings item when PP lines are > 4 hours old (threshold: `PP_STALE_HOURS = 4`)
 
-**Proxy support exists but is insufficient:**
-- `PP_PROXY_URL` env var accepts comma-separated `host:port:user:pass` or `http://user:pass@host:port` entries
-- Uses `undici`'s `ProxyAgent` + `undiciFetch` (must use same undici instance — mixing with Node's built-in fetch causes `invalid onRequestStart method` error)
-- Proxy gets through to PP but PerimeterX CAPTCHA fires anyway
+**Residential proxies do NOT defeat PerimeterX — never reach for them.** A proxied server fetch was tried and abandoned: the proxy reaches PP but PX still serves a CAPTCHA, so no JSON comes back. The entire server-side PP fetch path (proxy agents, `syncPpLines`/`fetchPP`, the `/sync/pp-lines` route + OpenAPI op, the `PP_PROXY_URL` secret) has been deleted. Browser import is the only ingestion path. If full automation is ever required, Puppeteer + stealth is the only viable route — not proxies.
 
 **No automatic PP cron — by design.** There is intentionally NO scheduled/server-side PP sync, and PP is excluded from the `/sync/all` and `/sync/pre-lock` batches and from the frontend `SYNC_JOBS` list. Earlier there was a 30-min cron with a circuit breaker; it was removed because every tick 403s and overwrites the import's success in `data_pull_logs`, flipping the Settings data-health dot back to red ~30 min after each import. The data-health dot reads the *latest* log per provider, so any doomed server pull poisons it. The browser copy-paste import is the ONLY thing that should ever write a `provider='prizepicks'` log.
 

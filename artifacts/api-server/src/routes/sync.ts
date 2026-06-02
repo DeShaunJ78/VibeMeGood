@@ -4,7 +4,7 @@ import { dataPullLogsTable, alertsTable, syncRunsTable, playersTable, injuriesTa
 import { eq, and, isNull, or, gte, lte } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { broadcastSyncStatus, broadcast } from "../lib/sse";
-import { syncPpLines, processPpData } from "../lib/sync/prizepicks";
+import { processPpData } from "../lib/sync/prizepicks";
 import { syncExternalOdds, recalcPropScores } from "../lib/sync/external-odds";
 import { computeAllProjections } from "../lib/projection/compute";
 import { computeStreaks } from "../lib/sync/streaks";
@@ -272,14 +272,6 @@ router.post("/sync/pp-lines-import", async (req, res) => {
   }
 });
 
-router.post("/sync/pp-lines", async (req, res) => {
-  await runSync("prizepicks", "pp-lines", syncPpLines, res);
-  // Recalc prop scores after new lines arrive so edges/action tags stay current.
-  // computeAllProjections is NOT called here — projections are built from nightly
-  // game logs and don't change when PP rotates line values.
-  await recalcPropScores();
-});
-
 router.post("/sync/injuries", async (req, res) => {
   await runSync("injury-news", "sync-injuries", syncInjuriesImpl, res);
 });
@@ -404,7 +396,8 @@ router.post("/admin/sync/projections", async (req, res) => {
   }
 });
 
-// Force sync all — triggers PP lines + external odds sequentially
+// Force sync all — triggers the server-fetchable providers sequentially.
+// PP lines are NOT included (browser import only — see note below).
 router.post("/sync/all", async (req, res) => {
   res.json({ status: "started", message: "All syncs initiated" });
   broadcastSyncStatus("all", "running");
