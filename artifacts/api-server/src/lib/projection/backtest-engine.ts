@@ -12,7 +12,6 @@ import { asc, eq } from "drizzle-orm";
 import { pOverLineDist } from "./distributions.js";
 import {
   restFactor,
-  homeAwayFactor,
   combineFactors,
   type FactorResult,
 } from "./factors.js";
@@ -303,22 +302,8 @@ export async function runBacktest(): Promise<BacktestResult> {
         1 + prior.filter((p) => new Date(p.gameDate).getTime() >= windowStart).length;
       const isThreeInFour = gamesInWindow >= 3;
 
-      const isHome =
-        cur.homeAway == null ? null : cur.homeAway.toLowerCase() === "home";
-      const homeVals = prior
-        .filter((p) => p.homeAway?.toLowerCase() === "home")
-        .map((p) => p.value);
-      const awayVals = prior
-        .filter((p) => p.homeAway?.toLowerCase() === "away")
-        .map((p) => p.value);
-
       const applied: (FactorResult | null)[] = [
         restFactor({ isBackToBack, isThreeInFour, daysRest }),
-        homeAwayFactor({
-          isHome,
-          homeAvg: homeVals.length ? mean(homeVals) : null,
-          awayAvg: awayVals.length ? mean(awayVals) : null,
-        }),
       ];
 
       const { combinedFactor, applied: appliedFactors } = combineFactors(applied);

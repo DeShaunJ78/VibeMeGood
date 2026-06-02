@@ -17,7 +17,7 @@ import {
 import { calibratePOver, loadCalibrationMap, type CalibrationMap } from "./calibration";
 import {
   restFactor, paceFactor, dvpFactor, impliedTotalFactor, weatherFactor,
-  homeAwayFactor, nflAdvancedFactor, snapFactor, parkFactor, combineFactors,
+  nflAdvancedFactor, snapFactor, parkFactor, combineFactors,
   impliedTeamTotal, SPORT_IMPLIED_BASELINE,
   type FactorResult,
 } from "./factors";
@@ -385,7 +385,7 @@ export async function computeAllProjections(): Promise<number> {
   const teamAbbrMap = new Map(teams.map(t => [t.id, t.abbreviation]));
 
   // --- Batch-load all factor context in parallel ---
-  const [fatigueRows, paceRows, nflUsageMap, dvpRows, splitRows] = await Promise.all([
+  const [fatigueRows, paceRows, nflUsageMap, dvpRows] = await Promise.all([
     // Latest fatigue row per player (ordered desc; we keep the first seen).
     playerIds.length
       ? db.select().from(fatigueDataTable)
@@ -410,18 +410,6 @@ export async function computeAllProjections(): Promise<number> {
       .innerJoin(playersTable, eq(playersTable.id, playerGameLogsTable.playerId))
       .where(and(isNotNull(playerGameLogsTable.opponentTeamId), isNotNull(playersTable.position)))
       .groupBy(playerGameLogsTable.opponentTeamId, playersTable.sport, playersTable.position, playerGameLogsTable.statType),
-    // Home/away splits per player+stat.
-    playerIds.length
-      ? db.select({
-          playerId: playerGameLogsTable.playerId,
-          statType: playerGameLogsTable.statType,
-          homeAway: playerGameLogsTable.homeAway,
-          avgValue: sql<string>`avg(${playerGameLogsTable.value})`,
-        })
-        .from(playerGameLogsTable)
-        .where(and(inArray(playerGameLogsTable.playerId, playerIds), isNotNull(playerGameLogsTable.homeAway)))
-        .groupBy(playerGameLogsTable.playerId, playerGameLogsTable.statType, playerGameLogsTable.homeAway)
-      : Promise.resolve([] as { playerId: number; statType: string; homeAway: string | null; avgValue: string }[]),
   ]);
 
   // Index fatigue (first row per player = latest).
@@ -451,16 +439,6 @@ export async function computeAllProjections(): Promise<number> {
     cur.sum += avg * games;
     cur.cnt += games;
     leagueAgg.set(lk, cur);
-  }
-
-  // Index home/away splits.
-  const splitMap = new Map<string, { home?: number; away?: number }>();
-  for (const r of splitRows) {
-    const key = `${r.playerId}:${r.statType}`;
-    const cur = splitMap.get(key) ?? {};
-    if (r.homeAway === "home") cur.home = parseFloat(r.avgValue);
-    else if (r.homeAway === "away") cur.away = parseFloat(r.avgValue);
-    splitMap.set(key, cur);
   }
 
   // Load the calibration table once and reuse it for every projection this run.
@@ -549,12 +527,6 @@ export async function computeAllProjections(): Promise<number> {
             statType: line.statType,
           }));
         }
-      }
-
-      // Home/away
-      if (isHome != null) {
-        const split = splitMap.get(`${line.playerId}:${line.statType}`);
-        factors.push(homeAwayFactor({ isHome, homeAvg: split?.home, awayAvg: split?.away }));
       }
 
       // NFL advanced usage + snap
