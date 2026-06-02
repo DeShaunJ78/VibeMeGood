@@ -1,0 +1,201 @@
+The jump from Stage 1 → Stage 2 was the monster.
+
+The jump from Stage 2 → Stage 3 is smaller, but that’s actually reassuring.
+
+If ZIP had suddenly improved everything by another 15 points, I’d be suspicious.
+
+Instead:
+
+* Brier improved
+* Hit rate improved
+* Existing fixes stayed intact
+* Guardrails passed
+
+That’s what you want to see.
+
+⸻
+
+The most important line in the report
+
+This one:
+
+10-20% bucket: predicted 16.5%, actual 16.5%
+
+That’s beautiful.
+
+Not because it’s a low bucket.
+
+Because it’s evidence the model can now produce probability ranges that actually correspond to reality.
+
+If the model says:
+
+“This should hit 16.5% of the time”
+
+and reality says:
+
+“Yep, 16.5%”
+
+you’re getting genuine calibration.
+
+⸻
+
+The shrinking 70–90% buckets is a huge win
+
+This may actually be more important than the Brier improvement.
+
+Look at this:
+
+Stage 2
+
+* 70–80% bucket = 1,628 samples
+* 80–90% bucket = 52 samples
+
+Stage 3
+
+* 70–80% bucket = 709 samples
+* 80–90% bucket = 37 samples
+
+The model is becoming less willing to claim certainty.
+
+That’s healthy.
+
+A lot of betting models fail because they’re addicted to confidence.
+
+Your system is slowly learning:
+
+“Maybe this isn’t an 85% play.”
+
+“Maybe it’s a 68% play.”
+
+That humility is often profitable.
+
+⸻
+
+The stolen bases finding is valuable
+
+The biggest lesson isn’t ZIP.
+
+It’s this:
+
+The mean is wrong.
+
+You discovered something deeper than a distribution issue.
+
+The model may be overestimating the baseline steal rate of the population PrizePicks chooses to post.
+
+That’s a market-selection problem.
+
+PrizePicks isn’t posting:
+
+* Ronald Acuña
+* Elly De La Cruz
+
+everywhere.
+
+They’re posting lots of players whose true steal expectation is tiny.
+
+That means:
+
+Future opportunity
+
+Build stat-family priors using:
+
+* PrizePicks-posted players
+* not league-wide players
+
+That could be a larger improvement than ZIP itself.
+
+⸻
+
+My read on Stage 4
+
+I’m much more cautious here.
+
+The first three stages fixed obvious distribution mismatches:
+
+* Normal → Poisson
+* Normal → NegBin
+* Normal → ZIP
+
+Those are slam dunks.
+
+Stage 4 is trickier.
+
+Candidate stats
+
+* Pass Yards
+* Rush Yards
+* Receiving Yards
+
+These aren’t sparse counts.
+
+They’re continuous-ish.
+
+They have:
+
+* skew
+* floors
+* ceilings
+* matchup dependence
+
+A log-normal may help.
+
+A large-r NegBin may help.
+
+But the gains may be much smaller than Stages 1–3.
+
+⸻
+
+What I would do before Stage 4
+
+If this were my project, I’d pause and measure.
+
+Specifically:
+
+Track
+
+* CLV
+* ROI
+* Calibration
+* Sport-level performance
+* Stat-level performance
+
+for at least several hundred recommendations.
+
+You now have:
+
+* reasonable distributions
+* calibration layer
+* replay infrastructure
+
+The next question is:
+
+“Does better modeling create better picks?”
+
+Not:
+
+“Can we lower Brier another 0.01?”
+
+⸻
+
+Current scorecard
+
+Data Integrity: 9.5/10
+
+Distribution Modeling: 8.5/10
+
+Calibration Infrastructure: 9/10
+
+Diagnostics & Transparency: 9.5/10
+
+Production Readiness: 8.5–9/10
+
+Proven Betting Edge: Still unproven, but now measurable
+
+That’s the key difference.
+
+A month ago you were chasing bugs.
+
+Today you’re discussing whether a 0.0068 Brier improvement justifies another modeling stage.
+
+That’s a completely different class of problem. And it’s a much better one to have.
