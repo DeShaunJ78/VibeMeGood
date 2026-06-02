@@ -1095,9 +1095,11 @@ export default function EntryBuilder() {
                       const b = (playstyle === "power" ? (multiplier - 1) : null);
                       if (b == null || b <= 0) return null;
                       const kellyFrac = (activeEV.pWin * b - (1 - activeEV.pWin)) / b;
-                      const quarterKelly = Math.max(0, kellyFrac * 0.25);
-                      const bankroll = 500;
-                      const kellyStake = quarterKelly * bankroll;
+                      const kf = parseFloat(userSettings?.kellyFraction ?? "0.25");
+                      const bankroll = parseFloat(userSettings?.bankroll ?? "500");
+                      const scaledKelly = Math.max(0, kellyFrac * kf);
+                      const kellyStake = scaledKelly * bankroll;
+                      const kPct = Math.round(kf * 100);
                       return (
                         <div className="flex justify-between items-center border-t border-slate-800/60 pt-2">
                           <span className="text-[10px] font-mono text-muted-foreground uppercase">Kelly Stake</span>
@@ -1105,7 +1107,7 @@ export default function EntryBuilder() {
                             <span className={`font-mono font-bold text-sm ${kellyStake > 0 ? "text-violet-400" : "text-slate-500"}`}>
                               ${kellyStake.toFixed(2)}
                             </span>
-                            <span className="text-[10px] text-muted-foreground font-mono ml-1">(¼K · $500)</span>
+                            <span className="text-[10px] text-muted-foreground font-mono ml-1">({kPct}%K · ${bankroll.toFixed(0)})</span>
                           </div>
                         </div>
                       );

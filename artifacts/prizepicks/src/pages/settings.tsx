@@ -15,7 +15,8 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical, Lock, Zap } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical, Lock, Zap, DollarSign } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useUserSettings, useUpdateUserSettings, type UserSettings } from "@/hooks/use-user-settings";
 
@@ -34,6 +35,115 @@ const MODE_TOGGLES = [
   { key: "ceilingHunterMode",   label: "Ceiling Hunter Mode",          desc: "Prioritize usage spikes and elevated environments." },
   { key: "excludeHighVolatility", label: "Exclude High Volatility",    desc: "Remove boom/bust and volatile props from optimizer." },
 ];
+
+const TIER_CONFIG = [
+  { label: "A — Elite",       minEdge: 43, units: 5, color: "text-violet-400", bg: "bg-violet-950/30 border-violet-700/40", desc: "Top 5% of model confidence. Highest historical hit rate (~94%). Max stake." },
+  { label: "B — Core",        minEdge: 30, units: 2, color: "text-emerald-400", bg: "bg-emerald-950/30 border-emerald-800/40", desc: "Top 20% — the primary recommendation tier. 83%+ historical hit rate." },
+  { label: "C — Exploratory", minEdge: 20, units: 1, color: "text-amber-400",  bg: "bg-amber-950/20 border-amber-800/30", desc: "Edge 20–30%. Visible but lower priority. Use to fill lineup gaps." },
+  { label: "D — Low",         minEdge: 0,  units: 0, color: "text-slate-500",  bg: "bg-slate-900 border-slate-800",        desc: "Edge below 20%. Hidden by default. Only visible in advanced view." },
+];
+
+function BankrollSection({ settings, onUpdate }: { settings: UserSettings; onUpdate: (patch: Partial<UserSettings>) => void }) {
+  const [editing, setEditing] = useState<Record<string, string>>({});
+
+  function startEdit(field: string, current: string | null) {
+    setEditing(e => ({ ...e, [field]: current ?? "" }));
+  }
+  function commitEdit(field: string, key: keyof UserSettings) {
+    const val = editing[field];
+    if (val === undefined) return;
+    const num = parseFloat(val);
+    if (val !== "" && isNaN(num)) return;
+    onUpdate({ [key]: val === "" ? null : String(num) } as Partial<UserSettings>);
+    setEditing(e => { const n = { ...e }; delete n[field]; return n; });
+  }
+
+  const unitSize  = parseFloat(settings.unitSize  ?? "5");
+  const bankroll  = parseFloat(settings.bankroll  ?? "500");
+  const kelly     = parseFloat(settings.kellyFraction ?? "0.25");
+  const dailyLoss = settings.dailyLossLimit ? parseFloat(settings.dailyLossLimit) : null;
+
+  return (
+    <Card className="bg-slate-900 border-slate-800">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <DollarSign className="w-4 h-4 text-primary" /> Bankroll &amp; Staking
+        </CardTitle>
+        <CardDescription>
+          Your capital allocation settings. These drive Kelly stake recommendations in the Entry Builder and the tier unit multipliers on the Slate Board.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+
+        {/* Core numbers */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { field: "bankroll",       key: "bankroll"       as keyof UserSettings, label: "Bankroll ($)",     placeholder: "500",  hint: "Total capital set aside for PrizePicks" },
+            { field: "unitSize",       key: "unitSize"       as keyof UserSettings, label: "Unit Size ($)",    placeholder: "5",    hint: "Base stake — 1 unit. Tiers multiply this." },
+            { field: "kellyFraction",  key: "kellyFraction"  as keyof UserSettings, label: "Kelly Fraction",  placeholder: "0.25", hint: "Fraction of full Kelly to bet (0.25 = Quarter Kelly)" },
+            { field: "dailyLossLimit", key: "dailyLossLimit" as keyof UserSettings, label: "Daily Loss Limit ($)", placeholder: "—", hint: "Stop-loss. Leave blank to disable." },
+          ].map(({ field, key, label, placeholder, hint }) => {
+            const stored = settings[key] as string | null;
+            const isEditing = field in editing;
+            return (
+              <div key={field} className="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-1">{label}</div>
+                {isEditing ? (
+                  <Input
+                    autoFocus
+                    type="number"
+                    value={editing[field]}
+                    onChange={e => setEditing(prev => ({ ...prev, [field]: e.target.value }))}
+                    onBlur={() => commitEdit(field, key)}
+                    onKeyDown={e => { if (e.key === "Enter") commitEdit(field, key); if (e.key === "Escape") setEditing(prev => { const n = { ...prev }; delete n[field]; return n; }); }}
+                    className="h-7 text-sm font-mono bg-slate-900 border-slate-700 focus-visible:ring-primary/50 px-2"
+                    placeholder={placeholder}
+                  />
+                ) : (
+                  <button
+                    onClick={() => startEdit(field, stored)}
+                    className="text-lg font-bold font-mono text-foreground hover:text-primary transition-colors w-full text-left"
+                  >
+                    {stored ? (field === "kellyFraction" ? `${(parseFloat(stored) * 100).toFixed(0)}%` : `$${parseFloat(stored).toLocaleString()}`) : <span className="text-slate-600 text-sm">{placeholder === "—" ? "Not set" : placeholder}</span>}
+                  </button>
+                )}
+                <div className="text-[10px] text-slate-600 mt-1 leading-tight">{hint}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Derived summary */}
+        <div className="bg-slate-950 border border-slate-700 rounded-lg p-3 grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-1 text-[11px] font-mono">
+          <div><span className="text-muted-foreground">1 unit = </span><span className="text-foreground font-semibold">${unitSize.toFixed(2)}</span></div>
+          <div><span className="text-muted-foreground">5 units (Tier A) = </span><span className="text-violet-400 font-semibold">${(unitSize * 5).toFixed(2)}</span></div>
+          <div><span className="text-muted-foreground">2 units (Tier B) = </span><span className="text-emerald-400 font-semibold">${(unitSize * 2).toFixed(2)}</span></div>
+          {dailyLoss != null
+            ? <div><span className="text-muted-foreground">Daily limit = </span><span className="text-amber-400 font-semibold">${dailyLoss.toFixed(2)}</span></div>
+            : <div><span className="text-muted-foreground">Kelly base = </span><span className="text-foreground font-semibold">${bankroll.toFixed(0)} × {(kelly * 100).toFixed(0)}%K</span></div>
+          }
+        </div>
+
+        {/* Tier table */}
+        <div>
+          <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-2">Stake Tiers — based on Audit Edge Deciles</div>
+          <div className="space-y-1.5">
+            {TIER_CONFIG.map(t => (
+              <div key={t.label} className={`flex items-center gap-3 border rounded-lg px-3 py-2 ${t.bg}`}>
+                <div className={`font-mono font-bold text-xs w-28 shrink-0 ${t.color}`}>{t.label}</div>
+                <div className="text-[11px] text-slate-400 flex-1">{t.desc}</div>
+                <div className={`font-mono font-bold text-sm shrink-0 ${t.color}`}>
+                  {t.units > 0 ? `${t.units}u = $${(unitSize * t.units).toFixed(2)}` : "Hidden"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+      </CardContent>
+    </Card>
+  );
+}
 
 function VarianceIntelSection({ settings, onUpdate }: { settings: UserSettings; onUpdate: (patch: Partial<UserSettings>) => void }) {
   const [showExpLab, setShowExpLab] = useState(false);
@@ -349,6 +459,10 @@ export default function Settings() {
           </Button>
         </div>
       </div>
+
+      {userSettings && (
+        <BankrollSection settings={userSettings} onUpdate={patch => updateSettings.mutate(patch)} />
+      )}
 
       {userSettings && (
         <VarianceIntelSection

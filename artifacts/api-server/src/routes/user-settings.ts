@@ -8,11 +8,13 @@ const router = Router();
 
 const DEFAULT_USER_ID = "default";
 
+const coerceNum = z.union([z.number(), z.string().transform(v => parseFloat(v))]);
+
 const UserSettingsSchema = z.object({
-  bankroll: z.number().positive().optional(),
-  unitSize: z.number().positive().optional(),
-  kellyFraction: z.number().min(0.05).max(1).optional(),
-  dailyLossLimit: z.number().positive().nullable().optional(),
+  bankroll: coerceNum.pipe(z.number().positive()).optional(),
+  unitSize: coerceNum.pipe(z.number().positive()).optional(),
+  kellyFraction: coerceNum.pipe(z.number().min(0.05).max(1)).optional(),
+  dailyLossLimit: coerceNum.pipe(z.number().positive()).nullable().optional(),
   varianceIntelEnabled: z.boolean().optional(),
   showFatigueSignal: z.boolean().optional(),
   showBlowoutRisk: z.boolean().optional(),
@@ -46,7 +48,7 @@ router.patch("/user-settings", async (req, res) => {
       res.status(400).json({ error: "Invalid input", issues: validation.error.issues });
       return;
     }
-    const patch = req.body as Partial<typeof userSettingsTable.$inferInsert>;
+    const patch = { ...req.body, ...validation.data } as Partial<typeof userSettingsTable.$inferInsert>;
     // Ensure record exists
     const [existing] = await db.select({ id: userSettingsTable.id })
       .from(userSettingsTable)
