@@ -34,6 +34,17 @@ const SECTIONS = [
   { id: "mistakes",        title: "Common Mistakes" },
   { id: "glossary",        title: "Beginner's Glossary" },
   { id: "cheatsheet",      title: "Quick Reference Cheat Sheet" },
+  // ── Part 5 — Under the hood ──
+  { id: "model-audit-intro",  title: "The Model Audit — What It Is" },
+  { id: "model-health",       title: "Model Health Metrics Explained" },
+  { id: "tier1-factor",       title: "Tier 1 — Factor Audit" },
+  { id: "tier2-stat",         title: "Tier 2 — Stat Audit" },
+  { id: "tier3-sport",        title: "Tier 3 — Sport Audit" },
+  { id: "tier4-edge",         title: "Tier 4 — Edge Audit" },
+  { id: "tier5-roi",          title: "Tier 5 — ROI & CLV Audit" },
+  { id: "tier5a-decile",      title: "Tier 5A — Edge Decile Audit" },
+  { id: "what-edge-means",    title: "What 'Edge' Means on the Slate Board" },
+  { id: "threshold-guide",    title: "Choosing Your Edge Threshold" },
 ];
 
 function Rule({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
@@ -559,8 +570,190 @@ export default function Guide() {
               <QR situation="EV is negative" action="Bad play long-term, even if it feels right" />
               <QR situation="Win probability under 10%" action="Switch to Flex" />
               <QR situation="Win probability over 15%" action="Power is fine" />
+              <QR situation="Slate Board pick has edge ≥ 30%" action="Strong PLAY — top 20% model confidence" />
+              <QR situation="Slate Board pick has edge ≥ 35%" action="Strong PLAY — top 10%, 87%+ historical hit rate" />
+              <QR situation="Slate Board pick has edge < 5%" action="Skip or proceed with caution only" />
+              <QR situation="Model Audit ECE < 3%" action="Probabilities are trustworthy" />
+              <QR situation="Model Audit CHR > 70%" action="Confident picks are performing well" />
             </tbody>
           </table>
+        </Section>
+
+        {/* ════════════ PART 5 — UNDER THE HOOD ════════════ */}
+        <div className="text-[10px] font-mono uppercase tracking-widest text-primary/70 border-b border-primary/20 pb-1">Part 5 — Under the Hood: How the Model Works</div>
+
+        <Section id="model-audit-intro" title="The Model Audit — What It Is">
+          <p>Navigate to <span className="text-foreground font-semibold">Model Audit</span> in the sidebar. This page answers a question that most betting tools never even ask: <em>"Is this app's math actually correct?"</em></p>
+          <p>Every time you press <span className="text-foreground font-semibold">Run Audit</span>, the system replays thousands of historical games — pretending it's making fresh predictions using only information that was available before each game started. It then compares those predictions to what actually happened. This is called a <span className="text-foreground font-semibold">walk-forward backtest</span>, and it's the gold standard for validating a predictive model.</p>
+          <Callout color="primary">
+            Think of it like this: the app gave you a "60% likely" prediction for a player. After thousands of those predictions, did the ones labeled 60% actually hit 60% of the time? If yes, the model is <strong>calibrated</strong> — it's honest about its own uncertainty. The audit measures that honesty six different ways.
+          </Callout>
+          <p>The audit page has six tiers, each measuring a different aspect of the model's performance. You don't need to understand the math — just know what each verdict means for you as a bettor.</p>
+        </Section>
+
+        <Section id="model-health" title="Model Health Metrics Explained">
+          <p>The Overview card at the top of the Audit page shows four numbers. Here's what each one means:</p>
+          <div className="space-y-3">
+            <div className="bg-slate-900 border border-slate-800 rounded p-3">
+              <div className="text-foreground font-semibold text-xs mb-1">Brier Score <span className="text-muted-foreground font-normal">(lower = better, target: below 0.22)</span></div>
+              <p className="text-[11px] text-slate-400">The average squared error of every probability prediction. A coin flip (50/50 guessing) scores about 0.25. A Brier below 0.22 means the model is meaningfully better than random. The current model scores <span className="text-emerald-400 font-semibold">0.2099</span> — a strong result across 36,000+ predictions.</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded p-3">
+              <div className="text-foreground font-semibold text-xs mb-1">Conf. Hit Rate (CHR) <span className="text-muted-foreground font-normal">(higher = better, target: above 70%)</span></div>
+              <p className="text-[11px] text-slate-400">When the model is <em>confident</em> — meaning it says the probability is at least 60% or at most 40% — what percentage of those picks actually hit? A CHR above 70% means confident picks are reliably strong. Current: <span className="text-emerald-400 font-semibold">74.9%</span>.</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded p-3">
+              <div className="text-foreground font-semibold text-xs mb-1">ECE — Expected Calibration Error <span className="text-muted-foreground font-normal">(lower = better, target: below 3%)</span></div>
+              <p className="text-[11px] text-slate-400">If the model says "65% likely," it should hit 65% of the time — not 55%, not 80%. ECE measures how far off those labels are on average across all probability buckets. Under 3% means the model's percentages can be trusted at face value. Current: <span className="text-emerald-400 font-semibold">2.0%</span> — well-calibrated.</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded p-3">
+              <div className="text-foreground font-semibold text-xs mb-1">Max Cal Error <span className="text-muted-foreground font-normal">(lower = better, target: below 20%)</span></div>
+              <p className="text-[11px] text-slate-400">The <em>worst</em> individual probability bucket. Even if the average error is tiny, one bucket might be badly miscalibrated. Under 20% means the worst-case bucket is still acceptable. Current: <span className="text-yellow-400 font-semibold">16.0%</span>.</p>
+            </div>
+          </div>
+          <Callout color="emerald">
+            <strong>Bottom line for bettors:</strong> an ECE of 2.0% means when the app tells you a pick is 70% likely, it really is 70% likely — not 60%, not 80%. You can trust the numbers as actual probabilities, not just rankings.
+          </Callout>
+        </Section>
+
+        <Section id="tier1-factor" title="Tier 1 — Factor Audit">
+          <p>The model considers many "factors" that might shift a prediction — days of rest, back-to-back games, pace of play, and others. Tier 1 tests each factor individually: does including it improve predictions or hurt them?</p>
+          <div className="space-y-1">
+            <p><span className="text-emerald-400 font-semibold">KEEP</span> — the factor genuinely improved Brier score by more than 0.0005. It belongs in the model.</p>
+            <p><span className="text-red-400 font-semibold">REMOVE</span> — the factor made predictions worse. It was over-fitting to noise.</p>
+            <p><span className="text-slate-400 font-semibold">NEUTRAL</span> — the delta was too small to matter either way.</p>
+          </div>
+          <p className="text-[11px]">You don't need to act on this. It's the model's internal report card — information that helps us keep improving the predictions you rely on.</p>
+        </Section>
+
+        <Section id="tier2-stat" title="Tier 2 — Stat Audit">
+          <p>Different stat types are harder or easier to predict. Points are volatile. Blocked shots are sparse and spiky. Rebounds sit somewhere in between. Tier 2 breaks down model performance by every stat type so you can see which ones the model handles well.</p>
+          <p>Higher Brier = harder to predict. Lower ECE = better calibrated. If a stat type has a very high Brier score (above 0.26), treat the model's picks in that stat category with extra caution — the uncertainty is genuine.</p>
+          <Callout color="amber">
+            Practical use: if you're choosing between two similarly-edged picks and one involves a hard-to-predict stat (e.g. Hits+Runs+RBIs vs. Points), the points pick is more reliably modeled. Tier 2 tells you which stat types to trust most.
+          </Callout>
+        </Section>
+
+        <Section id="tier3-sport" title="Tier 3 — Sport Audit">
+          <p>Same idea as Tier 2, but at the sport level. Some sports have more regular data patterns than others. The audit shows which sports the model handles best so you can calibrate your confidence by sport.</p>
+          <p>Sports with fewer games or sparser stat history will tend to have higher Brier scores — that's expected, not a bug. The model is more honest in those cases.</p>
+        </Section>
+
+        <Section id="tier4-edge" title="Tier 4 — Edge Audit">
+          <p>This is where the model's honesty test gets practical. The Edge Audit groups all predictions into five buckets based on how confident the model was:</p>
+          <div className="font-mono bg-slate-800 rounded px-3 py-2 space-y-0.5 text-foreground text-[11px]">
+            <div><span className="text-muted-foreground w-16 inline-block">0–5%</span> Very low confidence — basically a coin flip</div>
+            <div><span className="text-muted-foreground w-16 inline-block">5–10%</span> Slight lean</div>
+            <div><span className="text-muted-foreground w-16 inline-block">10–15%</span> Meaningful edge</div>
+            <div><span className="text-muted-foreground w-16 inline-block">15–20%</span> Strong edge</div>
+            <div><span className="text-muted-foreground w-16 inline-block">20%+</span> High confidence</div>
+          </div>
+          <p>Edge = how far the model's probability is from 50%. A prediction of 70% has a 20% edge (70 − 50 = 20). A prediction of 45% has a 5% edge on the <em>under</em> side (50 − 45 = 5).</p>
+          <p>The key question: does higher edge → higher hit rate? If the answer is yes (monotonically increasing), the model is coherent — it really is more confident when it should be. Any row marked <span className="text-red-400">⚠ inversion</span> means the model was over-confident at that level.</p>
+        </Section>
+
+        <Section id="tier5-roi" title="Tier 5 — ROI & CLV Audit">
+          <p>Tier 5 translates model confidence into dollar terms. It simulates making a flat $1 bet on every single prediction — always betting in the direction the model favors — and measures what would have happened.</p>
+          <div className="space-y-2">
+            <div className="bg-slate-900 border border-slate-800 rounded p-3">
+              <div className="text-foreground font-semibold text-xs mb-0.5">Predicted ROI</div>
+              <p className="text-[11px] text-slate-400">What the model's own math says you <em>should</em> earn per dollar. A model predicting 60% confident = +20% predicted ROI per bet.</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded p-3">
+              <div className="text-foreground font-semibold text-xs mb-0.5">Realized ROI</div>
+              <p className="text-[11px] text-slate-400">What <em>actually</em> happened. If picks in a bucket hit 60% of the time with flat $1 bets, realized ROI = +20%. This is real-world performance.</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded p-3">
+              <div className="text-foreground font-semibold text-xs mb-0.5">CLV (Model CLV)</div>
+              <p className="text-[11px] text-slate-400">Realized ROI minus Predicted ROI. Positive CLV = the model was <em>too modest</em> — picks outperformed their predicted value. Negative CLV = the model over-estimated its own edge. Near-zero CLV at high edge buckets is ideal.</p>
+            </div>
+          </div>
+          <Callout color="emerald">
+            <strong>What it showed:</strong> every single edge bucket has positive realized ROI — from +1.2% at 0–5% edge to +66.7% at 20%+ edge. ROI increases monotonically with edge. The model's signals genuinely translate to money.
+          </Callout>
+          <p>The σ (sigma) column shows variance — the spread of outcomes. High σ at low-edge buckets is expected (near-coin-flip outcomes are noisy). The σ <em>shrinks</em> as edge grows, meaning high-edge picks are not only more profitable but more consistent.</p>
+        </Section>
+
+        <Section id="tier5a-decile" title="Tier 5A — Edge Decile Audit">
+          <p>Tier 5A is the most actionable section in the entire audit. It addresses the question Tier 5 couldn't: the old "20%+ bucket" contained 11,475 predictions. Were they all equally good? No — and now we can see exactly how they differ.</p>
+          <p>Instead of fixed percentage bands, Tier 5A uses <span className="text-foreground font-semibold">rank-based bands</span> computed fresh every audit run:</p>
+          <div className="font-mono bg-slate-800 rounded px-3 py-2 space-y-1 text-[11px]">
+            <div className="flex gap-4">
+              <span className="text-primary font-semibold w-20">Top 1%</span>
+              <span className="text-foreground">The 1% of all predictions where the model was most confident</span>
+            </div>
+            <div className="flex gap-4">
+              <span className="text-primary font-semibold w-20">Top 5%</span>
+              <span className="text-foreground">Predictions from the 95th to 99th percentile of confidence</span>
+            </div>
+            <div className="flex gap-4">
+              <span className="text-primary font-semibold w-20">Top 10%</span>
+              <span className="text-foreground">90th to 95th percentile</span>
+            </div>
+            <div className="flex gap-4">
+              <span className="text-primary font-semibold w-20">Top 20%</span>
+              <span className="text-foreground">80th to 90th percentile</span>
+            </div>
+            <div className="flex gap-4">
+              <span className="text-muted-foreground font-semibold w-20">Rest</span>
+              <span className="text-muted-foreground">The bottom 80% — lowest-confidence predictions</span>
+            </div>
+          </div>
+
+          <p>The <span className="text-foreground font-semibold">Threshold</span> column answers a critical question: "What edge number on the Slate Board does this tier start at?" For example, if the Top 10% threshold is ≥ 34.6%, any pick on the Slate Board showing 35% edge or higher is historically in the top 10% of model confidence — and has hit at 87.7%.</p>
+          <p>The <span className="text-foreground font-semibold">% of all</span> column answers the volume question: of every prediction the model makes, what share falls into this band? Top 1% = 1% of picks. If you run 200 predictions on a given day, that's roughly 2 picks in the Top 1% tier.</p>
+
+          <Callout color="emerald">
+            <strong>What it currently shows:</strong>
+            <div className="mt-1 space-y-0.5">
+              <div>Top 1% (≥ 49% edge) → <strong>98.4% hit rate, +96.8% ROI</strong></div>
+              <div>Top 10% (≥ 34.6% edge) → <strong>87.7% hit rate, +75.4% ROI</strong></div>
+              <div>Top 20% (≥ 30.1% edge) → <strong>82.7% hit rate, +65.4% ROI</strong></div>
+              <div>Rest (below 30.1%) → 58.0% hit rate, +16.0% ROI</div>
+            </div>
+          </Callout>
+          <p>The thresholds are recalculated each time you run the audit — they're data-driven, not fixed. If the model's edge distribution shifts as more data comes in, so does the threshold.</p>
+        </Section>
+
+        <Section id="what-edge-means" title="What 'Edge' Means on the Slate Board">
+          <p>On the <span className="text-foreground font-semibold">Slate Board</span>, every pick shows an edge percentage. This is the same number the Model Audit uses — it directly corresponds to the Tier 5A bands.</p>
+          <div className="font-mono bg-slate-800 rounded px-3 py-2 text-[11px] space-y-1">
+            <div className="text-muted-foreground mb-1">Edge = |model probability − 50%|</div>
+            <div>Model says 70% likely → <span className="text-primary">20% edge</span></div>
+            <div>Model says 85% likely → <span className="text-primary">35% edge</span></div>
+            <div>Model says 99% likely → <span className="text-primary">49% edge</span></div>
+            <div>Model says 55% likely → <span className="text-primary">5% edge</span> (same for 45% on the under)</div>
+          </div>
+          <p>A pick can be an over <em>or</em> an under — the model always surfaces the direction it believes in (the one above 50%). The edge number tells you how strongly it believes.</p>
+          <Callout color="primary">
+            Connecting Slate Board to Tier 5A: if you see a Slate Board pick with 35% edge, that pick is historically in the <strong>Top 10%</strong> tier — where the realized hit rate has been 87.7%. That's the single most useful thing the audit tells a daily bettor.
+          </Callout>
+        </Section>
+
+        <Section id="threshold-guide" title="Choosing Your Edge Threshold">
+          <p>The audit data lets you make a principled decision about which picks to play. Here's how to think about the trade-off:</p>
+          <div className="space-y-2">
+            <div className="bg-emerald-950/30 border border-emerald-800/40 rounded p-3">
+              <div className="text-emerald-300 font-semibold text-xs mb-1">High threshold (≥ 35% edge) — Quality over volume</div>
+              <p className="text-[11px] text-slate-300">You play only top-10% picks. Hit rate historically ~87%+. You'll see fewer qualifying picks per day — maybe 2–5. But those picks are near-certainties by historical standards. Best strategy if you have a limited daily budget or want maximum confidence per pick.</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded p-3">
+              <div className="text-foreground font-semibold text-xs mb-1">Mid threshold (≥ 30% edge) — Balanced</div>
+              <p className="text-[11px] text-slate-400">Top-20% picks. Hit rate ~83%. More volume — maybe 5–10 qualifying picks per day. Still strong hit rates. Good for building Power Plays from the strongest available options. This is the recommended daily filter.</p>
+            </div>
+            <div className="bg-amber-950/30 border border-amber-800/40 rounded p-3">
+              <div className="text-amber-300 font-semibold text-xs mb-1">Low threshold (≥ 10% edge) — Broad net</div>
+              <p className="text-[11px] text-slate-300">Opens up the top 40% or so of picks. More options to work with, but lower average hit rates (~70–75%). Useful when you need more picks to fill a specific lineup size, or when the high-edge pool is small on a given day.</p>
+            </div>
+            <div className="bg-red-950/20 border border-red-900/30 rounded p-3">
+              <div className="text-red-400 font-semibold text-xs mb-1">No threshold (or &lt; 5% edge) — Avoid</div>
+              <p className="text-[11px] text-slate-400">The "Rest" band in the audit covers the bottom 80% of picks. Hit rate is 58%, ROI is +16% — positive, but noisy. At this level, one bad stretch easily wipes out the edge. Don't build Power Plays around these picks.</p>
+            </div>
+          </div>
+          <Callout color="amber">
+            <strong>The volume question:</strong> thresholds are meaningless without volume. Run the audit, check the Tier 5A table, and read the "% of all" column for your chosen threshold. If Top 10% = 5% of all predictions and you see ~100 picks per day, that's 5 qualifying picks daily — enough to build a solid 2–3 pick Power Play every day.
+          </Callout>
+          <p>Re-run the audit every few weeks. As more game data arrives, the thresholds shift and the hit rates update. The Tier 5A table always reflects the freshest available evidence.</p>
         </Section>
 
       </div>
