@@ -52,6 +52,7 @@ const POISSON_STATS = new Set<string>([
   "Rush TDs",   // NFL — ~0.55/game, rare per-game event
   "Rec TDs",    // NFL — ~0.42/game, rare per-game event
   "3-PT Made",  // NBA/WNBA — ~2.2/game, discrete makes
+  "Triples",    // MLB — ~0.05/game, rarest non-HR hit type; hard floor 0
 ]);
 
 // ---------------------------------------------------------------------------
@@ -63,13 +64,16 @@ const POISSON_STATS = new Set<string>([
  * r = mean²/(sigma²−mean) computed at runtime; Poisson fallback if sigma²≤mean.
  */
 const NEGBIN_STATS = new Set<string>([
-  "RBIs",     // MLB — 0-0-0-3-0 burst patterns
-  "Hits",     // MLB — cold streaks + multi-hit games
-  "Walks",    // MLB — pitcher-matchup dependent
-  "Assists",  // NHL — playmaking chains
-  "Doubles",  // MLB — park/matchup driven
-  "Runs",     // MLB — clusters with lineup productivity
-  "Singles",  // MLB — contact vs strikeout games
+  "RBIs",               // MLB — 0-0-0-3-0 burst patterns
+  "Hits",               // MLB — cold streaks + multi-hit games
+  "Walks",              // MLB — pitcher-matchup dependent
+  "Assists",            // NHL — playmaking chains
+  "Doubles",            // MLB — park/matchup driven
+  "Runs",               // MLB — clusters with lineup productivity
+  "Singles",            // MLB — contact vs strikeout games
+  "Total Bases",        // MLB — composite counting stat; overdispersed
+  "Steals",             // NBA — discrete bursts; separate stat from MLB "Stolen Bases"
+  "Hitter Strikeouts",  // MLB — pitcher-matchup bursty; discrete count with overdispersion
 ]);
 
 // ---------------------------------------------------------------------------

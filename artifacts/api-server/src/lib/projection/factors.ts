@@ -56,9 +56,9 @@ export const FACTOR_CONFIG = {
     clamp: { min: 0.9, max: 1.0 },
   },
   homeAway: {
-    genericHome: 0.01,
-    genericAway: -0.01,
-    splitWeight: 0.4, // weight on historical home/away split when available
+    genericHome: 0.0,   // zeroed: assumption-based nudge was empirically net-negative
+    genericAway: 0.0,   // factor now fires ONLY when actual home/away split data exists
+    splitWeight: 0.4,   // weight on historical home/away split when available
     clamp: { min: 0.97, max: 1.03 },
   },
   nflAdvanced: {
