@@ -67,13 +67,15 @@ const NEGBIN_STATS = new Set<string>([
   "RBIs",               // MLB — 0-0-0-3-0 burst patterns
   "Hits",               // MLB — cold streaks + multi-hit games
   "Walks",              // MLB — pitcher-matchup dependent
-  "Assists",            // NHL — playmaking chains
+  "Assists",            // NHL+NBA — playmaking chains; overdispersed across both sports
   "Doubles",            // MLB — park/matchup driven
   "Runs",               // MLB — clusters with lineup productivity
   "Singles",            // MLB — contact vs strikeout games
   "Total Bases",        // MLB — composite counting stat; overdispersed
   "Steals",             // NBA — discrete bursts; separate stat from MLB "Stolen Bases"
   "Hitter Strikeouts",  // MLB — pitcher-matchup bursty; discrete count with overdispersion
+  "Turnovers",          // NBA — classic overdispersion: 1-2 most games, occasional 7-8 blowups
+  "Rebounds",           // NBA — bursty board-work; board-crashers and quiet games alternate
 ]);
 
 // ---------------------------------------------------------------------------
