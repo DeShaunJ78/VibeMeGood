@@ -1692,6 +1692,9 @@ components:
         riskScore: { type: ["number", "null"] }
         finalScore: { type: ["number", "null"] }
         actionTag: { type: ["string", "null"] }
+        evValue: { type: ["number", "null"], description: Expected value (pHit × payout) of the recommended side. }
+        recommendedSide: { type: ["string", "null"], description: over | under — the side the EV is computed for. }
+        bestTierInGroup: { type: boolean, description: True when this is the highest-EV tier among the player's standard/demon/goblin siblings. }
         isWatched: { type: boolean }
         watchlistId: { type: ["integer", "null"] }
         updatedAt: { type: string, format: date-time }

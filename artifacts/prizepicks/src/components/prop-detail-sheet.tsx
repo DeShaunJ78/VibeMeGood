@@ -103,6 +103,9 @@ interface TierRung {
   pOver: number | null;
   breakevenMultiplier: number | null;
   payoutMultiplier: number | null;
+  evValue: number | null;
+  recommendedSide: string | null;
+  bestTierInGroup: boolean;
 }
 
 interface PropDetail {
@@ -630,11 +633,24 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${isCurrent ? "border-violet-600/60 bg-violet-950/20" : "border-slate-800 bg-slate-900/50"}`}
                         >
                           <LineTypeBadge type={rung.lineType} />
+                          {rung.bestTierInGroup && (
+                            <span
+                              className="font-mono text-[9px] px-1 py-0 rounded text-yellow-300 border border-yellow-400/40 bg-yellow-500/10 shrink-0"
+                              title="Highest expected value across this player's tiers (probability × payout)"
+                            >
+                              ★ BEST{rung.recommendedSide ? ` ${rung.recommendedSide.toUpperCase()}` : ""}
+                            </span>
+                          )}
                           <span className="font-mono text-sm font-bold text-slate-200">{rung.effectiveLine}</span>
                           <div className="flex-1 flex items-center gap-3 justify-end text-[10px] font-mono">
                             <span className={pOverColor(rung.pOver)}>
                               {rung.pOver != null ? `${rung.pOver.toFixed(1)}%` : "—"}
                             </span>
+                            {rung.evValue != null && (
+                              <span className="text-yellow-300/80" title="Expected value = hit probability × payout multiplier">
+                                EV {rung.evValue.toFixed(2)}
+                              </span>
+                            )}
                             {(rung.lineType === "demon" || rung.lineType === "goblin") && rung.breakevenMultiplier != null && (
                               <span className="text-violet-300" title="Break-even multiplier = 1 / hit probability">
                                 BE ×{rung.breakevenMultiplier.toFixed(2)}

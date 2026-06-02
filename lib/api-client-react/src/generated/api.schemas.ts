@@ -342,6 +342,18 @@ export interface SlateRow {
   finalScore?: number | null;
   /** @nullable */
   actionTag?: string | null;
+  /**
+     * Expected value (pHit × payout) of the recommended side.
+     * @nullable
+     */
+  evValue?: number | null;
+  /**
+     * over | under — the side the EV is computed for.
+     * @nullable
+     */
+  recommendedSide?: string | null;
+  /** True when this is the highest-EV tier among the player's standard/demon/goblin siblings. */
+  bestTierInGroup?: boolean;
   isWatched: boolean;
   /** @nullable */
   watchlistId?: number | null;

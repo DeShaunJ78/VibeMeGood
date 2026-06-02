@@ -8,6 +8,7 @@ import { logger } from "../logger";
 import { twoWayHold, noVigProbs } from "../analytics/odds-math";
 import { pOverLine } from "../projection/normal-dist";
 import { calibratePOver, loadCalibrationMap } from "../projection/calibration";
+import { effectivePayoutMultiplier } from "../payout/multiplier";
 
 const ODDS_BASE = process.env.ODDS_API_BASE || "https://api.the-odds-api.com/v4";
 const ODDS_KEY = process.env.ODDS_API_KEY || "";
@@ -372,6 +373,40 @@ export async function recalcPropScores(): Promise<void> {
   // Calibration table loaded once — used to temper each line's raw P(over).
   const calibrationMap = await loadCalibrationMap();
 
+  // Standard sibling P(over) per player+stat — anchors the EV-fair payout-multiplier
+  // estimate for that player's demon/goblin tiers. Uses the CALIBRATED pOver (the same
+  // probability basis as pHit below) so the synthetic multiplier is EV-neutral against
+  // our own model: a tier only out-scores standard when a REAL (manual) PrizePicks
+  // multiplier beats fair value, never from a raw-vs-calibrated mismatch.
+  const standardPOverByPlayerStat = new Map<string, number>();
+  for (const { line, player } of lines) {
+    if (line.lineType !== "standard") continue;
+    const proj = projByPlayerStat.get(`${line.playerId}:${line.statType}`);
+    if (!proj?.projectedValue || !proj?.stdDev) continue;
+    const sLine = parseFloat((line.lineValueOverride ?? line.lineValue).toString());
+    const sRaw = pOverLine(parseFloat(proj.projectedValue.toString()), parseFloat(proj.stdDev.toString()), sLine);
+    const sCal = proj.sourceLabel && proj.sourceLabel !== "prior_only"
+      ? calibratePOver(sRaw, player.sport, line.statType, line.lineType, calibrationMap).pOver
+      : sRaw;
+    standardPOverByPlayerStat.set(`${line.playerId}:${line.statType}`, sCal / 100);
+  }
+
+  // Active tier count per player+stat group — a "best value" recommendation is only
+  // meaningful when there is an actual cross-tier choice (>1 active tier).
+  const tierCountByGroup = new Map<string, Set<string>>();
+  for (const { line } of lines) {
+    const key = `${line.playerId}:${line.statType}`;
+    (tierCountByGroup.get(key) ?? tierCountByGroup.set(key, new Set()).get(key)!).add(line.lineType);
+  }
+
+  // Best-value tier per player+stat group: the sibling with the highest expected
+  // value (pHit × payout). Resolved in a second pass once every line's EV is known.
+  // Ties (which is what EV-neutral synthetic multipliers produce) break toward the
+  // lower-risk tier so we never crown a demon without a genuine payout edge.
+  const TIER_RISK: Record<string, number> = { standard: 0, goblin: 1, demon: 2 };
+  const EV_EPS = 0.005;
+  const bestByGroup = new Map<string, { ppLineId: number; ev: number; lineType: string }>();
+
   // Computed scores are accumulated here, then written in one batched swap.
   const scorePayloads: (typeof propScoresTable.$inferInsert)[] = [];
 
@@ -420,6 +455,44 @@ export async function recalcPropScores(): Promise<void> {
       const pOver = (pOverRaw !== null && sourceLabel !== "prior_only")
         ? calibratePOver(pOverRaw, player.sport, line.statType, line.lineType, calibrationMap).pOver
         : pOverRaw;
+
+      // --- Cross-tier expected value ---
+      // EV = P(hit of recommended side) × payout multiplier (standard = 1.0).
+      // demon/goblin are over-side (MORE) constructs, so their boosted/reduced payout
+      // applies to the over; standard lines take whichever side is more likely at 1.0.
+      // Comparing EV across a player's tiers reveals when a demon/goblin's payout
+      // outweighs its lower hit rate — i.e. the genuine best-value play.
+      const stdPOver = standardPOverByPlayerStat.get(`${line.playerId}:${line.statType}`) ?? null;
+      const payoutMult = effectivePayoutMultiplier(
+        line.payoutMultiplier != null ? Number(line.payoutMultiplier) : null,
+        line.lineType,
+        pOver != null ? pOver / 100 : null,
+        stdPOver,
+      );
+      // A tier may be crowned best-value only when its payout multiplier is
+      // trustworthy: standard is exact (1.0); demon/goblin need either a real
+      // manual override OR a standard sibling to anchor the EV-fair ratio. With
+      // neither, the multiplier is an arbitrary tier default (demon 1.5 / goblin
+      // 0.75) that structurally favors demon — so it must not win the ★ BEST badge.
+      const multiplierTrustworthy =
+        line.lineType === "standard" ||
+        (line.payoutMultiplier != null && Number(line.payoutMultiplier) > 0) ||
+        stdPOver != null;
+
+      let recommendedSide: string | null = null;
+      let pHit: number | null = null;
+      let evValue: number | null = null;
+      if (pOver !== null) {
+        if (line.lineType === "demon" || line.lineType === "goblin") {
+          recommendedSide = "over";
+          pHit = pOver / 100;
+          evValue = pHit * payoutMult;
+        } else {
+          recommendedSide = pOver >= 50 ? "over" : "under";
+          pHit = recommendedSide === "over" ? pOver / 100 : 1 - pOver / 100;
+          evValue = pHit * payoutMult;
+        }
+      }
 
       // --- Gate 1: Edge Score ---
       const edgeScore = Math.min(100,
@@ -499,16 +572,43 @@ export async function recalcPropScores(): Promise<void> {
         riskScore:          riskScore.toString(),
         finalScore:         overallScore.toString(),
         actionTag,
+        evValue:            evValue != null ? evValue.toFixed(4) : null,
+        recommendedSide,
+        bestTierInGroup:    false, // resolved in the second pass below
         reasoning,
         scoredAt:           new Date(),
       };
 
       scorePayloads.push(scorePayload);
 
+      // Track the highest-EV tier per player+stat group (skip NO-PLAY lines so a
+      // gated line never wins). Floating EVs are compared by value, not equality.
+      if (evValue != null && actionTag !== "NO-PLAY" && multiplierTrustworthy) {
+        const groupKey = `${line.playerId}:${line.statType}`;
+        const cur = bestByGroup.get(groupKey);
+        // Strictly higher EV wins; within EV_EPS it's a tie, so keep the lower-risk
+        // tier (standard < goblin < demon) — never crown a riskier tier on noise.
+        const better = !cur
+          || evValue > cur.ev + EV_EPS
+          || (Math.abs(evValue - cur.ev) <= EV_EPS
+              && (TIER_RISK[line.lineType] ?? 1) < (TIER_RISK[cur.lineType] ?? 1));
+        if (better) bestByGroup.set(groupKey, { ppLineId: line.id, ev: evValue, lineType: line.lineType });
+      }
+
       void player;
     } catch (e) {
       logger.error({ err: e, lineId: line.id }, "Prop score calc error");
     }
+  }
+
+  // Second pass: flag each group's highest-EV tier as the recommended best value —
+  // but only when the group has a real cross-tier choice (>1 active tier). A lone
+  // standard line is trivially "best" and the badge would be meaningless noise.
+  for (const payload of scorePayloads) {
+    const groupKey = `${payload.playerId}:${payload.statType}`;
+    if ((tierCountByGroup.get(groupKey)?.size ?? 0) < 2) continue;
+    const best = bestByGroup.get(groupKey);
+    if (best && best.ppLineId === payload.ppLineId) payload.bestTierInGroup = true;
   }
 
   // Atomically swap in the freshly computed scores: clear all, then batch-insert.

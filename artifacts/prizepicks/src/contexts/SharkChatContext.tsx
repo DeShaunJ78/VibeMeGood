@@ -24,8 +24,7 @@ const WELCOME_MESSAGE: ChatMessage = {
   role: "assistant",
   content:
     "Welcome. I'm your Personal Shark for VibeMeGood.\n\n" +
-    "Ask me anything about PrizePicks pick'em analytics, entry construction, break-even rates, payout shifts, variance signals, or the daily workflow.\n\n" +
-    "Paper Trade Mode is active — no real-money recommendations.",
+    "Ask me anything about PrizePicks pick'em analytics, entry construction, break-even rates, payout shifts, variance signals, cross-tier expected value, or the daily workflow.",
   timestamp: 0,
 };
 

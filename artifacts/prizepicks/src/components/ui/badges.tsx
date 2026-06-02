@@ -44,6 +44,23 @@ export function LineTypeBadge({ type, className }: { type: string | null | undef
   );
 }
 
+/** Highest expected-value tier among a player's standard/demon/goblin siblings. */
+export function BestValueBadge({ side, className }: { side?: string | null; className?: string }) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "font-mono text-[10px] px-1 py-0 text-yellow-300 border-yellow-400/40 bg-yellow-500/10",
+        className,
+      )}
+      data-testid="best-value-badge"
+      title="Highest expected value across this player's tiers (probability × payout)"
+    >
+      ★ BEST{side ? ` ${side.toUpperCase()}` : ""}
+    </Badge>
+  );
+}
+
 /** P(over) pill — color-coded by probability */
 export function POverBadge({ pOver, noPlayReason, className }: {
   pOver: number | null | undefined;

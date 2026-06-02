@@ -17,3 +17,5 @@
 - [Factor engine & backtest](factor-engine-and-backtest.md) — factors return null when context missing (never default a side); backtest lives in api-server (leaf scripts can't import engine); per-factor lift must be isolated counterfactual.
 - [Self-exec scripts in bundled server](self-exec-in-bundle.md) — never put `if(isMain) {...process.exit()}` in a module the server imports; esbuild bundles it and isMain is true for the server entry → job runs and kills the server on boot. Use a separate tsx-only entry file.
 - [Probability calibration source](probability-calibration-source.md) — calibration is self-feeding from player_game_logs walk-forward replay (no manual input); historical PP lines aren't linkable to outcomes (only unplayed games carry gameId).
+- [Cross-tier EV best-value](cross-tier-ev-best-value.md) — EV=pHit×M per tier; two traps that spuriously crown demon: mixed raw/calibrated prob basis, and synthetic-default multipliers (gate on multiplierTrustworthy).
+- [Shark knowledge injection](shark-knowledge-injection.md) — Shark prompt also pulls EVERY *.md in its knowledge folders; editing prompt+UI alone leaves stale framing; grep all of knowledge/.

@@ -18,6 +18,7 @@ const SECTIONS = [
   { id: "hit-prob",        title: "Hit Probability" },
   { id: "market-lines",    title: "Market Lines" },
   { id: "ev",              title: "Expected Value (EV)" },
+  { id: "best-value",      title: "The ★ BEST VALUE Badge" },
   { id: "kelly",           title: "Kelly Criterion (Bet Sizing)" },
   // ── Doing it: the daily workflow ──
   { id: "workflow",        title: "Daily Workflow, Start to Finish" },
@@ -330,6 +331,12 @@ export default function Guide() {
             4-pick Goblin Power, $25: (0.179 × $250) − (0.821 × $25) = <span className="text-emerald-400">+$24.22</span>
           </div>
           <p>That positive number is the whole reason to use Goblin lines. Compare a standard 4-pick at 50% each: EV = <span className="text-red-400">−$7.81</span>. Same format, but negative — which is exactly why most casual PrizePicks players slowly lose. Always aim for green EV.</p>
+        </Section>
+
+        <Section id="best-value" title="The ★ BEST VALUE Badge">
+          <p>Most players show up on the Slate Board more than once — the same player and stat can have a <strong>Standard</strong>, a <strong>Goblin</strong>, and a <strong>Demon</strong> line all at the same time. They look different, but you can usually only afford to use one. So which is the best deal?</p>
+          <p>The app answers that for you. For each player+stat, it compares the three tiers on <span className="text-foreground font-semibold">expected value</span> — the hit probability of each tier multiplied by what that tier pays — and stamps a gold <span className="font-mono text-yellow-300">★ BEST</span> badge on the single tier with the highest expected value. The badge also tells you which side to take (<span className="font-mono">OVER</span> or <span className="font-mono">UNDER</span>), and the detail sheet's <span className="text-foreground font-semibold">Risk Ladder</span> shows the EV number for every tier side-by-side.</p>
+          <Callout color="amber">Important: the badge only compares the tiers <em>against each other</em> — it does not mean the play is automatically good. A line can be the best of three bad options. Still check that its True Edge and EV are green before you commit. By default the app leans toward the safer Standard or Goblin tier; it only crowns a Demon when its payout genuinely outweighs the lower hit rate.</Callout>
         </Section>
 
         <Section id="kelly" title="Kelly Criterion (Bet Sizing)">

@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, numeric, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, numeric, text, timestamp, jsonb, boolean, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -14,6 +14,11 @@ export const propScoresTable = pgTable("prop_scores", {
   riskScore: numeric("risk_score").notNull(),
   finalScore: numeric("final_score").notNull(),
   actionTag: text("action_tag").notNull(), // PLAY | WATCH | PASS
+  // Cross-tier expected value: pHit(calibrated) × payout multiplier for the
+  // recommended side. Used to rank standard/demon/goblin against each other.
+  evValue: numeric("ev_value"),
+  recommendedSide: text("recommended_side"), // over | under
+  bestTierInGroup: boolean("best_tier_in_group").notNull().default(false),
   reasoning: jsonb("reasoning"),
   scoredAt: timestamp("scored_at").notNull(),
 }, (t) => [

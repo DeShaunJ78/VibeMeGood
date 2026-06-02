@@ -89,7 +89,7 @@ PLAY tag only.
 Upside: P(Over) ≥ 62%, any action tag.
 Late-News: Props with recent injury updates.
 My Style: Your custom saved filters.
-Unlocks after 30 paper trades logged.
+Unlocks after 30 entries logged.
 Until then: build your own filter intuition.
 
 ## Portfolio Optimizer

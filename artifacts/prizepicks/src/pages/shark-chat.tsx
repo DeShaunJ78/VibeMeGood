@@ -126,16 +126,6 @@ export default function SharkChat() {
         </div>
       </div>
 
-      {/* Paper Trade Mode banner */}
-      <div className="shrink-0 mb-4 px-3 py-2 rounded-md bg-amber-950/40 border border-amber-700/40 flex items-center gap-2">
-        <span className="text-amber-400 text-xs font-mono font-bold uppercase tracking-widest">
-          📄 Paper Trade Mode Active
-        </span>
-        <span className="text-amber-200/60 text-xs font-mono">
-          — No real-money recommendations. Build evidence first.
-        </span>
-      </div>
-
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto space-y-4 pr-1 min-h-0">
         {messages.map(msg => (

@@ -33,7 +33,12 @@ import { logger } from "../lib/logger";
 
 const MIN_PRIOR = 5;        // need at least this many prior games to project
 const STD_FLOOR_PCT = 0.1;  // floor sigma at 10% of mean so pOver isn't degenerate
-const LINE_TYPE = "standard"; // only tier we can reconstruct from logs
+// Tier-agnostic: a player's outcome distribution does not depend on the tier
+// LABEL (standard/demon/goblin) — only on the line VALUE, which is already
+// captured by edgeBucket. So we bucket under one "all" tier and every tier reads
+// the same empirical curve (demon/goblin included), instead of leaving non-standard
+// tiers uncalibrated.
+const LINE_TYPE = "all";
 
 interface CalibrationBucket {
   sport: string;

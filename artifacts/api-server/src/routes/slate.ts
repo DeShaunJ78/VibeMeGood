@@ -152,6 +152,9 @@ router.get("/slate", async (req, res) => {
         riskScore: score ? Number(score.riskScore) : null,
         finalScore: score ? Number(score.finalScore) : null,
         actionTag: score?.actionTag ?? null,
+        evValue: score?.evValue != null ? Number(score.evValue) : null,
+        recommendedSide: score?.recommendedSide ?? null,
+        bestTierInGroup: score?.bestTierInGroup ?? false,
         isWatched: watchlistSet.has(`${line.playerId}:${line.statType}`),
         watchlistId: watchlistIdMap.get(`${line.playerId}:${line.statType}`) ?? null,
         updatedAt: line.updatedAt.toISOString(),
@@ -259,12 +262,19 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
       eq(ppLinesTable.statType, line.statType),
       eq(ppLinesTable.isActive, true),
     ));
+    const siblingScores = siblingRows.length
+      ? await db.select().from(propScoresTable).where(
+          inArray(propScoresTable.ppLineId, siblingRows.map(s => s.id)),
+        )
+      : [];
+    const siblingScoreByLine = new Map(siblingScores.map(s => [s.ppLineId, s]));
     const siblingTiers = siblingRows
       .map(s => {
         const sEff = Number(s.lineValueOverride ?? s.lineValue);
         const sPOver = (op?.projectedValue && op?.stdDev)
           ? pOverLine(Number(op.projectedValue), Number(op.stdDev), sEff)
           : null;
+        const sScore = siblingScoreByLine.get(s.id);
         return {
           ppLineId: s.id,
           lineType: s.lineType,
@@ -274,6 +284,9 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
           pOver: sPOver != null ? Math.round(sPOver * 10) / 10 : null,
           breakevenMultiplier: sPOver != null && sPOver > 0 ? Math.round((100 / sPOver) * 100) / 100 : null,
           payoutMultiplier: s.payoutMultiplier != null ? Number(s.payoutMultiplier) : null,
+          evValue: sScore?.evValue != null ? Number(sScore.evValue) : null,
+          recommendedSide: sScore?.recommendedSide ?? null,
+          bestTierInGroup: sScore?.bestTierInGroup ?? false,
         };
       })
       .sort((a, b) => a.effectiveLine - b.effectiveLine);

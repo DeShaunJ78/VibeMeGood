@@ -97,7 +97,11 @@ export function calibratePOver(
 
   const direction = pOverRaw >= 50 ? "over" : "under";
   const edgeBucket = getEdgeBucket(Math.abs(pOverRaw - 50));
-  const cell = map.get(key(normalizeSport(sport), statType, lineType, edgeBucket, direction));
+  // Calibration is tier-agnostic: every tier (standard/demon/goblin) reads the same
+  // empirical curve, keyed by line value (edgeBucket) not tier label. `lineType` is
+  // accepted for call-site stability but intentionally not part of the lookup.
+  void lineType;
+  const cell = map.get(key(normalizeSport(sport), statType, "all", edgeBucket, direction));
   if (!cell || cell.sampleSize < PROBABILITY_CALIBRATION.minSampleSize) return noop;
 
   // empirical P(over): the table stores P(model direction correct)

@@ -23,7 +23,7 @@ The Journal and Review Dashboard track:
 - All wins concentrated in one player/stat type: concentration risk
 
 ## Calibration Process
-1. Run 50+ paper picks before adjusting real weights
+1. Log 50+ settled picks before adjusting weights
 2. Compare P(Over) buckets (50–55%, 55–60%, 60%+) to actual over rates
 3. If systematically off, adjust `hitRateAssumptions` in Settings
 4. Re-run 30+ picks after adjustment to measure impact

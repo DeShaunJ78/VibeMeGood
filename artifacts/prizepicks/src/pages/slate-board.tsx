@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge } from "@/components/ui/badges";
+import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge, BestValueBadge } from "@/components/ui/badges";
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
 import { TeamPicksBoard } from "@/components/team-picks-board";
 import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight, Filter, ChevronDown, ChevronRight, X } from "lucide-react";
@@ -1506,6 +1506,7 @@ export default function SlateBoard() {
                         <TableCell className="text-center" onClick={e => e.stopPropagation()}>
                           <div className="flex flex-col items-center gap-0.5">
                             <LineTypeBadge type={row.lineType} />
+                            {row.bestTierInGroup && <BestValueBadge side={row.recommendedSide} />}
                             {(row.lineType === "demon" || row.lineType === "goblin") && (() => {
                               // PrizePicks multipliers are dynamic (set at lineup-build time), so we
                               // do NOT fabricate a per-line payout. Instead show the BREAK-EVEN
