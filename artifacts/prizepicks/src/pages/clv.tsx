@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { apiUrl } from "@/lib/api-base";
 import { TrendingUp, TrendingDown, Minus, AlertTriangle, CheckCircle2, BarChart3 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer, CartesianGrid } from "recharts";
@@ -35,10 +36,9 @@ interface ClvResponse {
 }
 
 function useClv() {
-  const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
   return useQuery<ClvResponse>({
     queryKey: ["clv"],
-    queryFn: () => fetch(`${base}/api/clv`).then(r => r.json()),
+    queryFn: () => fetch(apiUrl("/api/clv")).then(r => r.json()),
     staleTime: 60_000,
   });
 }

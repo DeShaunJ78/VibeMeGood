@@ -12,8 +12,11 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2 } from "lucide-react";
+import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2, BookOpen } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
+import { Link } from "wouter";
 import { format } from "date-fns";
+import { apiUrl } from "@/lib/api-base";
 
 const SPORTS = ["NFL", "NBA", "MLB", "NHL", "WNBA", "MMA", "PGA", "NASCAR", "SOCCER"];
 
@@ -265,8 +268,7 @@ function EntryRow({ entry }: { entry: any }) {
   async function handleDeleteEntry(entryId: number) {
     setDeletingId(entryId);
     try {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-      const res = await fetch(`${base}/api/entries/${entryId}`, { method: "DELETE" });
+      const res = await fetch(apiUrl(`/api/entries/${entryId}`), { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
       toast({ title: "Entry deleted" });
       await qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
@@ -292,7 +294,7 @@ function EntryRow({ entry }: { entry: any }) {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     try {
-      const res = await fetch(`/api/explain/entry/${entry.id}`, {
+      const res = await fetch(apiUrl(`/api/explain/entry/${entry.id}`), {
         method: "POST",
         signal: abortRef.current.signal,
       });
@@ -954,17 +956,34 @@ export default function Journal() {
             <Skeleton key={i} className="h-14 bg-slate-900 rounded-lg" />
           ))
         ) : list.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 gap-2 text-muted-foreground font-mono text-sm">
-            <span>No entries found.</span>
-            {hasParams && (
-              <button
-                onClick={clearFilters}
-                className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
+          <EmptyState
+            className="h-48"
+            icon={<BookOpen className="w-8 h-8" />}
+            title={hasParams ? "No entries match your filters" : "No entries logged yet"}
+            description={
+              hasParams
+                ? "Try clearing filters or widening the date range."
+                : "Build a slip in Entry Builder and log it, or use Log Entry here to record a past slip."
+            }
+            action={
+              hasParams ? (
+                <Button size="sm" variant="secondary" className="font-mono text-xs" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              ) : (
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Link href="/entry-builder">
+                    <Button size="sm" variant="secondary" className="font-mono text-xs">
+                      Entry Builder
+                    </Button>
+                  </Link>
+                  <Button size="sm" className="font-mono text-xs gap-1" onClick={() => setNewOpen(true)}>
+                    <Plus className="w-3.5 h-3.5" /> Log Entry
+                  </Button>
+                </div>
+              )
+            }
+          />
         ) : (
           list.map((entry: any) => <EntryRow key={entry.id} entry={entry} />)
 

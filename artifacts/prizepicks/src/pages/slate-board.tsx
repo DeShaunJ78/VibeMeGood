@@ -23,6 +23,9 @@ import { useEntry, type EntryPick } from "@/lib/entry-context";
 import { VarianceBadge } from "@/components/ui/variance-badge";
 import { useUserSettings } from "@/hooks/use-user-settings";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
+import { EmptyState } from "@/components/empty-state";
+import { Link } from "wouter";
+import { apiBase, apiUrl } from "@/lib/api-base";
 
 type OurProjection = {
   value: number;
@@ -97,7 +100,6 @@ type MarketIntelPage = {
 };
 
 function useMarketIntel(params: Record<string, string | undefined>, page: number, enabled = true) {
-  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v) qs.set(k, v);
   qs.set("page", String(page));
@@ -105,7 +107,7 @@ function useMarketIntel(params: Record<string, string | undefined>, page: number
   return useQuery<MarketIntelPage>({
     queryKey: ["market-intel", params, page],
     queryFn: async () => {
-      const r = await fetch(`${base}/api/market-intel?${qs}`);
+      const r = await fetch(`${apiBase()}/api/market-intel?${qs}`);
       if (!r.ok) throw new Error("market-intel fetch failed");
       return r.json();
     },
@@ -119,13 +121,11 @@ function SyncProjectionsButton() {
   const [result, setResult] = useState<string | null>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
-  const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-
   async function syncProj() {
     setSyncing(true);
     setResult(null);
     try {
-      const res = await fetch(`${base}/api/admin/sync/projections`, { method: "POST" });
+      const res = await fetch(apiUrl("/api/admin/sync/projections"), { method: "POST" });
       const data = await res.json() as { matched?: number; upserted?: number; error?: string };
       if (data.error) throw new Error(data.error);
       const label = `${data.upserted ?? data.matched ?? 0} projections`;
@@ -161,11 +161,9 @@ function ForceSyncButton() {
   const [syncStep, setSyncStep] = useState<string | null>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
-  const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-
   useEffect(() => {
     if (!syncing) return;
-    const es = new EventSource(`${base}/api/events`);
+    const es = new EventSource(apiUrl("/api/events"));
     es.addEventListener("sync_status", (e) => {
       const { job, status } = JSON.parse(e.data) as { job: string; status: string };
       if (status === "running") setSyncStep(`${job}…`);
@@ -178,13 +176,13 @@ function ForceSyncButton() {
       if (status === "error") setSyncStep(`${job} failed`);
     });
     return () => es.close();
-  }, [syncing, base, qc]);
+  }, [syncing, qc]);
 
   async function forceSync() {
     setSyncing(true);
     setSyncStep("starting…");
     try {
-      await fetch(`${base}/api/sync/all`, { method: "POST" });
+      await fetch(apiUrl("/api/sync/all"), { method: "POST" });
     } catch {
       toast({ title: "Sync failed", variant: "destructive" });
       setSyncing(false);
@@ -212,12 +210,10 @@ function SyncOddsButton({ onDone }: { onDone?: () => void }) {
   const [syncing, setSyncing] = useState(false);
   const { toast } = useToast();
   const qc = useQueryClient();
-  const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-
   async function syncOdds() {
     setSyncing(true);
     try {
-      const res = await fetch(`${base}/api/sync/external-odds`, { method: "POST" });
+      const res = await fetch(apiUrl("/api/sync/external-odds"), { method: "POST" });
       if (!res.ok) throw new Error("sync failed");
       toast({ title: "Odds synced", description: "External odds data refreshed." });
       await qc.invalidateQueries({ queryKey: ["market-intel"] });
@@ -512,8 +508,7 @@ export default function SlateBoard() {
   const { data: allEntriesForCount } = useQuery<{ length: number }>({
     queryKey: ["entries-total-count"],
     queryFn: async () => {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-      const r = await fetch(`${base}/api/entries`);
+      const r = await fetch(apiUrl("/api/entries"));
       const arr = (await r.json()) as unknown[];
       return { length: Array.isArray(arr) ? arr.length : 0 };
     },
@@ -564,8 +559,7 @@ export default function SlateBoard() {
   const { data: preLockStatus } = useQuery<{ preLockActive: boolean }>({
     queryKey: ["pre-lock-status"],
     queryFn: async () => {
-      const b = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-      const r = await fetch(`${b}/api/system-health/pre-lock`);
+      const r = await fetch(apiUrl("/api/system-health/pre-lock"));
       return r.json() as Promise<{ preLockActive: boolean }>;
     },
     refetchInterval: 60_000,
@@ -652,9 +646,8 @@ export default function SlateBoard() {
       setSport(sportCounts[0].sport);
     } else if (sportsLoaded || sportsError) {
       // Counts query finished but returned nothing (off-season / no active lines
-      // / fetch error). Fall back to a concrete sport so the query stays
-      // sport-scoped (never all-sports) and the skeleton stops loading.
-      setSport("MLB");
+      // / fetch error). Show all sports — never default to MLB (seed has no MLB lines).
+      setSport("all");
     }
   }, [sportCounts, sport, sportsLoaded, sportsError]);
 
@@ -915,8 +908,7 @@ export default function SlateBoard() {
   }>>({
     queryKey: ["platform-lines-better"],
     queryFn: async () => {
-      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-      const r = await fetch(`${base}/api/platform-lines/better-lines`);
+      const r = await fetch(apiUrl("/api/platform-lines/better-lines"));
       return r.ok ? (r.json() as Promise<Array<{ ppLineId: number; bestPlatform: string; bestLineValue: number }>>) : [];
     },
     staleTime: 5 * 60 * 1000,
@@ -961,8 +953,7 @@ export default function SlateBoard() {
   const { data: paceGames = [] } = useQuery<TonightPace[]>({
     queryKey: ["pace-tonight"],
     queryFn: async (): Promise<TonightPace[]> => {
-      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-      const r = await fetch(`${base}/api/pace/tonight`);
+      const r = await fetch(apiUrl("/api/pace/tonight"));
       return r.ok ? (r.json() as Promise<TonightPace[]>) : [];
     },
     staleTime: 10 * 60 * 1000,
@@ -988,8 +979,7 @@ export default function SlateBoard() {
   const { data: nflAdvData = [] } = useQuery<NflAdvRow[]>({
     queryKey: ["nfl-advanced-slate"],
     queryFn: async (): Promise<NflAdvRow[]> => {
-      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-      const r = await fetch(`${base}/api/nfl-advanced/slate`);
+      const r = await fetch(apiUrl("/api/nfl-advanced/slate"));
       return r.ok ? (r.json() as Promise<NflAdvRow[]>) : [];
     },
     staleTime: 60 * 60 * 1000,
@@ -1117,7 +1107,7 @@ export default function SlateBoard() {
         {/* Row 1: title + tabs (left) · status badges / mobile controls (right) */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-1">
-            <h1 className="hidden sm:block text-2xl font-bold tracking-tight mr-4">Slates</h1>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight mr-2 sm:mr-4 shrink-0">Slates</h1>
             <button
               onClick={() => setTab("player")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-mono transition-colors ${tab === "player" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground bg-slate-800/50"}`}
@@ -1425,25 +1415,40 @@ export default function SlateBoard() {
 
       {/* Not synced banner — only when there are also no seeded props to show */}
       {notSynced && !isLoading && playerRows.length === 0 && (
-        <div className="flex items-center justify-between gap-3 text-amber-400 bg-amber-950/20 border border-amber-700/30 rounded px-3 py-2 text-sm font-mono">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            No live data — use <span className="font-bold mx-1">Force Sync</span> to pull props from PrizePicks.
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-200/90 bg-amber-950/20 border border-amber-700/40 rounded-lg px-4 py-3 text-sm font-mono">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-100">No synced PrizePicks lines</p>
+              <p className="text-xs text-amber-200/70 mt-0.5">
+                Lines must be imported in the last 24h. Use Force Sync, or run dev seed if you are on a local database.
+              </p>
+            </div>
           </div>
-          <ForceSyncButton />
+          <div className="flex items-center gap-2 shrink-0">
+            <ForceSyncButton />
+            <Link href="/settings">
+              <Button size="sm" variant="outline" className="border-amber-700/50 text-amber-200 hover:bg-amber-900/30 font-mono text-xs">
+                Settings
+              </Button>
+            </Link>
+          </div>
         </div>
       )}
 
       {/* Table */}
       {tab === "player" ? (
         <div className="flex-1 bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col min-h-0">
-          <div className="overflow-auto flex-1">
-            <Table>
+          <p className="md:hidden shrink-0 px-3 py-1.5 text-[10px] font-mono text-muted-foreground border-b border-slate-800 bg-slate-950/80">
+            Swipe horizontally for full columns · core fields stay visible
+          </p>
+          <div className="overflow-x-auto overflow-y-auto flex-1 min-w-0">
+            <Table className="min-w-[720px]">
               <TableHeader className="bg-slate-950 sticky top-0 z-10">
                 <TableRow className="border-slate-800 hover:bg-slate-950">
-                  <TableHead className="w-8 font-mono text-xs" />
-                  <TableHead className="w-14 font-mono text-xs">Sport</TableHead>
-                  <SortTh col="playerName" label="Player" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                  <TableHead className="w-8 font-mono text-xs sticky left-0 z-20 bg-slate-950" />
+                  <TableHead className="w-14 font-mono text-xs sticky left-8 z-20 bg-slate-950">Sport</TableHead>
+                  <SortTh col="playerName" label="Player" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="sticky left-[4.5rem] z-20 bg-slate-950 min-w-[9rem] shadow-[4px_0_12px_rgba(2,6,23,0.6)]" />
                   <SortTh col="position" label="Pos" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden md:table-cell w-12 text-center" />
                   <TableHead className="hidden md:table-cell w-12 font-mono text-xs">Team</TableHead>
                   <TableHead className="hidden md:table-cell w-12 font-mono text-xs">Opp</TableHead>
@@ -1506,8 +1511,34 @@ export default function SlateBoard() {
                   ))
                 ) : playerRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={(varianceEnabled ? 20 : 18) - (oddsStale ? 1 : 0)} className="h-48 text-center text-muted-foreground font-mono">
-                      {sport !== "all" ? `No ${sport} props on the board — try All Sports` : "No props — click Force Sync to load live slate"}
+                    <TableCell colSpan={(varianceEnabled ? 20 : 18) - (oddsStale ? 1 : 0)} className="p-0">
+                      <EmptyState
+                        icon={<Filter className="w-8 h-8" />}
+                        title={
+                          sport !== "all"
+                            ? `No ${sport} props match your filters`
+                            : "No props on the board"
+                        }
+                        description={
+                          sport !== "all"
+                            ? "Try All Sports, clear filters, or switch the slate window to Upcoming."
+                            : "Synced lines appear here after Force Sync or dev seed. Filters may also hide gated NO-PLAY rows."
+                        }
+                        action={
+                          sport !== "all" ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="font-mono text-xs"
+                              onClick={() => setSport("all")}
+                            >
+                              Show All Sports
+                            </Button>
+                          ) : (
+                            <ForceSyncButton />
+                          )
+                        }
+                      />
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -1521,14 +1552,14 @@ export default function SlateBoard() {
                     return (
                       <React.Fragment key={row.ppLineId}>
                       <TableRow
-                        className={`border-slate-800 cursor-pointer transition-colors ${
+                        className={`group border-slate-800 cursor-pointer transition-colors ${
                           isNoPlay ? "opacity-50 hover:opacity-70" :
                           row.isWatched ? "bg-amber-950/10 hover:bg-amber-950/20" :
                           "hover:bg-slate-800/50"
                         }`}
                         onClick={() => setSelectedPropId(row.ppLineId)}
                       >
-                        <TableCell onClick={e => e.stopPropagation()} className="pr-0">
+                        <TableCell onClick={e => e.stopPropagation()} className="pr-0 sticky left-0 z-10 bg-slate-900 group-hover:bg-slate-800/80">
                           <div className="flex items-center gap-0.5">
                             <button
                               onClick={e => { e.stopPropagation(); setExpandedRow(v => v === row.ppLineId ? null : row.ppLineId); }}
@@ -1539,8 +1570,8 @@ export default function SlateBoard() {
                             <WatchToggle row={row} slateParams={slateParams} />
                           </div>
                         </TableCell>
-                        <TableCell className="font-mono text-xs text-primary">{row.sport}</TableCell>
-                        <TableCell className="font-bold">
+                        <TableCell className="font-mono text-xs text-primary sticky left-8 z-10 bg-slate-900 group-hover:bg-slate-800/80">{row.sport}</TableCell>
+                        <TableCell className="font-bold sticky left-[4.5rem] z-10 bg-slate-900 group-hover:bg-slate-800/80 min-w-[9rem] shadow-[4px_0_12px_rgba(2,6,23,0.5)]">
                           <div className="flex items-center gap-2">
                             <PlayerAvatar name={row.playerName} imageUrl={row.imageUrl} size="sm" />
                             <div>

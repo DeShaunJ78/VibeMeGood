@@ -30,16 +30,16 @@ export interface UserSettings {
 
 const SETTINGS_KEY = ["user-settings"];
 
-const base = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+import { apiUrl } from "@/lib/api-base";
 
 async function fetchSettings(): Promise<UserSettings> {
-  const r = await fetch(`${base()}/api/user-settings`);
+  const r = await fetch(apiUrl("/api/user-settings"));
   if (!r.ok) throw new Error("Failed to load settings");
   return r.json();
 }
 
 async function patchSettings(patch: Partial<UserSettings>): Promise<UserSettings> {
-  const r = await fetch(`${base()}/api/user-settings`, {
+  const r = await fetch(apiUrl("/api/user-settings"), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),

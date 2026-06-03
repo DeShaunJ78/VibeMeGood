@@ -17,6 +17,8 @@ import {
   BellOff, CheckCheck, Trash2, X, ChevronRight,
 } from "lucide-react";
 import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge } from "@/components/ui/badges";
+import { DataFreshnessBadge } from "@/components/data-freshness-badge";
+import { EmptyState } from "@/components/empty-state";
 
 function StatCard({
   label, value, icon: Icon, iconClass, subLabel, onClick,
@@ -223,13 +225,14 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <h1 className="text-2xl font-bold tracking-tight">Command Center</h1>
-        <div className="text-xs font-mono text-muted-foreground flex items-center gap-2" data-testid="status-live">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-          </span>
-          LIVE DATA
-        </div>
+        {data && !isLoading ? (
+          <DataFreshnessBadge
+            activePropsCount={data.activePropsCount}
+            linesUpdatedAtMs={(data as { dataFreshness?: { ppLines?: number | null } }).dataFreshness?.ppLines ?? null}
+          />
+        ) : (
+          <div className="h-5 w-24 rounded bg-slate-800 animate-pulse" aria-hidden />
+        )}
       </div>
 
       {isLoading || !data ? (
@@ -244,8 +247,24 @@ export default function Dashboard() {
         </>
       ) : (
         <>
+          {data.activePropsCount === 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-amber-800/40 bg-amber-950/20 px-4 py-3 text-sm font-mono text-amber-200/90">
+              <span>
+                No synced props in the last 24 hours. Run <strong className="text-amber-100">Settings → Sync All</strong> or dev seed (<code className="text-[11px] bg-slate-900/80 px-1 rounded">seed:dev</code>).
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 border-amber-700/50 text-amber-200 hover:bg-amber-900/30"
+                onClick={() => navigate("/settings")}
+              >
+                Open Settings
+              </Button>
+            </div>
+          )}
+
           {/* KPI row — data */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard
               label="Active Props"
               value={data.activePropsCount}
@@ -387,9 +406,24 @@ export default function Dashboard() {
                     </div>
                   ))
                 ) : (
-                  <div className="flex flex-col items-center justify-center h-32 text-muted-foreground font-mono text-sm text-center px-4">
-                    No actionable picks in the current slate — sync to refresh projections.
-                  </div>
+                  <EmptyState
+                    className="h-40"
+                    title={
+                      data.activePropsCount === 0
+                        ? "No active lines on the board"
+                        : "No top picks for today's games"
+                    }
+                    description={
+                      data.activePropsCount === 0
+                        ? "Lines need a recent PrizePicks sync (last 24h). After syncing, PLAY props and model top picks will appear here."
+                        : "Props are loaded but none qualify for today's slate window, or all are gated NO-PLAY. Check Slates or run Sync All."
+                    }
+                    action={
+                      <Button size="sm" variant="secondary" onClick={() => navigate("/slate")}>
+                        Open Slates
+                      </Button>
+                    }
+                  />
                 )}
               </CardContent>
             </Card>

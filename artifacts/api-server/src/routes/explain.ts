@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import {
   ppLinesTable, playersTable, gamesTable, propScoresTable,
-  projectionsTable, externalLinesTable, injuriesTable,
+  ourProjectionsTable, externalLinesTable, injuriesTable,
   lineupConfirmationsTable, entriesTable, entryPicksTable,
   varianceScoresTable,
 } from "@workspace/db/schema";
@@ -51,8 +51,11 @@ router.post("/explain/prop/:id", async (req: Request, res: Response): Promise<vo
 
     const [player] = await db.select().from(playersTable).where(eq(playersTable.id, line.playerId));
     const [score] = await db.select().from(propScoresTable).where(eq(propScoresTable.ppLineId, lineId));
-    const projections = await db.select().from(projectionsTable)
-      .where(and(eq(projectionsTable.playerId, line.playerId), eq(projectionsTable.statType, line.statType)));
+    const [ourProjection] = await db.select().from(ourProjectionsTable)
+      .where(and(
+        eq(ourProjectionsTable.playerId, line.playerId),
+        eq(ourProjectionsTable.statType, line.statType),
+      ));
     const externalLines = await db.select().from(externalLinesTable)
       .where(and(eq(externalLinesTable.playerId, line.playerId), eq(externalLinesTable.statType, line.statType)));
     const injuries = await db.select().from(injuriesTable).where(eq(injuriesTable.playerId, line.playerId));
@@ -94,12 +97,15 @@ router.post("/explain/prop/:id", async (req: Request, res: Response): Promise<vo
         final: Number(score.finalScore), actionTag: score.actionTag,
         reasoning: score.reasoning,
       } : null,
-      projection: projections[0] ? {
-        value: Number(projections[0].projectedValue),
-        floor: Number(projections[0].floorValue),
-        ceiling: Number(projections[0].ceilingValue),
-        confidence: Number(projections[0].confidenceScore),
-        source: projections[0].projectionSource,
+      projection: ourProjection ? {
+        value: Number(ourProjection.projectedValue),
+        pOver: ourProjection.pOver != null ? Number(ourProjection.pOver) : null,
+        stdDev: ourProjection.stdDev != null ? Number(ourProjection.stdDev) : null,
+        dataQualityScore: ourProjection.dataQualityScore,
+        noPlayReason: ourProjection.noPlayReason,
+        source: ourProjection.sourceLabel,
+        confidence: ourProjection.confidence,
+        gamesUsed: ourProjection.gamesUsed,
       } : null,
       externalLines: externalLines.map(el => ({
         book: el.bookName, overLine: Number(el.overLine), underLine: Number(el.underLine),

@@ -29,6 +29,7 @@ import SystemHealth from "@/pages/system-health";
 import SharkChat from "@/pages/shark-chat";
 import ModelAudit from "@/pages/audit";
 import { EntryProvider } from "@/lib/entry-context";
+import { apiUrl } from "@/lib/api-base";
 import { SharkChatProvider } from "@/contexts/SharkChatContext";
 
 const queryClient = new QueryClient();
@@ -41,8 +42,7 @@ function SSEListener() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-    const es = new EventSource(`${base}/api/events`);
+    const es = new EventSource(apiUrl("/api/events"));
 
     es.addEventListener("sync_status", (e) => {
       const data = JSON.parse(e.data) as { job: string; status: string };

@@ -10,7 +10,7 @@ export function ActionTagBadge({ tag, className }: { tag: string | null | undefi
       variant="outline"
       className={cn(
         "font-mono text-xs px-1.5 py-0",
-        upper === "PLAY"    && "text-emerald-500 border-emerald-500/30 bg-emerald-500/10",
+        upper === "PLAY"    && "text-emerald-300 border-emerald-400/50 bg-emerald-500/15 shadow-[0_0_12px_rgba(16,185,129,0.25)] font-semibold ring-1 ring-emerald-500/20",
         upper === "WATCH"   && "text-amber-500 border-amber-500/30 bg-amber-500/10",
         upper === "PASS"    && "text-slate-400 border-slate-700 bg-slate-800/50",
         upper === "NO-PLAY" && "text-rose-400 border-rose-500/30 bg-rose-500/10",

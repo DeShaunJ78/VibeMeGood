@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { apiUrl } from "@/lib/api-base";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,10 +32,8 @@ interface HealthData {
   };
 }
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
 async function fetchHealth(): Promise<HealthData> {
-  const res = await fetch(`${BASE}/api/system-health`);
+  const res = await fetch(apiUrl("/api/system-health"));
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -59,7 +58,7 @@ async function triggerSync(action: string): Promise<Response | null> {
   };
   const path = map[action];
   if (!path) return null;
-  return fetch(`${BASE}${path}`, { method: "POST" });
+  return fetch(apiUrl(path), { method: "POST" });
 }
 
 // Maps a Fix action to the jobName the server broadcasts on the `sync_status`
@@ -279,8 +278,7 @@ export default function SystemHealth() {
   // green at the right moment — for every job, present and future. This is the
   // single source of "is it done", replacing brittle per-button timers.
   useEffect(() => {
-    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-    const es = new EventSource(`${base}/api/events`);
+    const es = new EventSource(apiUrl("/api/events"));
     es.addEventListener("sync_status", (e) => {
       let d: { job?: string; status?: string };
       try { d = JSON.parse((e as MessageEvent).data); } catch { return; }

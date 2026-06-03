@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { apiBase, apiUrl } from "@/lib/api-base";
 import { useListInjuries, getListInjuriesQueryKey, useListLineupConfirmations, getListLineupConfirmationsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,8 +25,7 @@ export default function Injuries() {
     if (!form.playerName.trim()) return;
     setSubmitting(true);
     try {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-      await fetch(`${base}/api/injuries`, {
+      await fetch(apiUrl("/api/injuries"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, reportedAt: new Date().toISOString(), source: "manual" }),

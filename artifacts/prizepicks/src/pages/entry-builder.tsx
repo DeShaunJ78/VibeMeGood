@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { apiBase, apiUrl } from "@/lib/api-base";
 import { useQuery } from "@tanstack/react-query";
 import { useCreateEntry } from "@workspace/api-client-react";
 import type { EntryPickInput } from "@workspace/api-client-react";
@@ -18,6 +19,7 @@ import { useEntry } from "@/lib/entry-context";
 import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown, ShieldAlert, AlertTriangle, ClipboardCheck, BarChart2, Shuffle, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
+import { EmptyState } from "@/components/empty-state";
 import {
   getBreakEven,
   getOptimalEntryType,
@@ -188,8 +190,7 @@ export default function EntryBuilder() {
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-    fetch(`${base}/api/entries?result=pending`)
+    fetch(apiUrl("/api/entries?result=pending"))
       .then(r => r.json())
       .then(data => setPendingCount(Array.isArray(data) ? data.length : 0))
       .catch(() => {});
@@ -201,8 +202,7 @@ export default function EntryBuilder() {
   const { data: todaySummary } = useQuery<{ todayStake: number; entryCount: number }>({
     queryKey: ["today-summary"],
     queryFn: async () => {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-      const r = await fetch(`${base}/api/entries/today-summary`);
+      const r = await fetch(apiUrl("/api/entries/today-summary"));
       return r.json() as Promise<{ todayStake: number; entryCount: number }>;
     },
     refetchInterval: 30_000,
@@ -211,8 +211,7 @@ export default function EntryBuilder() {
   const { data: totalEntriesCount } = useQuery<number>({
     queryKey: ["entries-total-count"],
     queryFn: async () => {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-      const r = await fetch(`${base}/api/entries`);
+      const r = await fetch(apiUrl("/api/entries"));
       const arr = await r.json() as unknown[];
       return Array.isArray(arr) ? arr.length : 0;
     },
@@ -224,7 +223,6 @@ export default function EntryBuilder() {
     if (currentPicks.length < 2) { setSimResult(null); return; }
     setSimLoading(true);
     try {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
       const body = {
         legs: currentPicks.map(p => ({
           ppLineId:  p.ppLineId,
@@ -235,7 +233,7 @@ export default function EntryBuilder() {
         multiplier: mult,
         entryType: style,
       };
-      const res = await fetch(`${base}/api/simulation/entry`, {
+      const res = await fetch(apiUrl("/api/simulation/entry"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -374,7 +372,6 @@ export default function EntryBuilder() {
     setPortfolioResult(null);
     setPortfolioLoggedSet(new Set());
     try {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
       const props = picks.map(p => ({
         playerId: p.playerId,
         statType: p.statType,
@@ -392,7 +389,7 @@ export default function EntryBuilder() {
           : 0.5,
         vor: p.vor ?? null,
       }));
-      const r = await fetch(`${base}/api/portfolio/optimize`, {
+      const r = await fetch(apiUrl("/api/portfolio/optimize"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ props, entrySize: portfolioEntrySize, maxEntries: portfolioMaxEntries }),
@@ -481,8 +478,7 @@ export default function EntryBuilder() {
     }
     // Pre-flight: check daily loss limit
     try {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-      const res = await fetch(`${base}/api/entries/loss-limit-status`);
+      const res = await fetch(apiUrl("/api/entries/loss-limit-status"));
       if (res.ok) {
         const status = await res.json() as LossLimitState;
         if (status.exceeded) {
@@ -796,15 +792,19 @@ export default function EntryBuilder() {
           </div>
           <div className="flex-1 overflow-auto">
             {picks.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-center space-y-3 p-8">
-                <div>
-                  <div className="bg-slate-800/50 w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Target className="w-7 h-7 text-slate-600" />
-                  </div>
-                  <p className="text-muted-foreground text-sm">No picks selected.</p>
-                  <p className="text-xs font-mono text-slate-500 mt-1">Click a row on the Slate Board → Add to Entry</p>
-                </div>
-              </div>
+              <EmptyState
+                className="h-full min-h-[200px]"
+                icon={<Target className="w-8 h-8" />}
+                title="Your entry slip is empty"
+                description="Open Slates, click a prop row, then Add to Entry. You need at least two legs to log Power or Flex."
+                action={
+                  <Link href="/slate">
+                    <Button size="sm" variant="secondary" className="font-mono text-xs gap-1.5">
+                      Browse Slates
+                    </Button>
+                  </Link>
+                }
+              />
             ) : (
               <div className="divide-y divide-slate-800">
                 {correlatedTeams.length > 0 && (

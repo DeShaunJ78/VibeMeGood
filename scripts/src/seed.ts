@@ -17,8 +17,9 @@ async function seed() {
 
   await db.execute(sql`TRUNCATE TABLE
     alerts, watchlist_items, entry_picks, entries, prop_scores,
-    lineup_confirmations, injuries, projections, external_lines,
-    pp_line_history, pp_lines, games, players, teams, payout_config
+    our_projections, player_game_logs, lineup_confirmations, injuries,
+    projections, external_lines, pp_line_history, pp_lines, games, players, teams,
+    payout_config
     RESTART IDENTITY CASCADE`);
 
   // ---- Teams ----
@@ -159,6 +160,11 @@ async function seed() {
   const lines = await db.insert(ppLinesTable).values([...playerLineDefs, ...teamLineDefs]).returning();
   const playerLines = lines.filter(l => l.pickCategory === "player");
   console.log(`Inserted ${lines.length} pp_lines (${playerLines.length} player, ${lines.length - playerLines.length} team picks)`);
+
+  // Slate, dashboard, and market-intel require a real sync timestamp (not NULL).
+  const syncTs = new Date();
+  await db.update(ppLinesTable).set({ lastSyncedAt: syncTs, updatedAt: syncTs });
+  console.log("Set lastSyncedAt on all pp_lines for dev/slate visibility");
 
   // ---- Line History ----
   const historyDefs = playerLines.flatMap(line => {

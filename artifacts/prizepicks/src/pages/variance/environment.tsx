@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { apiBase, apiUrl } from "@/lib/api-base";
 import { Wind } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,11 +18,10 @@ interface VarianceRow {
 }
 
 function useVarianceScores() {
-  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   return useQuery<VarianceRow[]>({
     queryKey: ["variance-scores"],
     queryFn: async () => {
-      const r = await fetch(`${base}/api/variance`);
+      const r = await fetch(apiUrl("/api/variance"));
       if (!r.ok) throw new Error("Failed");
       return r.json();
     },

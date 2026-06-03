@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { apiBase, apiUrl } from "@/lib/api-base";
 import { Battery, RefreshCw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,15 +38,13 @@ interface FatigueResponse {
   };
 }
 
-const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-
 function useFatigueData(sport?: string) {
   return useQuery<FatigueResponse>({
     queryKey: ["/api/fatigue/today", sport],
     queryFn: async () => {
       const url = sport
-        ? `${base}/api/fatigue/today?sport=${sport}`
-        : `${base}/api/fatigue/today`;
+        ? apiUrl(`/api/fatigue/today?sport=${sport}`)
+        : apiUrl("/api/fatigue/today");
       const r = await fetch(url);
       if (!r.ok) throw new Error("Fatigue fetch failed");
       return r.json();
@@ -234,7 +233,7 @@ export default function FatigueTracker() {
   const rested        = useMemo(() => sortedPlayers.filter(p => (p.daysRest ?? 0) >= 4), [sortedPlayers]);
 
   async function handleComputeNow() {
-    await fetch(`${base}/api/sync/fatigue`, { method: "POST" });
+    await fetch(apiUrl("/api/sync/fatigue"), { method: "POST" });
     setTimeout(() => refetch(), 3000);
   }
 

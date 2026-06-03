@@ -19,6 +19,8 @@ import { Input } from "@/components/ui/input";
 import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical, Lock, Zap, DollarSign } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useUserSettings, useUpdateUserSettings, type UserSettings } from "@/hooks/use-user-settings";
+import { apiUrl } from "@/lib/api-base";
+import { EmptyState } from "@/components/empty-state";
 
 const SIGNAL_TOGGLES = [
   { key: "fatigue",     label: "Fatigue & Rest Modeling", desc: "Back-to-backs, distance, timezone shift" },
@@ -324,7 +326,7 @@ export default function Settings() {
   async function triggerSync(endpoint: string, label: string) {
     setSyncingJob(endpoint);
     try {
-      const r = await fetch(endpoint, { method: "POST" });
+      const r = await fetch(apiUrl(endpoint), { method: "POST" });
       if (!r.ok) throw new Error();
       toast({ title: `Sync started`, description: `${label} sync initiated.` });
       setTimeout(() => {
@@ -342,7 +344,7 @@ export default function Settings() {
     setSyncingAll(true);
     for (const job of SYNC_JOBS) {
       try {
-        await fetch(job.endpoint, { method: "POST" });
+        await fetch(apiUrl(job.endpoint), { method: "POST" });
         await new Promise(r => setTimeout(r, 200));
       } catch { /* continue */ }
     }
@@ -468,7 +470,7 @@ export default function Settings() {
   async function preLockSync() {
     setSyncingPreLock(true);
     try {
-      await fetch("/api/sync/pre-lock", { method: "POST" });
+      await fetch(apiUrl("/api/sync/pre-lock"), { method: "POST" });
       toast({ title: "Pre-lock sync started", description: "Lines, injuries, and odds refreshing now." });
       setTimeout(() => {
         qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
@@ -550,6 +552,11 @@ export default function Settings() {
                   <RefreshCw className="w-4 h-4 text-primary" /> Data Sync
                 </CardTitle>
                 <CardDescription className="mt-1">Manually trigger individual data provider syncs</CardDescription>
+                <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed max-w-lg">
+                  The Slate Board only shows PrizePicks lines synced in the last 24 hours. After importing lines, run{" "}
+                  <span className="font-mono text-foreground/80">Sync All</span> or individual provider jobs so{" "}
+                  <span className="font-mono text-foreground/80">last_synced_at</span> stays current.
+                </p>
               </div>
               <Button
                 size="sm"
@@ -688,7 +695,10 @@ export default function Settings() {
                 ))}
               </div>
             ) : (
-              <div className="text-sm text-muted-foreground font-mono">No sync logs found.</div>
+              <EmptyState
+                title="No sync logs yet"
+                description="Run Sync All or an individual provider sync. Logs appear here after each pull completes."
+              />
             )}
           </CardContent>
         </Card>

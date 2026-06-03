@@ -4,6 +4,7 @@ import { PlayerAvatar } from "@/components/ui/player-avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEntry } from "@/lib/entry-context";
 import { useToast } from "@/hooks/use-toast";
+import { apiUrl } from "@/lib/api-base";
 
 interface Streak {
   streakId: number;
@@ -21,10 +22,9 @@ interface Streak {
 }
 
 function useStreaks() {
-  const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
   return useQuery<Streak[]>({
     queryKey: ["streaks"],
-    queryFn: () => fetch(`${base}/api/streaks`).then(r => r.json()),
+    queryFn: () => fetch(apiUrl("/api/streaks")).then(r => r.json()),
     staleTime: 60_000,
   });
 }

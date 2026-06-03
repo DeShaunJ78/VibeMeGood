@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { apiUrl } from "@/lib/api-base";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -277,7 +278,6 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
 
   useEffect(() => {
     if (!data || !open) return;
-    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     const pid = data.player?.id;
     const sType = data.ppLine?.statType;
     const lineVal = data.ppLine?.lineValue;
@@ -297,7 +297,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
     });
     if (opponentTeamId) params.append("opponentTeamId", String(opponentTeamId));
 
-    fetch(`${base}/api/historical-hit-rates?${params}`)
+    fetch(apiUrl(`/api/historical-hit-rates?${params}`))
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setHitRates(d as HitRates); })
       .catch(() => {});
@@ -305,7 +305,6 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
 
   useEffect(() => {
     if (!data || !open) return;
-    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     const playerName = data.player?.fullName;
     const sType = data.ppLine?.statType;
     const lineVal = data.ppLine?.lineValue;
@@ -317,7 +316,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
       ppLineValue: String(lineVal),
     });
 
-    fetch(`${base}/api/platform-lines/by-prop?${params}`)
+    fetch(apiUrl(`/api/platform-lines/by-prop?${params}`))
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setLineShopping(d as LineShopping); })
       .catch(() => {});
@@ -328,8 +327,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
     const homeTeamId = data.game?.homeTeamId as number | undefined;
     const awayTeamId = data.game?.awayTeamId as number | undefined;
     if (!homeTeamId && !awayTeamId) return;
-    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-    fetch(`${base}/api/pace/tonight`)
+    fetch(apiUrl("/api/pace/tonight"))
       .then(r => r.ok ? r.json() : null)
       .then((games: Array<{
         gameId: number; homeTeamId: number; awayTeamId: number;
@@ -367,14 +365,13 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
     setHitRates(null);
     setLineShopping(null);
     setGamePace(null);
-    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     setVariance(null);
-    fetch(`${base}/api/slate/${ppLineId}`)
+    fetch(apiUrl(`/api/slate/${ppLineId}`))
       .then(r => r.json())
       .then(d => {
         setData(d);
         setLoading(false);
-        return fetch(`${base}/api/variance/${ppLineId}`);
+        return fetch(apiUrl(`/api/variance/${ppLineId}`));
       })
       .then(r => r?.ok ? r.json() : null)
       .then(v => { if (v) setVariance(v); })
@@ -441,7 +438,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     try {
-      const res = await fetch(`/api/explain/prop/${ppLineId}`, {
+      const res = await fetch(apiUrl(`/api/explain/prop/${ppLineId}`), {
         method: "POST",
         signal: abortRef.current.signal,
       });
