@@ -652,9 +652,8 @@ export default function SlateBoard() {
       setSport(sportCounts[0].sport);
     } else if (sportsLoaded || sportsError) {
       // Counts query finished but returned nothing (off-season / no active lines
-      // / fetch error). Fall back to a concrete sport so the query stays
-      // sport-scoped (never all-sports) and the skeleton stops loading.
-      setSport("MLB");
+      // / fetch error). Show all sports — never default to MLB (seed has no MLB lines).
+      setSport("all");
     }
   }, [sportCounts, sport, sportsLoaded, sportsError]);
 

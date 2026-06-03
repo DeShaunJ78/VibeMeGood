@@ -441,7 +441,8 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     try {
-      const res = await fetch(`/api/explain/prop/${ppLineId}`, {
+      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${base}/api/explain/prop/${ppLineId}`, {
         method: "POST",
         signal: abortRef.current.signal,
       });
