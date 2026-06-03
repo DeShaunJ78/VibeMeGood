@@ -23,6 +23,8 @@ import { useEntry, type EntryPick } from "@/lib/entry-context";
 import { VarianceBadge } from "@/components/ui/variance-badge";
 import { useUserSettings } from "@/hooks/use-user-settings";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
+import { EmptyState } from "@/components/empty-state";
+import { Link } from "wouter";
 
 type OurProjection = {
   value: number;
@@ -1116,7 +1118,7 @@ export default function SlateBoard() {
         {/* Row 1: title + tabs (left) · status badges / mobile controls (right) */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-1">
-            <h1 className="hidden sm:block text-2xl font-bold tracking-tight mr-4">Slates</h1>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight mr-2 sm:mr-4 shrink-0">Slates</h1>
             <button
               onClick={() => setTab("player")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-mono transition-colors ${tab === "player" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground bg-slate-800/50"}`}
@@ -1424,12 +1426,24 @@ export default function SlateBoard() {
 
       {/* Not synced banner — only when there are also no seeded props to show */}
       {notSynced && !isLoading && playerRows.length === 0 && (
-        <div className="flex items-center justify-between gap-3 text-amber-400 bg-amber-950/20 border border-amber-700/30 rounded px-3 py-2 text-sm font-mono">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            No live data — use <span className="font-bold mx-1">Force Sync</span> to pull props from PrizePicks.
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-200/90 bg-amber-950/20 border border-amber-700/40 rounded-lg px-4 py-3 text-sm font-mono">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-100">No synced PrizePicks lines</p>
+              <p className="text-xs text-amber-200/70 mt-0.5">
+                Lines must be imported in the last 24h. Use Force Sync, or run dev seed if you are on a local database.
+              </p>
+            </div>
           </div>
-          <ForceSyncButton />
+          <div className="flex items-center gap-2 shrink-0">
+            <ForceSyncButton />
+            <Link href="/settings">
+              <Button size="sm" variant="outline" className="border-amber-700/50 text-amber-200 hover:bg-amber-900/30 font-mono text-xs">
+                Settings
+              </Button>
+            </Link>
+          </div>
         </div>
       )}
 
@@ -1505,8 +1519,34 @@ export default function SlateBoard() {
                   ))
                 ) : playerRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={(varianceEnabled ? 20 : 18) - (oddsStale ? 1 : 0)} className="h-48 text-center text-muted-foreground font-mono">
-                      {sport !== "all" ? `No ${sport} props on the board — try All Sports` : "No props — click Force Sync to load live slate"}
+                    <TableCell colSpan={(varianceEnabled ? 20 : 18) - (oddsStale ? 1 : 0)} className="p-0">
+                      <EmptyState
+                        icon={<Filter className="w-8 h-8" />}
+                        title={
+                          sport !== "all"
+                            ? `No ${sport} props match your filters`
+                            : "No props on the board"
+                        }
+                        description={
+                          sport !== "all"
+                            ? "Try All Sports, clear filters, or switch the slate window to Upcoming."
+                            : "Synced lines appear here after Force Sync or dev seed. Filters may also hide gated NO-PLAY rows."
+                        }
+                        action={
+                          sport !== "all" ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="font-mono text-xs"
+                              onClick={() => setSport("all")}
+                            >
+                              Show All Sports
+                            </Button>
+                          ) : (
+                            <ForceSyncButton />
+                          )
+                        }
+                      />
                     </TableCell>
                   </TableRow>
                 ) : (
