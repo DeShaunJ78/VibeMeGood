@@ -750,8 +750,8 @@ export async function backfillHistoricalStats(
   const results = { nba: 0, mlb: 0, nhl: 0, nfl: 0, total: 0 };
 
   if (options.nba !== false) {
-    // season param = ending year of season: 2025 = 2024-25, 2024 = 2023-24
-    results.nba = await backfillNBA(allPlayers, [2024, 2025]);
+    // season param = ending year of season: 2026 = 2025-26, 2025 = 2024-25, 2024 = 2023-24
+    results.nba = await backfillNBA(allPlayers, [2024, 2025, 2026]);
   }
 
   if (options.mlb !== false) {
@@ -759,11 +759,11 @@ export async function backfillHistoricalStats(
   }
 
   if (options.nhl !== false) {
-    results.nhl = await backfillNHL(allPlayers, ["20232024", "20242025"]);
+    results.nhl = await backfillNHL(allPlayers, ["20232024", "20242025", "20252026"]);
   }
 
   if (options.nfl !== false) {
-    results.nfl = await backfillNFL(allPlayers, [2023, 2024]);
+    results.nfl = await backfillNFL(allPlayers, [2023, 2024, 2025]);
   }
 
   results.total = results.nba + results.mlb + results.nhl + results.nfl;
