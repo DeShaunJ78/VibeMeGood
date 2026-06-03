@@ -53,6 +53,17 @@ export interface ProjectionOutput {
   };
 }
 
+// Pre-loaded cache passed from computeAllProjections to avoid N+1 DB queries.
+type GameLog = typeof playerGameLogsTable.$inferSelect;
+type MatchupRow = typeof matchupHistoryTable.$inferSelect;
+type InjuryRow = typeof injuriesTable.$inferSelect;
+interface ProjectionCache {
+  gameLogs: Map<string, GameLog[]>;         // key: `${playerId}:${statType}` (top 20, desc)
+  allLogsForPlayer: Map<number, GameLog[]>; // key: playerId — all stat types (combo fallback)
+  matchup: Map<string, MatchupRow>;         // key: `${playerId}:${opponentTeamId}:${statType}`
+  injury: Map<number, InjuryRow>;           // key: playerId
+}
+
 export async function computeProjection(
   playerId: number,
   statType: string,
@@ -61,20 +72,25 @@ export async function computeProjection(
   sport: string,
   opponentTeamId?: number | null,
   calibrationMap?: CalibrationMap | null,
+  cache?: ProjectionCache,
 ): Promise<ProjectionOutput> {
   const prior = getPrior(sport, statType);
   const deductions: string[] = [];
 
   // --- 1. Fetch game logs (last 20, use up to 15) ---
-  const logs = await db
-    .select()
-    .from(playerGameLogsTable)
-    .where(and(
-      eq(playerGameLogsTable.playerId, playerId),
-      eq(playerGameLogsTable.statType, statType),
-    ))
-    .orderBy(desc(playerGameLogsTable.gameDate))
-    .limit(20);
+  // Use pre-loaded batch cache when available; fall back to DB for single-player calls.
+  const cacheKey = `${playerId}:${statType}`;
+  const logs: GameLog[] = cache?.gameLogs.has(cacheKey)
+    ? cache.gameLogs.get(cacheKey)!
+    : await db
+        .select()
+        .from(playerGameLogsTable)
+        .where(and(
+          eq(playerGameLogsTable.playerId, playerId),
+          eq(playerGameLogsTable.statType, statType),
+        ))
+        .orderBy(desc(playerGameLogsTable.gameDate))
+        .limit(20);
 
   let rawValues = logs.map(l => parseFloat(l.value.toString()));
 
@@ -88,19 +104,26 @@ export async function computeProjection(
   const comboComponents = COMBO_MAP[statType] ?? null;
 
   if (rawValues.length === 0 && comboComponents) {
-    const componentLogs = await db
-      .select({
-        gameDate: playerGameLogsTable.gameDate,
-        statType: playerGameLogsTable.statType,
-        value:    playerGameLogsTable.value,
-      })
-      .from(playerGameLogsTable)
-      .where(and(
-        eq(playerGameLogsTable.playerId, playerId),
-        inArray(playerGameLogsTable.statType, comboComponents),
-      ))
-      .orderBy(desc(playerGameLogsTable.gameDate))
-      .limit(60);
+    type ComponentLog = Pick<GameLog, "gameDate" | "statType" | "value">;
+    let componentLogs: ComponentLog[];
+    const cachedPlayerLogs = cache?.allLogsForPlayer.get(playerId);
+    if (cachedPlayerLogs) {
+      componentLogs = cachedPlayerLogs.filter(l => comboComponents.includes(l.statType)).slice(0, 60);
+    } else {
+      componentLogs = await db
+        .select({
+          gameDate: playerGameLogsTable.gameDate,
+          statType: playerGameLogsTable.statType,
+          value:    playerGameLogsTable.value,
+        })
+        .from(playerGameLogsTable)
+        .where(and(
+          eq(playerGameLogsTable.playerId, playerId),
+          inArray(playerGameLogsTable.statType, comboComponents),
+        ))
+        .orderBy(desc(playerGameLogsTable.gameDate))
+        .limit(60);
+    }
 
     // Sum all components per game date
     const byDate = new Map<string, number>();
@@ -196,15 +219,18 @@ export async function computeProjection(
 
   if (opponentTeamId) {
     try {
-      const [matchup] = await db
-        .select()
-        .from(matchupHistoryTable)
-        .where(and(
-          eq(matchupHistoryTable.playerId, playerId),
-          eq(matchupHistoryTable.opponentTeamId, opponentTeamId),
-          eq(matchupHistoryTable.statType, statType),
-        ))
-        .limit(1);
+      const matchupCacheKey = `${playerId}:${opponentTeamId}:${statType}`;
+      const [matchup] = cache?.matchup
+        ? [cache.matchup.get(matchupCacheKey)]
+        : await db
+            .select()
+            .from(matchupHistoryTable)
+            .where(and(
+              eq(matchupHistoryTable.playerId, playerId),
+              eq(matchupHistoryTable.opponentTeamId, opponentTeamId),
+              eq(matchupHistoryTable.statType, statType),
+            ))
+            .limit(1);
 
       if (matchup?.avgValue && matchup.gamesPlayed && matchup.gamesPlayed >= 3) {
         const histAvg = parseFloat(matchup.avgValue.toString());
@@ -230,12 +256,14 @@ export async function computeProjection(
   // --- 4. Injury check ---
   let injuryExplain = "";
   try {
-    const [injury] = await db
-      .select()
-      .from(injuriesTable)
-      .where(eq(injuriesTable.playerId, playerId))
-      .orderBy(desc(injuriesTable.reportedAt))
-      .limit(1);
+    const [injury] = cache?.injury
+      ? [cache.injury.get(playerId)]
+      : await db
+          .select()
+          .from(injuriesTable)
+          .where(eq(injuriesTable.playerId, playerId))
+          .orderBy(desc(injuriesTable.reportedAt))
+          .limit(1);
 
     if (injury) {
       const status = (injury.status || "").toLowerCase();
@@ -444,7 +472,70 @@ export async function computeAllProjections(): Promise<number> {
   // Load the calibration table once and reuse it for every projection this run.
   const calibrationMap = await loadCalibrationMap();
 
+  // ── Batch-load per-player data to eliminate N+1 queries in the inner loop ──
+  // One query per data type instead of one per player.
+  const allGameLogs = playerIds.length
+    ? await db.select().from(playerGameLogsTable)
+        .where(inArray(playerGameLogsTable.playerId, playerIds))
+        .orderBy(desc(playerGameLogsTable.gameDate))
+    : [] as (typeof playerGameLogsTable.$inferSelect)[];
+
+  const gameLogsByKey = new Map<string, (typeof playerGameLogsTable.$inferSelect)[]>();
+  const allLogsByPlayer = new Map<number, (typeof playerGameLogsTable.$inferSelect)[]>();
+  for (const log of allGameLogs) {
+    const k = `${log.playerId}:${log.statType}`;
+    const kArr = gameLogsByKey.get(k) ?? [];
+    if (kArr.length < 20) kArr.push(log);
+    gameLogsByKey.set(k, kArr);
+    const pArr = allLogsByPlayer.get(log.playerId) ?? [];
+    pArr.push(log);
+    allLogsByPlayer.set(log.playerId, pArr);
+  }
+
+  const opponentIds = [...new Set(
+    activeLines
+      .filter(r => r.line.gameId != null && r.player.teamId != null)
+      .flatMap(r => {
+        const game = gameMap[r.line.gameId!];
+        if (!game) return [] as number[];
+        const oppId = game.homeTeamId === r.player.teamId ? game.awayTeamId : game.homeTeamId;
+        return oppId != null ? [oppId] : ([] as number[]);
+      }),
+  )];
+
+  const matchupBatchRows = playerIds.length && opponentIds.length
+    ? await db.select().from(matchupHistoryTable)
+        .where(and(
+          inArray(matchupHistoryTable.playerId, playerIds),
+          inArray(matchupHistoryTable.opponentTeamId, opponentIds),
+        ))
+    : [] as (typeof matchupHistoryTable.$inferSelect)[];
+
+  const matchupByKey = new Map<string, typeof matchupHistoryTable.$inferSelect>();
+  for (const m of matchupBatchRows) {
+    matchupByKey.set(`${m.playerId}:${m.opponentTeamId}:${m.statType}`, m);
+  }
+
+  const injuryBatchRows = playerIds.length
+    ? await db.select().from(injuriesTable)
+        .where(inArray(injuriesTable.playerId, playerIds))
+        .orderBy(desc(injuriesTable.reportedAt))
+    : [] as (typeof injuriesTable.$inferSelect)[];
+
+  const injuryByPlayer = new Map<number, typeof injuriesTable.$inferSelect>();
+  for (const inj of injuryBatchRows) {
+    if (!injuryByPlayer.has(inj.playerId)) injuryByPlayer.set(inj.playerId, inj);
+  }
+
+  const projCache: ProjectionCache = {
+    gameLogs: gameLogsByKey,
+    allLogsForPlayer: allLogsByPlayer,
+    matchup: matchupByKey,
+    injury: injuryByPlayer,
+  };
+
   let computed = 0;
+  const projectionPayloads: (typeof ourProjectionsTable.$inferInsert)[] = [];
 
   for (const { line, player } of activeLines) {
     const sport = player.sport.toUpperCase();
@@ -467,6 +558,7 @@ export async function computeAllProjections(): Promise<number> {
         player.sport,
         opponentTeamId,
         calibrationMap,
+        projCache,
       );
 
       // ── Build the factor stack ──────────────────────────────────────────
@@ -587,25 +679,44 @@ export async function computeAllProjections(): Promise<number> {
         generatedAt: new Date(),
       };
 
-      const [existing] = await db
-        .select()
-        .from(ourProjectionsTable)
-        .where(and(
-          eq(ourProjectionsTable.playerId, line.playerId),
-          eq(ourProjectionsTable.statType, line.statType),
-        ))
-        .limit(1);
-
-      if (existing) {
-        await db.update(ourProjectionsTable).set(payload).where(eq(ourProjectionsTable.id, existing.id));
-      } else {
-        await db.insert(ourProjectionsTable).values(payload);
-      }
-
+      projectionPayloads.push(payload);
       computed++;
     } catch (e) {
       logger.error({ err: e, lineId: line.id }, "Projection compute error");
     }
+  }
+
+  // Bulk upsert all computed projections in one DB round-trip.
+  if (projectionPayloads.length > 0) {
+    await db.insert(ourProjectionsTable).values(projectionPayloads)
+      .onConflictDoUpdate({
+        target: [ourProjectionsTable.playerId, ourProjectionsTable.statType],
+        set: {
+          gameId:           sql`excluded.game_id`,
+          projectedValue:   sql`excluded.projected_value`,
+          weightedAvg:      sql`excluded.weighted_avg`,
+          gamesUsed:        sql`excluded.games_used`,
+          confidence:       sql`excluded.confidence`,
+          modelVersion:     sql`excluded.model_version`,
+          stdDev:           sql`excluded.std_dev`,
+          p99:              sql`excluded.p99`,
+          pOver:            sql`excluded.p_over`,
+          percentileAtLine: sql`excluded.percentile_at_line`,
+          dataQualityScore: sql`excluded.data_quality_score`,
+          shrinkageFactor:  sql`excluded.shrinkage_factor`,
+          noPlayReason:     sql`excluded.no_play_reason`,
+          sourceLabel:      sql`excluded.source_label`,
+          opponentAdj:      sql`excluded.opponent_adj`,
+          paceFactor:       sql`excluded.pace_factor`,
+          defenseFactor:    sql`excluded.defense_factor`,
+          restFactor:       sql`excluded.rest_factor`,
+          adjustments:      sql`excluded.adjustments`,
+          ensembleBlendPct: sql`excluded.ensemble_blend_pct`,
+          vor:              sql`excluded.vor`,
+          expiresAt:        sql`excluded.expires_at`,
+          generatedAt:      sql`excluded.generated_at`,
+        },
+      });
   }
 
   logger.info({ computed }, "computeAllProjections done");
