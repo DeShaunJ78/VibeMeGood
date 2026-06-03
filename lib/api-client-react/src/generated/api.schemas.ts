@@ -315,6 +315,11 @@ export interface SlateRow {
   sport: string;
   /** @nullable */
   startTime?: string | null;
+  /**
+     * Game status from the games table (scheduled, live, final, etc.)
+     * @nullable
+     */
+  gameStatus?: string | null;
   statType: string;
   lineValue: number;
   /** @nullable */

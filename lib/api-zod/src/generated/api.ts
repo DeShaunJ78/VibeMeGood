@@ -637,6 +637,7 @@ export const GetSlateResponseItem = zod.object({
   "opponentAbbr": zod.string().nullish(),
   "sport": zod.string(),
   "startTime": zod.string().nullish(),
+  "gameStatus": zod.string().nullish().describe('Game status from the games table (scheduled, live, final, etc.)'),
   "statType": zod.string(),
   "lineValue": zod.number(),
   "lineValueOverride": zod.number().nullish(),

@@ -1732,6 +1732,7 @@ components:
         opponentAbbr: { type: ["string", "null"] }
         sport: { type: string }
         startTime: { type: ["string", "null"] }
+        gameStatus: { type: ["string", "null"], description: "Game status from the games table (scheduled, live, final, etc.)" }
         statType: { type: string }
         lineValue: { type: number }
         lineValueOverride: { type: ["number", "null"] }

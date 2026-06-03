@@ -125,6 +125,7 @@ router.get("/slate", async (req, res) => {
         opponentAbbr,
         sport: player?.sport ?? "unknown",
         startTime: game?.startTime?.toISOString() ?? null,
+        gameStatus: game?.status ?? null,
         statType: line.statType,
         lineValue: Number(line.lineValue),
         lineValueOverride: line.lineValueOverride != null ? Number(line.lineValueOverride) : null,

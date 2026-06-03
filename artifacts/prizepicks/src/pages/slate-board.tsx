@@ -16,7 +16,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge, BestValueBadge } from "@/components/ui/badges";
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
 import { TeamPicksBoard } from "@/components/team-picks-board";
-import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight, Filter, ChevronDown, ChevronRight, X } from "lucide-react";
+import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight, Filter, ChevronDown, ChevronRight, X, Clock } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ReferenceLine, Cell, ResponsiveContainer, AreaChart, Area } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { useEntry, type EntryPick } from "@/lib/entry-context";
@@ -488,6 +488,18 @@ function classifyTier(lineVal: number, proj: number): "goblin" | "standard" | "d
   return "standard";
 }
 
+function formatWindowTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const todayStr = now.toDateString();
+  const tomorrowStr = new Date(now.getTime() + 86_400_000).toDateString();
+  const dayStr = d.toDateString();
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (dayStr === todayStr) return time;
+  if (dayStr === tomorrowStr) return `Tmrw ${time}`;
+  return `${d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} ${time}`;
+}
+
 function normalCDF(mean: number, std: number, line: number): number {
   if (std <= 0) return line < mean ? 1 : 0;
   const z = (line - mean) / (std * Math.sqrt(2));
@@ -530,6 +542,9 @@ export default function SlateBoard() {
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [sharpOnly, setSharpOnly] = useState(false);
+  // "upcoming" = exclude finished games (default), "all" = everything,
+  // or an ISO startTime string = show only that game window.
+  const [selectedWindow, setSelectedWindow] = useState<string>("upcoming");
   const [visibleCount, setVisibleCount] = useState(75);
   const [sortCol, setSortCol] = useState<string>("projGap");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -648,6 +663,16 @@ export default function SlateBoard() {
     if (sport !== "") { try { localStorage.setItem("slate-sport", sport); } catch {} }
   }, [sport]);
 
+  // When the sport changes the available windows change too — reset to "upcoming"
+  // so the view is never empty (wrong window selected for new sport).
+  const prevSport = useRef(sport);
+  useEffect(() => {
+    if (prevSport.current !== sport && sport !== "") {
+      prevSport.current = sport;
+      setSelectedWindow("upcoming");
+    }
+  }, [sport]);
+
   const { data: slate, isLoading: slateLoading } = useGetSlate(slateParams, {
     query: { queryKey: getGetSlateQueryKey(slateParams), enabled: sportResolved },
   });
@@ -756,8 +781,35 @@ export default function SlateBoard() {
   const teamRows = allRows.filter((r) => r.pickCategory === "team");
   const notSynced = allMiRows.length === 0 && !miLoading && sport === "all";
 
+  // Distinct game-time windows derived from the loaded slate. Each unique
+  // startTime becomes one picker pill. Ordered chronologically so the user
+  // sees morning → afternoon → evening left to right.
+  const windowGroups = useMemo(() => {
+    const map = new Map<string, { count: number; gameStatus: string | null; startTime: string }>();
+    for (const r of (slate ?? []) as any[]) {
+      const key: string = r.startTime ?? "__none__";
+      const gs: string | null = r.gameStatus ?? null;
+      const entry = map.get(key);
+      if (entry) { entry.count++; }
+      else { map.set(key, { count: 1, gameStatus: gs, startTime: key === "__none__" ? "" : key }); }
+    }
+    return [...map.entries()]
+      .map(([key, val]) => ({ key, ...val }))
+      .sort((a, b) => {
+        if (a.key === "__none__") return 1;
+        if (b.key === "__none__") return -1;
+        return a.startTime.localeCompare(b.startTime);
+      });
+  }, [slate]);
+
   const playerRows = useMemo(() => {
     let rows = allRows.filter((r) => r.pickCategory !== "team");
+    // Slate window — default hides completed games, specific windows isolate one time slot.
+    if (selectedWindow === "upcoming") {
+      rows = rows.filter(r => r.gameStatus !== "final");
+    } else if (selectedWindow !== "all") {
+      rows = rows.filter(r => (r.startTime ?? "__none__") === selectedWindow);
+    }
     if (lineTypeFilter !== "all") rows = rows.filter(r => r.lineType === lineTypeFilter);
     if (minEdge) rows = rows.filter(r => r.edgeScore != null && r.edgeScore >= parseFloat(minEdge));
     if (searchQuery) {
@@ -849,7 +901,7 @@ export default function SlateBoard() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [allRows, lineTypeFilter, minEdge, searchQuery, sortCol, sortDir, sharpOnly]);
+  }, [allRows, lineTypeFilter, minEdge, searchQuery, sortCol, sortDir, sharpOnly, selectedWindow]);
 
   const watchCount  = useMemo(() => playerRows.filter(r => r.isWatched).length,   [playerRows]);
   const noPlayCount = useMemo(() => playerRows.filter(r => r.actionTag === "NO-PLAY").length, [playerRows]);
@@ -1165,6 +1217,70 @@ export default function SlateBoard() {
                 </button>
               )}
             </div>
+            )}
+
+            {/* Slate window picker — one pill per distinct game-start time, sorted
+                chronologically. "Upcoming" (default) hides finished games. Picking a
+                specific time slot shows only props from that game window. */}
+            {windowGroups.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap py-0.5">
+                <Clock className="w-3 h-3 text-slate-600 shrink-0" />
+                <span className="text-[10px] font-mono text-slate-600 uppercase tracking-wider shrink-0">Slate:</span>
+
+                {/* Upcoming — hides final games (default) */}
+                <button
+                  onClick={() => setSelectedWindow("upcoming")}
+                  className={`px-2 py-0.5 rounded font-mono text-[10px] border transition-colors ${
+                    selectedWindow === "upcoming"
+                      ? "bg-emerald-900/40 text-emerald-300 border-emerald-700/40"
+                      : "border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500"
+                  }`}
+                >
+                  Upcoming
+                </button>
+
+                {/* Per-window pills */}
+                {windowGroups.map(w => {
+                  const isSelected = selectedWindow === w.key;
+                  const isFinal = w.gameStatus === "final";
+                  const isLive  = w.gameStatus === "live";
+                  const label = w.key === "__none__"
+                    ? "No Game"
+                    : formatWindowTime(w.startTime);
+                  return (
+                    <button
+                      key={w.key}
+                      onClick={() => setSelectedWindow(w.key)}
+                      className={`flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[10px] border transition-colors ${
+                        isSelected
+                          ? "bg-primary/20 text-primary border-primary/30"
+                          : isFinal
+                          ? "border-slate-800 text-slate-600 hover:text-slate-400 hover:border-slate-600"
+                          : isLive
+                          ? "border-rose-800/50 text-rose-400 hover:border-rose-600 hover:text-rose-300"
+                          : "border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500"
+                      }`}
+                    >
+                      {isLive && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse shrink-0" />}
+                      {label}
+                      <span className="opacity-50 ml-0.5">{w.count}</span>
+                      {isFinal && <span className="opacity-40 text-[9px]">fin</span>}
+                    </button>
+                  );
+                })}
+
+                {/* All — shows every window including finished */}
+                <button
+                  onClick={() => setSelectedWindow("all")}
+                  className={`px-2 py-0.5 rounded font-mono text-[10px] border transition-colors ${
+                    selectedWindow === "all"
+                      ? "bg-primary/20 text-primary border-primary/30"
+                      : "border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500"
+                  }`}
+                >
+                  All
+                </button>
+              </div>
             )}
 
             {/* Mobile search */}
