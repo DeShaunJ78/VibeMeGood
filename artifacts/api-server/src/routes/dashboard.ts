@@ -6,6 +6,7 @@ import {
   playersTable, teamsTable, ourProjectionsTable,
 } from "@workspace/db/schema";
 import { eq, and, gte, desc, sql, inArray, isNotNull } from "drizzle-orm";
+import { ppLineFreshSince } from "../lib/pp-line-freshness";
 
 const router = Router();
 
@@ -23,7 +24,7 @@ router.get("/dashboard/summary", async (req, res) => {
         db.select().from(injuriesTable).orderBy(desc(injuriesTable.reportedAt)).limit(8),
         db.select().from(ppLinesTable).where(and(
           eq(ppLinesTable.isActive, true),
-          gte(ppLinesTable.lastSyncedAt, new Date(Date.now() - 24 * 60 * 60 * 1000)),
+          gte(ppLinesTable.lastSyncedAt, ppLineFreshSince()),
         )),
         db.select({ count: sql<number>`count(*)` }).from(watchlistItemsTable),
         db.select({ count: sql<number>`count(*)` }).from(alertsTable).where(eq(alertsTable.isRead, false)),

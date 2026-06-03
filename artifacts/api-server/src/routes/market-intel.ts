@@ -9,6 +9,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, or, isNull, isNotNull, desc, gte, asc, inArray, ilike, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
+import { ppLineFreshSince } from "../lib/pp-line-freshness";
 import { consensusFairProb, edgePct, holdWarning } from "../lib/analytics/odds-math";
 import { pOverLine } from "../lib/projection/normal-dist";
 import { detectSharpMoney } from "../lib/propedge/sharp-detector";
@@ -86,14 +87,11 @@ router.get("/market-intel", async (req, res) => {
     const limitNum = Math.min(500, Math.max(1, parseInt(limit) || 100));
     const offset = (pageNum - 1) * limitNum;
 
-    const freshnessCutoff = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    const freshnessCutoff = ppLineFreshSince();
 
     const baseConditions: ReturnType<typeof eq>[] = [
       eq(ppLinesTable.isActive, true),
-      or(
-        isNull(ppLinesTable.lastSyncedAt),
-        gte(ppLinesTable.lastSyncedAt, freshnessCutoff),
-      ) as ReturnType<typeof eq>,
+      gte(ppLinesTable.lastSyncedAt, freshnessCutoff),
     ];
 
     if (sport) {

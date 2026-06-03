@@ -11,6 +11,8 @@ Private full-stack analytics workstation for evaluating PrizePicks props. Dark t
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/scripts run seed` — re-seed the database
+- `pnpm --filter @workspace/scripts run seed:dev` — seed + game logs (required for slate/dashboard in dev)
+- `pnpm --filter @workspace/scripts run seed-game-logs` — historical stats for projection engine only
 
 ## Stack
 
@@ -62,7 +64,8 @@ Private full-stack analytics workstation for evaluating PrizePicks props. Dark t
 ## Gotchas
 
 - Always run `pnpm --filter @workspace/api-spec run codegen` after OpenAPI spec changes; never edit generated files directly.
-- After schema changes: `pnpm --filter @workspace/db run push` then `pnpm --filter @workspace/scripts run seed`.
+- After schema changes: `pnpm --filter @workspace/db run push` then `pnpm --filter @workspace/scripts run seed:dev`.
+- Fresh dev DB: lines need `last_synced_at` (set by seed) and `player_game_logs` (seed:dev) before `/api/slate` and KPIs populate; restart API after seed:dev so projections use logs.
 - Review stats API is at `/api/dashboard/review` — called via `useGetReviewStats`.
 - `useGetDataHealth` takes a single `options?` arg.
 - Do not call `createEntry.mutateAsync` with flat data — always wrap in `{ data: {...} }`.

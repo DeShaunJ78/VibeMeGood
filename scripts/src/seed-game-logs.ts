@@ -37,76 +37,76 @@ const PLAYER_LOGS: Array<{
   {
     name: "Jayson Tatum",
     logs: {
-      points:   [27.8, 6.2],
-      rebounds: [8.9,  2.8],
-      assists:  [4.8,  1.9],
+      Points:   [27.8, 6.2],
+      Rebounds: [8.9,  2.8],
+      Assists:  [4.8,  1.9],
     },
   },
   {
     name: "Jaylen Brown",
     logs: {
-      points:   [23.1, 5.4],
-      rebounds: [5.2,  2.1],
+      Points:   [23.1, 5.4],
+      Rebounds: [5.2,  2.1],
     },
   },
   {
     name: "Stephen Curry",
     logs: {
-      points:      [27.3, 7.1],
-      threes_made: [4.8,  1.8],
+      Points:      [27.3, 7.1],
+      "3-PT Made": [4.8,  1.8],
     },
   },
   {
     name: "LeBron James",
     logs: {
-      points:   [24.0, 5.8],
-      assists:  [7.9,  2.4],
+      Points:  [24.0, 5.8],
+      Assists: [7.9,  2.4],
     },
   },
   {
     name: "Kevin Durant",
     logs: {
-      points:   [26.7, 5.1],
+      Points: [26.7, 5.1],
     },
   },
   {
     name: "Devin Booker",
     logs: {
-      points:   [25.0, 6.3],
+      Points: [25.0, 6.3],
     },
   },
   {
     name: "Nikola Jokic",
     logs: {
-      points:   [30.8, 7.2],
-      rebounds: [13.4, 3.1],
-      assists:  [9.2,  2.7],
+      Points:   [30.8, 7.2],
+      Rebounds: [13.4, 3.1],
+      Assists:  [9.2,  2.7],
     },
   },
   {
     name: "Jamal Murray",
     logs: {
-      points:   [22.8, 6.9],
+      Points: [22.8, 6.9],
     },
   },
   {
     name: "Jimmy Butler",
     // Questionable status — fewer games, more variance
     logs: {
-      points:   [19.4, 6.8],
+      Points: [19.4, 6.8],
     },
   },
   {
     name: "Giannis Antetokounmpo",
     logs: {
-      points:   [31.5, 7.8],
-      rebounds: [12.1, 3.4],
+      Points:   [31.5, 7.8],
+      Rebounds: [12.1, 3.4],
     },
   },
   {
     name: "Donovan Mitchell",
     logs: {
-      points:   [27.2, 6.5],
+      Points: [27.2, 6.5],
     },
   },
 ];

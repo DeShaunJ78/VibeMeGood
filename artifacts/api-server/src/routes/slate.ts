@@ -9,6 +9,7 @@ import {
 import { eq, and, inArray, desc, gte } from "drizzle-orm";
 import { pOverLineDist, percentileAtLineDist } from "../lib/projection/distributions";
 import { effectivePayoutMultiplier } from "../lib/payout/multiplier";
+import { ppLineFreshSince } from "../lib/pp-line-freshness";
 
 const router = Router();
 
@@ -37,7 +38,7 @@ router.get("/slate", async (req, res) => {
     // Require a real sync timestamp — excludes seeded/legacy lines that have
     // lastSyncedAt = NULL. Using 24h so users who haven't synced today still
     // see yesterday's slate without off-season stale lines leaking in.
-    const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const cutoff24h = ppLineFreshSince();
     const lineConditions = [
       and(
         eq(ppLinesTable.isActive, true),
@@ -188,7 +189,7 @@ router.get("/slate", async (req, res) => {
 
 router.get("/slate-sports", async (req, res) => {
   try {
-    const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const cutoff24h = ppLineFreshSince();
     const rows = await db
       .select({ sport: playersTable.sport })
       .from(ppLinesTable)
