@@ -16,6 +16,7 @@ import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filte
 import { EmptyState } from "@/components/empty-state";
 import { Link } from "wouter";
 import { format } from "date-fns";
+import { apiUrl } from "@/lib/api-base";
 
 const SPORTS = ["NFL", "NBA", "MLB", "NHL", "WNBA", "MMA", "PGA", "NASCAR", "SOCCER"];
 
@@ -267,8 +268,7 @@ function EntryRow({ entry }: { entry: any }) {
   async function handleDeleteEntry(entryId: number) {
     setDeletingId(entryId);
     try {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-      const res = await fetch(`${base}/api/entries/${entryId}`, { method: "DELETE" });
+      const res = await fetch(apiUrl(`/api/entries/${entryId}`), { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
       toast({ title: "Entry deleted" });
       await qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
@@ -294,7 +294,7 @@ function EntryRow({ entry }: { entry: any }) {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     try {
-      const res = await fetch(`/api/explain/entry/${entry.id}`, {
+      const res = await fetch(apiUrl(`/api/explain/entry/${entry.id}`), {
         method: "POST",
         signal: abortRef.current.signal,
       });

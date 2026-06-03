@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from "react";
+import { apiUrl } from "@/lib/api-base";
 
 export interface ChatMessage {
   id: string;
@@ -57,7 +58,6 @@ export function SharkChatProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<ChatMessage[]>(loadMessages);
   const [draftInput, _setDraftInput] = useState<string>(loadDraft);
   const [isLoading, setIsLoading] = useState(false);
-  const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
 
   // Keep a ref so sendMessage always has the latest messages for history
   const messagesRef = useRef<ChatMessage[]>(messages);
@@ -92,7 +92,7 @@ export function SharkChatProvider({ children }: { children: ReactNode }) {
       .map(m => ({ role: m.role, content: m.content }));
 
     try {
-      const r = await fetch(`${base}/api/shark/chat`, {
+      const r = await fetch(apiUrl("/api/shark/chat"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -128,7 +128,7 @@ export function SharkChatProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading, base, setDraftInput]);
+  }, [isLoading, setDraftInput]);
 
   const clearChat = useCallback(() => {
     const fresh = [WELCOME_MESSAGE];

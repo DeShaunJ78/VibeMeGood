@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Send, Plus, Trash2, MessageSquare, Bot, Database } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { apiUrl } from "@/lib/api-base";
 
 function MdLine({ text }: { text: string }) {
   // Bold: **text**
@@ -72,18 +73,20 @@ function MarkdownMessage({ content }: { content: string }) {
 interface Conversation { id: number; title: string; createdAt: string; }
 interface Message { id: number; conversationId: number; role: string; content: string; createdAt: string; }
 
-const BASE = `${(import.meta.env.BASE_URL as string).replace(/\/$/, "")}/api`;
+function chatApi(path: string) {
+  return apiUrl(`/api${path.startsWith("/") ? path : `/${path}`}`);
+}
 
 async function apiGet(path: string) {
-  const r = await fetch(`${BASE}${path}`);
+  const r = await fetch(chatApi(path));
   return r.json();
 }
 async function apiPost(path: string, body: object) {
-  const r = await fetch(`${BASE}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const r = await fetch(chatApi(path), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   return r.json();
 }
 async function apiDelete(path: string) {
-  await fetch(`${BASE}${path}`, { method: "DELETE" });
+  await fetch(chatApi(path), { method: "DELETE" });
 }
 
 export default function AiChat() {

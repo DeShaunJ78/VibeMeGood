@@ -5,7 +5,8 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, ReferenceLine,
 } from "recharts";
-import { TrendingUp, TrendingDown, Percent, DollarSign, Target, Brain } from "lucide-react";
+import { TrendingUp, TrendingDown, Percent, DollarSign, Target, Brain, BarChart3 } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 
 const EMOTION_EMOJI: Record<string, string> = {
   confident: "💪", neutral: "😐", frustrated: "😤",
@@ -23,6 +24,9 @@ export default function Review() {
     <div className="space-y-6 h-full overflow-auto">
       <div className="border-b border-border pb-4">
         <h1 className="text-2xl font-bold tracking-tight">Review Dashboard</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Settled entries, bankroll curve, and model accuracy over time.
+        </p>
       </div>
 
       {isLoading ? (
@@ -73,7 +77,7 @@ export default function Review() {
               <CardTitle className="text-sm font-mono uppercase tracking-wider">Bankroll Curve</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-56">
+              <div className="h-44 sm:h-56 md:h-64 min-h-[11rem]">
                 {s.bankrollCurve && s.bankrollCurve.length > 1 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={s.bankrollCurve} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
@@ -89,7 +93,12 @@ export default function Review() {
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex items-center justify-center text-muted-foreground text-sm font-mono">Not enough data</div>
+                  <EmptyState
+                    icon={<BarChart3 />}
+                    title="No bankroll history yet"
+                    description="Settle a few entries in the Journal to plot your balance over time."
+                    className="h-full py-6"
+                  />
                 )}
               </div>
             </CardContent>
@@ -102,7 +111,7 @@ export default function Review() {
                 <CardTitle className="text-sm font-mono uppercase tracking-wider">Monthly P&L</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-48">
+                <div className="h-40 sm:h-48 md:h-52 min-h-[10rem]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={s.monthlyPnl} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
@@ -240,7 +249,12 @@ export default function Review() {
           )}
         </>
       ) : (
-        <div className="text-center text-muted-foreground font-mono py-20">Failed to load stats.</div>
+        <EmptyState
+          icon={<BarChart3 />}
+          title="Could not load review stats"
+          description="Check that the API is running and you have settled entries in the database."
+          className="py-16"
+        />
       )}
     </div>
   );

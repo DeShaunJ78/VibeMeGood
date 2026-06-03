@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Swords, ChevronDown, ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
+import { apiBase, apiUrl } from "@/lib/api-base";
 
 interface MatchupEntry {
   histId: number;
@@ -26,10 +27,9 @@ interface PlayerMatchup {
 }
 
 function useMatchup() {
-  const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
   return useQuery<PlayerMatchup[]>({
     queryKey: ["matchup"],
-    queryFn: () => fetch(`${base}/api/matchup`).then(r => r.json()),
+    queryFn: () => fetch(apiUrl("/api/matchup")).then(r => r.json()),
     staleTime: 120_000,
   });
 }

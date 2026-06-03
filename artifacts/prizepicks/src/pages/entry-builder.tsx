@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { apiBase, apiUrl } from "@/lib/api-base";
 import { useQuery } from "@tanstack/react-query";
 import { useCreateEntry } from "@workspace/api-client-react";
 import type { EntryPickInput } from "@workspace/api-client-react";
@@ -189,8 +190,7 @@ export default function EntryBuilder() {
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-    fetch(`${base}/api/entries?result=pending`)
+    fetch(apiUrl("/api/entries?result=pending"))
       .then(r => r.json())
       .then(data => setPendingCount(Array.isArray(data) ? data.length : 0))
       .catch(() => {});
@@ -202,8 +202,7 @@ export default function EntryBuilder() {
   const { data: todaySummary } = useQuery<{ todayStake: number; entryCount: number }>({
     queryKey: ["today-summary"],
     queryFn: async () => {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-      const r = await fetch(`${base}/api/entries/today-summary`);
+      const r = await fetch(apiUrl("/api/entries/today-summary"));
       return r.json() as Promise<{ todayStake: number; entryCount: number }>;
     },
     refetchInterval: 30_000,
@@ -212,8 +211,7 @@ export default function EntryBuilder() {
   const { data: totalEntriesCount } = useQuery<number>({
     queryKey: ["entries-total-count"],
     queryFn: async () => {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-      const r = await fetch(`${base}/api/entries`);
+      const r = await fetch(apiUrl("/api/entries"));
       const arr = await r.json() as unknown[];
       return Array.isArray(arr) ? arr.length : 0;
     },
@@ -225,7 +223,6 @@ export default function EntryBuilder() {
     if (currentPicks.length < 2) { setSimResult(null); return; }
     setSimLoading(true);
     try {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
       const body = {
         legs: currentPicks.map(p => ({
           ppLineId:  p.ppLineId,
@@ -236,7 +233,7 @@ export default function EntryBuilder() {
         multiplier: mult,
         entryType: style,
       };
-      const res = await fetch(`${base}/api/simulation/entry`, {
+      const res = await fetch(apiUrl("/api/simulation/entry"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -375,7 +372,6 @@ export default function EntryBuilder() {
     setPortfolioResult(null);
     setPortfolioLoggedSet(new Set());
     try {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
       const props = picks.map(p => ({
         playerId: p.playerId,
         statType: p.statType,
@@ -393,7 +389,7 @@ export default function EntryBuilder() {
           : 0.5,
         vor: p.vor ?? null,
       }));
-      const r = await fetch(`${base}/api/portfolio/optimize`, {
+      const r = await fetch(apiUrl("/api/portfolio/optimize"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ props, entrySize: portfolioEntrySize, maxEntries: portfolioMaxEntries }),
@@ -482,8 +478,7 @@ export default function EntryBuilder() {
     }
     // Pre-flight: check daily loss limit
     try {
-      const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-      const res = await fetch(`${base}/api/entries/loss-limit-status`);
+      const res = await fetch(apiUrl("/api/entries/loss-limit-status"));
       if (res.ok) {
         const status = await res.json() as LossLimitState;
         if (status.exceeded) {
