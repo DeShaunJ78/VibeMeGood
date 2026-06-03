@@ -76,7 +76,7 @@ function recordCircuitFailure(provider: string) {
 // ---------------------------------------------------------------------------
 // logPull — wraps every cron sync with logging + circuit breaker
 // ---------------------------------------------------------------------------
-async function logPull(provider: string, jobName: string, fn: () => Promise<number>) {
+export async function logPull(provider: string, jobName: string, fn: () => Promise<number>) {
   if (circuitIsOpen(provider)) return;
 
   const [log] = await db.insert(dataPullLogsTable).values({
@@ -165,10 +165,10 @@ export function startCronJobs() {
 
   // Variance scores at 6:30 AM and 6:30 PM (after projections)
   cron.schedule("30 6 * * *", () =>
-    logPull("internal", "variance-scores", computeAllVarianceScores)
+    logPull("internal", "variance", computeAllVarianceScores)
   );
   cron.schedule("30 18 * * *", () =>
-    logPull("internal", "variance-scores", computeAllVarianceScores)
+    logPull("internal", "variance", computeAllVarianceScores)
   );
 
   // Fatigue data at 6:35 AM (after projections populate game logs)
