@@ -534,7 +534,12 @@ export default function SlateBoard() {
   const totalEntries = allEntriesForCount?.length ?? 0;
   const presetsUnlocked = totalEntries >= 30;
   const varianceEnabled = userSettings?.varianceIntelEnabled ?? false;
-  const [tab, setTab] = useState<"player" | "team" | "culture">("player");
+  const [tab, setTab] = useState<"player" | "team" | "culture">(() => {
+    try {
+      const t = localStorage.getItem("slate-tab");
+      return (t === "team" || t === "culture") ? t : "player";
+    } catch { return "player"; }
+  });
   // "" = unresolved; auto-defaults to the most-populated sport once counts load.
   // Persists the user's manual choice across sessions.
   const [sport, setSport] = useState<string>(() => {
@@ -545,7 +550,9 @@ export default function SlateBoard() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedPropId, setSelectedPropId] = useState<number | null>(null);
   const [optimizerOpen, setOptimizerOpen] = useState(false);
-  const [actionTagFilter, setActionTagFilter] = useState<string>("all");
+  const [actionTagFilter, setActionTagFilter] = useState<string>(() => {
+    try { return localStorage.getItem("slate-action-tag") ?? "all"; } catch { return "all"; }
+  });
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [activePreset, setActivePreset] = useState<string | null>(null);
 
@@ -688,10 +695,16 @@ export default function SlateBoard() {
     }
   }, [sportCounts, sport, sportsLoaded, sportsError]);
 
-  // Persist the user's resolved sport choice across sessions.
+  // Persist filter choices across sessions.
   useEffect(() => {
     if (sport !== "") { try { localStorage.setItem("slate-sport", sport); } catch {} }
   }, [sport]);
+  useEffect(() => {
+    try { localStorage.setItem("slate-tab", tab); } catch {}
+  }, [tab]);
+  useEffect(() => {
+    try { localStorage.setItem("slate-action-tag", actionTagFilter); } catch {}
+  }, [actionTagFilter]);
 
   // When the sport changes the available windows change too — reset to "upcoming"
   // so the view is never empty (wrong window selected for new sport).
