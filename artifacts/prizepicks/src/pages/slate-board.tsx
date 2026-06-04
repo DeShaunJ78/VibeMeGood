@@ -1228,6 +1228,13 @@ export default function SlateBoard() {
                   <Clock className="w-2.5 h-2.5 shrink-0" />
                   {ppNeverSynced ? "not synced" : relativeTime(boardFreshnessAt!)}
                 </span>
+                {playerRows.length > 0 && (
+                  <span className="font-mono text-[10px] text-slate-500 shrink-0">
+                    {visibleRows.length < playerRows.length
+                      ? `${visibleRows.length} / ${playerRows.length} rows`
+                      : `${playerRows.length} rows`}
+                  </span>
+                )}
                 {playCount > 0 && (
                   <button
                     onClick={() => setActionTagFilter(f => f === "PLAY" ? "all" : "PLAY")}
