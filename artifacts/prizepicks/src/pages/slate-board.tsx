@@ -1176,6 +1176,14 @@ export default function SlateBoard() {
             </button>
           </div>
 
+          {tab === "team" && teamRows.length > 0 && (
+            <div className="md:hidden flex items-center gap-2 shrink-0">
+              <span className="font-mono text-[10px] text-slate-500 shrink-0">
+                {teamRows.length} rows
+              </span>
+            </div>
+          )}
+
           {tab === "player" && (
             <div className="flex items-center gap-2 shrink-0">
               {/* desktop status badges */}
