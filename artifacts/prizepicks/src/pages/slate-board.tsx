@@ -718,7 +718,7 @@ export default function SlateBoard() {
   const { data: allSportSlate } = useGetSlate(allSportSlateParams, {
     query: {
       queryKey: getGetSlateQueryKey(allSportSlateParams),
-      enabled: sportResolved && sport !== "all" && (tab === "team" || tab === "culture"),
+      enabled: sportResolved && sport !== "all" && (tab === "team" || tab === "player" || tab === "culture"),
       staleTime: 5 * 60 * 1000,
     },
   });
@@ -831,6 +831,9 @@ export default function SlateBoard() {
   const cultureRows = allRows.filter((r) => r.pickCategory === "culture");
   const totalCultureRowCount: number | null = sport !== "all" && allSportSlate
     ? (allSportSlate as any[]).filter((r: any) => r.pickCategory === "culture").length
+    : null;
+  const totalPlayerRowCount: number | null = sport !== "all" && allSportSlate
+    ? (allSportSlate as any[]).filter((r: any) => r.pickCategory !== "team" && r.pickCategory !== "culture").length
     : null;
   const notSynced = allMiRows.length === 0 && !miLoading && sport === "all";
 
@@ -1301,6 +1304,11 @@ export default function SlateBoard() {
                   </button>
                 )}
               </div>
+              {totalPlayerRowCount !== null && (
+                <span className="hidden md:inline font-mono text-[10px] text-slate-500 shrink-0">
+                  {playerRows.length} / {totalPlayerRowCount} rows
+                </span>
+              )}
               {/* mobile filter toggle + sync */}
               <div className="md:hidden flex items-center gap-2">
                 <Button size="sm" variant="outline" onClick={() => setFilterOpen(true)} className="gap-1.5 font-mono text-xs border-slate-700 text-muted-foreground">
