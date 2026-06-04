@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { probabilityCalibrationTable } from "@workspace/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, count, max } from "drizzle-orm";
 
 const router = Router();
 
@@ -29,6 +29,34 @@ const BUCKET_MIDPOINTS: Record<string, number> = {
 };
 
 const BUCKET_ORDER = ["0-5", "5-10", "10-15", "15-20", "20-25", "25+"];
+
+router.get("/calibration/status", async (req, res) => {
+  try {
+    const [row] = await db
+      .select({
+        bucketCount: count(),
+        lastUpdated: max(probabilityCalibrationTable.lastUpdated),
+      })
+      .from(probabilityCalibrationTable);
+
+    const bucketCount = Number(row?.bucketCount ?? 0);
+    const lastUpdated = row?.lastUpdated ?? null;
+    const ageHours = lastUpdated
+      ? (Date.now() - lastUpdated.getTime()) / 3600000
+      : null;
+    const isStale = ageHours == null || ageHours > 7 * 24;
+
+    res.json({
+      bucketCount,
+      lastUpdated: lastUpdated?.toISOString() ?? null,
+      ageHours: ageHours != null ? Math.round(ageHours * 10) / 10 : null,
+      isStale,
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 router.get("/calibration/diagnostics", async (req, res) => {
   try {

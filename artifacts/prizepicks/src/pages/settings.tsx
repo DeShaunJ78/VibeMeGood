@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useGetDataHealth, getGetDataHealthQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -322,6 +322,35 @@ export default function Settings() {
     query: { queryKey: getGetDataHealthQueryKey() },
   });
 
+  const [calibrationNudge, setCalibrationNudge] = useState(false);
+
+  const { data: calStatus } = useQuery({
+    queryKey: ["calibration-status"],
+    queryFn: async () => {
+      const r = await fetch("/api/calibration/status");
+      if (!r.ok) return null;
+      return r.json() as Promise<{ bucketCount: number; lastUpdated: string | null; ageHours: number | null; isStale: boolean }>;
+    },
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
+
+  useEffect(() => {
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const es = new EventSource(`${base}/api/events`);
+    es.addEventListener("sync_status", (e) => {
+      const d = JSON.parse(e.data) as { job: string; status: string };
+      if (d.status === "success" && (d.job === "game-logs" || d.job === "historical-stats")) {
+        setCalibrationNudge(true);
+      }
+      if (d.status === "success" && d.job === "calibration") {
+        setCalibrationNudge(false);
+        qc.invalidateQueries({ queryKey: ["calibration-status"] });
+      }
+    });
+    return () => es.close();
+  }, [qc]);
+
   async function triggerSync(endpoint: string, label: string) {
     setSyncingJob(endpoint);
     try {
@@ -608,6 +637,59 @@ export default function Settings() {
               const failed = prov?.status === "error";
               const ageMs = prov?.lastSuccessAt ? Date.now() - new Date(prov.lastSuccessAt).getTime() : null;
               const isStale = job.staleDays != null && ageMs != null && ageMs > job.staleDays * 86400000;
+
+              if (job.endpoint === "/api/sync/calibration") {
+                const calIsStale = calStatus?.isStale ?? isStale;
+                const calAge = calStatus?.lastUpdated
+                  ? formatDistanceToNow(new Date(calStatus.lastUpdated), { addSuffix: true })
+                  : prov?.lastSuccessAt
+                    ? formatDistanceToNow(new Date(prov.lastSuccessAt), { addSuffix: true })
+                    : "Never run";
+                const calDot = isRunning ? "bg-amber-400 animate-pulse"
+                  : calIsStale ? "bg-amber-400"
+                  : calStatus?.bucketCount ? "bg-emerald-400"
+                  : "bg-slate-600";
+                const calBorder = calibrationNudge
+                  ? "border-amber-500/30"
+                  : calIsStale ? "border-amber-500/20"
+                  : "border-slate-800";
+                return (
+                  <div key={job.endpoint} className={`flex flex-col gap-1.5 p-3 bg-slate-950 border rounded ${calBorder}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <span className={`w-2 h-2 rounded-full inline-block shrink-0 ${calDot}`} />
+                        <div>
+                          <span className="font-mono text-sm block">{job.label}</span>
+                          <span className={`text-[10px] font-mono ${calIsStale ? "text-amber-400/80" : "text-muted-foreground"}`}>
+                            {calStatus?.bucketCount != null && calStatus.bucketCount > 0
+                              ? `${calStatus.bucketCount.toLocaleString()} buckets · ${calAge}`
+                              : calAge}
+                          </span>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { triggerSync(job.endpoint, job.label); setCalibrationNudge(false); }}
+                        disabled={isRunning || syncingAll}
+                        className={`h-7 font-mono text-xs ${calIsStale || calibrationNudge
+                          ? "border-amber-600/50 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20"
+                          : "border-slate-700 bg-slate-800 hover:bg-slate-700"}`}
+                      >
+                        <RefreshCw className={`w-3 h-3 mr-1 ${isRunning ? "animate-spin" : ""}`} />
+                        {isRunning ? "Running" : "Re-run"}
+                      </Button>
+                    </div>
+                    {calibrationNudge && !isRunning && (
+                      <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-400/80 bg-amber-900/20 border border-amber-700/30 rounded px-2 py-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        New game logs imported — consider re-running calibration to improve model accuracy.
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               const dotClass = isRunning ? "bg-amber-400 animate-pulse"
                 : failed ? "bg-rose-400"
                 : isStale ? "bg-amber-400"
