@@ -1219,6 +1219,15 @@ export default function SlateBoard() {
                   )}
                 </Button>
                 <ForceSyncButton />
+                <span
+                  className={`font-mono text-[10px] flex items-center gap-1 ${
+                    ppNeverSynced ? "text-rose-500/70" : ppStale ? "text-amber-400/80" : "text-slate-500"
+                  }`}
+                  title={boardFreshnessAt ? `PP lines last imported ${relativeTime(boardFreshnessAt)}` : "PP lines not yet imported"}
+                >
+                  <Clock className="w-2.5 h-2.5 shrink-0" />
+                  {ppNeverSynced ? "not synced" : relativeTime(boardFreshnessAt!)}
+                </span>
               </div>
             </div>
           )}
