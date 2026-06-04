@@ -822,6 +822,9 @@ export default function SlateBoard() {
     ? (allSportSlate as any[]).filter((r: any) => r.pickCategory === "team").length
     : null;
   const cultureRows = allRows.filter((r) => r.pickCategory === "culture");
+  const totalCultureRowCount: number | null = sport !== "all" && allSportSlate
+    ? (allSportSlate as any[]).filter((r: any) => r.pickCategory === "culture").length
+    : null;
   const notSynced = allMiRows.length === 0 && !miLoading && sport === "all";
 
   // Distinct game-time windows derived from the loaded slate. Each unique
@@ -1213,7 +1216,9 @@ export default function SlateBoard() {
           {tab === "culture" && cultureRows.length > 0 && (
             <div className="md:hidden flex items-center gap-2 shrink-0">
               <span className="font-mono text-[10px] text-slate-500 shrink-0">
-                {cultureRows.length} rows
+                {totalCultureRowCount !== null
+                  ? `${cultureRows.length} / ${totalCultureRowCount} rows`
+                  : `${cultureRows.length} rows`}
               </span>
             </div>
           )}
