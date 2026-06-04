@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import {
   useListEntries, getListEntriesQueryKey, useCreateEntry,
   useUpdateEntry, useUpdateEntryPick,
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2 } from "lucide-react";
+import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2, Pencil } from "lucide-react";
 import { format } from "date-fns";
 
 const SPORTS = ["NFL", "NBA", "MLB", "NHL", "WNBA", "MMA", "PGA", "NASCAR", "SOCCER"];
@@ -122,6 +122,15 @@ function MarkResultPanel({ entry, onDone }: { entry: any; onDone: () => void }) 
     return Number(entry.stake) * mult;
   })();
 
+  // Auto-open the confirm panel for Power entries the moment all picks are graded.
+  // Intentionally excludes confirmResult from deps so a user-cancel does not re-open.
+  useEffect(() => {
+    if (allPicksGraded && entry.entryType === "power" && confirmResult === null && picksSummary) {
+      setConfirmResult(picksSummary.suggested);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allPicksGraded, entry.entryType]);
+
   if (confirmResult) {
     return (
       <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-3 space-y-2">
@@ -230,6 +239,7 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const updatePick = useUpdateEntryPick();
+  const [regradingPickId, setRegradingPickId] = useState<number | null>(null);
 
   async function setPickResult(pickId: number, result: "hit" | "miss" | "dnp") {
     try {
@@ -296,10 +306,44 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
                     className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors border border-slate-700"
                   >DNP</button>
                 </>
+              ) : regradingPickId === pick.id ? (
+                <>
+                  <span className="text-[10px] text-slate-500 font-mono mr-0.5">re-grade:</span>
+                  <button
+                    onClick={() => { void setPickResult(pick.id, "hit"); setRegradingPickId(null); }}
+                    disabled={updatePick.isPending}
+                    className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-emerald-900/30 text-emerald-500 hover:bg-emerald-900/60 transition-colors border border-emerald-800/40"
+                  >HIT</button>
+                  <button
+                    onClick={() => { void setPickResult(pick.id, "miss"); setRegradingPickId(null); }}
+                    disabled={updatePick.isPending}
+                    className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-rose-900/30 text-rose-500 hover:bg-rose-900/60 transition-colors border border-rose-800/40"
+                  >MISS</button>
+                  <button
+                    onClick={() => { void setPickResult(pick.id, "dnp"); setRegradingPickId(null); }}
+                    disabled={updatePick.isPending}
+                    className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors border border-slate-700"
+                  >DNP</button>
+                  <button
+                    onClick={() => setRegradingPickId(null)}
+                    className="px-1 py-0.5 text-[10px] text-slate-500 hover:text-slate-300 font-mono"
+                  >✕</button>
+                </>
               ) : (
-                <span className={`font-bold uppercase ${PICK_RESULT_STYLES[pick.result] ?? "text-muted-foreground"}`}>
-                  {pick.result}
-                </span>
+                <div className="flex items-center gap-1">
+                  <span className={`font-bold uppercase ${PICK_RESULT_STYLES[pick.result] ?? "text-muted-foreground"}`}>
+                    {pick.result}
+                  </span>
+                  {pick.id && (
+                    <button
+                      onClick={() => setRegradingPickId(pick.id)}
+                      title="Re-grade this pick"
+                      className="text-slate-700 hover:text-slate-400 transition-colors ml-0.5"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
