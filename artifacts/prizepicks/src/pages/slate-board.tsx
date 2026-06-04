@@ -1222,26 +1222,47 @@ export default function SlateBoard() {
                 </span>
                 <div className="h-3 border-l border-slate-800" />
                 {watchCount > 0 && (
-                  <Badge className="font-mono text-xs bg-amber-900/40 text-amber-300 border border-amber-700/40 px-2 py-0.5">
-                    <Eye className="w-3 h-3 mr-1 inline" />
+                  <button
+                    onClick={() => setActionTagFilter(f => f === "WATCH" ? "all" : "WATCH")}
+                    className={`font-mono text-xs px-2 py-0.5 rounded border transition-colors flex items-center gap-1 ${
+                      actionTagFilter === "WATCH"
+                        ? "bg-amber-900/60 border-amber-700/50 text-amber-300"
+                        : "bg-amber-900/40 border-amber-700/40 text-amber-300 hover:bg-amber-900/60 hover:border-amber-700/50"
+                    }`}
+                  >
+                    <Eye className="w-3 h-3" />
                     {actionTagFilter === "WATCH"
                       ? `${watchCount} / ${playerRows.length} watched`
                       : `${watchCount} watched`}
-                  </Badge>
+                  </button>
                 )}
                 {playCount > 0 && (
-                  <Badge className="font-mono text-xs bg-emerald-900/40 text-emerald-300 border border-emerald-700/40 px-2 py-0.5">
+                  <button
+                    onClick={() => setActionTagFilter(f => f === "PLAY" ? "all" : "PLAY")}
+                    className={`font-mono text-xs px-2 py-0.5 rounded border transition-colors ${
+                      actionTagFilter === "PLAY"
+                        ? "bg-emerald-900/60 border-emerald-700/50 text-emerald-300"
+                        : "bg-emerald-900/40 border-emerald-700/40 text-emerald-300 hover:bg-emerald-900/60 hover:border-emerald-700/50"
+                    }`}
+                  >
                     {actionTagFilter === "PLAY"
                       ? `${playCount} / ${playerRows.length} PLAY`
                       : `${playCount} PLAY`}
-                  </Badge>
+                  </button>
                 )}
                 {noPlayCount > 0 && (
-                  <Badge className="font-mono text-xs bg-rose-900/40 text-rose-300 border border-rose-700/40 px-2 py-0.5">
+                  <button
+                    onClick={() => setActionTagFilter(f => f === "NO-PLAY" ? "all" : "NO-PLAY")}
+                    className={`font-mono text-xs px-2 py-0.5 rounded border transition-colors ${
+                      actionTagFilter === "NO-PLAY"
+                        ? "bg-rose-900/60 border-rose-700/50 text-rose-300"
+                        : "bg-rose-900/40 border-rose-700/40 text-rose-300 hover:bg-rose-900/60 hover:border-rose-700/50"
+                    }`}
+                  >
                     {actionTagFilter === "NO-PLAY"
                       ? `${noPlayCount} / ${playerRows.length} gated`
                       : `${noPlayCount} gated`}
-                  </Badge>
+                  </button>
                 )}
               </div>
               {/* mobile filter toggle + sync */}
