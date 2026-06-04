@@ -1219,8 +1219,13 @@ export default function SlateBoard() {
           )}
 
           {tab === "culture" && cultureRows.length > 0 && (
-            <div className="md:hidden flex items-center gap-2 shrink-0">
-              <span className="font-mono text-[10px] text-slate-500 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
+              {totalCultureRowCount !== null && (
+                <span className="hidden md:inline font-mono text-[10px] text-slate-500 shrink-0">
+                  {cultureRows.length} / {totalCultureRowCount} rows
+                </span>
+              )}
+              <span className="md:hidden font-mono text-[10px] text-slate-500 shrink-0">
                 {totalCultureRowCount !== null
                   ? `${cultureRows.length} / ${totalCultureRowCount} rows`
                   : `${cultureRows.length} rows`}
