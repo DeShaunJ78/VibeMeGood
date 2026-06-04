@@ -140,13 +140,12 @@ async function batch<T>(
 
 async function backfillNBA(
   allDbPlayers: typeof playersTable.$inferSelect[],
-  seasons: number[],   // e.g. [2025] = 2024-25 season; [2024] = 2023-24
+  seasons: number[],   // e.g. [2026] = 2025-26 season; [2025] = 2024-25; [2024] = 2023-24
 ): Promise<number> {
   const nbaPlayers = allDbPlayers.filter(p => p.sport === "NBA");
-  if (nbaPlayers.length === 0) return 0;
 
-  // Normalised name → DB player id
-  const nameToId = new Map<string, number>();
+  // Normalised name → DB player id (rebuilt after roster auto-insert below)
+  let nameToId = new Map<string, number>();
   for (const p of nbaPlayers) nameToId.set(normalizeName(p.fullName), p.id);
 
   // Helper: resolve ESPN display name to our DB player id
@@ -173,15 +172,18 @@ async function backfillNBA(
   const nbaTeamMap = new Map<string, number>();
   for (const t of nbaTeamRows) if (t.abbreviation) nbaTeamMap.set(t.abbreviation.toUpperCase(), t.id);
 
-  // Fetch all 30 NBA team IDs from ESPN
+  // Fetch all 30 NBA team IDs from ESPN — also capture abbreviation for roster pre-pop
   let teamIds: number[] = [];
+  const espnIdToAbbr = new Map<number, string>();
   try {
     const teamsData = await getJson(
       "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams",
     );
-    teamIds = (teamsData?.sports?.[0]?.leagues?.[0]?.teams ?? [])
-      .map((t: any) => Number(t?.team?.id))
-      .filter(Boolean);
+    for (const t of (teamsData?.sports?.[0]?.leagues?.[0]?.teams ?? [])) {
+      const id  = Number(t?.team?.id);
+      const abbr = (t?.team?.abbreviation ?? "").toUpperCase();
+      if (id) { teamIds.push(id); if (abbr) espnIdToAbbr.set(id, abbr); }
+    }
   } catch {
     // Fallback to hardcoded ESPN team IDs
     teamIds = [
@@ -189,6 +191,60 @@ async function backfillNBA(
       17,18,19,20,21,22,23,24,25,26,27,28,29,30,38,40,
     ];
   }
+
+  // ── Auto-populate players from ESPN team rosters ──────────────────────────
+  // The boxscore pass silently skips any player not already in the DB.
+  // Pre-fetching all 30 rosters and inserting unknown players ensures we write
+  // game logs for the full league, not just the PP-imported subset.
+  {
+    const existingNorm = new Set(nameToId.keys());
+    const toInsert: typeof playersTable.$inferInsert[] = [];
+
+    await batch(teamIds, 10, async (teamId) => {
+      try {
+        const data = await getJson(
+          `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${teamId}/roster`,
+          12000,
+        );
+        const abbr    = espnIdToAbbr.get(teamId);
+        const dbTeamId = abbr ? nbaTeamMap.get(abbr) ?? null : null;
+        // ESPN roster groups athletes by position (each group has an `items` array)
+        const groups: any[] = Array.isArray(data?.athletes) ? data.athletes : [];
+        for (const group of groups) {
+          const athletes: any[] = group?.items ?? group?.athletes ?? (Array.isArray(group) ? group : []);
+          for (const a of athletes) {
+            const fullName: string = a?.fullName ?? a?.displayName ?? "";
+            if (!fullName) continue;
+            const norm = normalizeName(fullName);
+            if (existingNorm.has(norm)) continue;
+            existingNorm.add(norm);
+            toInsert.push({
+              sport:     "NBA",
+              fullName,
+              firstName: a?.firstName ?? fullName.split(" ")[0] ?? "",
+              lastName:  a?.lastName  ?? fullName.split(" ").slice(1).join(" ") ?? "",
+              teamId:    dbTeamId,
+              position:  a?.position?.abbreviation ?? null,
+              status:    "active",
+            });
+          }
+        }
+      } catch { /* skip unreachable roster */ }
+      return 0;
+    }, 150);
+
+    if (toInsert.length > 0) {
+      for (let i = 0; i < toInsert.length; i += 100) {
+        await db.insert(playersTable).values(toInsert.slice(i, i + 100)).onConflictDoNothing();
+      }
+      // Reload so the boxscore pass sees all players
+      const fresh = await db.select().from(playersTable).where(eq(playersTable.sport, "NBA"));
+      nameToId = new Map();
+      for (const p of fresh) nameToId.set(normalizeName(p.fullName), p.id);
+      logger.info({ inserted: toInsert.length, total: nameToId.size }, "NBA: roster pre-population complete");
+    }
+  }
+  // ── End auto-populate ─────────────────────────────────────────────────────
 
   let grandTotal = 0;
 
@@ -318,40 +374,78 @@ async function backfillMLB(
   allDbPlayers: typeof playersTable.$inferSelect[],
   seasons: number[],
 ): Promise<number> {
-  const mlbDbPlayers = allDbPlayers.filter(p => p.sport === "MLB");
-  if (mlbDbPlayers.length === 0) return 0;
-
+  // No early exit — we auto-populate players from the official roster below.
   const BASE = "https://statsapi.mlb.com/api/v1";
   let grandTotal = 0;
+
+  // Track which normalised names already exist across all seasons
+  const existingNorm = new Set(
+    allDbPlayers.filter(p => p.sport === "MLB").map(p => normalizeName(p.fullName)),
+  );
 
   for (const season of seasons) {
     try {
       // Build MLB name→id map from the official roster
       const rosterRes = await getJson(`${BASE}/sports/1/players?season=${season}&limit=2500`);
-      const mlbRoster: Array<{ id: number; fullName: string }> =
-        (rosterRes?.people ?? []).map((p: any) => ({ id: p.id, fullName: p.fullName }));
+      const mlbRoster: Array<{ id: number; fullName: string; firstName?: string; lastName?: string; position?: string }> =
+        (rosterRes?.people ?? []).map((p: any) => ({
+          id:        p.id,
+          fullName:  p.fullName,
+          firstName: p.firstName,
+          lastName:  p.lastName,
+          position:  p.primaryPosition?.abbreviation ?? null,
+        }));
 
-      // Match each DB player to an MLB roster ID
+      // ── Auto-populate MLB players from this season's roster ───────────────
+      // The roster covers every player who appeared that season. Insert any we
+      // don't already have so the game-log fetch below can match them all.
+      const toInsert: typeof playersTable.$inferInsert[] = [];
+      for (const r of mlbRoster) {
+        if (!r.fullName) continue;
+        const norm = normalizeName(r.fullName);
+        if (existingNorm.has(norm)) continue;
+        existingNorm.add(norm);
+        toInsert.push({
+          sport:     "MLB",
+          fullName:  r.fullName,
+          firstName: r.firstName ?? r.fullName.split(" ")[0] ?? "",
+          lastName:  r.lastName  ?? r.fullName.split(" ").slice(1).join(" ") ?? "",
+          position:  r.position ?? null,
+          status:    "active",
+        });
+      }
+      if (toInsert.length > 0) {
+        for (let i = 0; i < toInsert.length; i += 100) {
+          await db.insert(playersTable).values(toInsert.slice(i, i + 100)).onConflictDoNothing();
+        }
+        logger.info({ season, inserted: toInsert.length }, "MLB: roster pre-population complete");
+      }
+      // ── End auto-populate ─────────────────────────────────────────────────
+
+      // Reload all MLB players from DB (includes freshly inserted ones)
+      const allMlbPlayers = await db.select().from(playersTable).where(eq(playersTable.sport, "MLB"));
+      const normToDbId = new Map<string, number>();
+      for (const p of allMlbPlayers) normToDbId.set(normalizeName(p.fullName), p.id);
+
+      // Match each roster entry to a DB player ID
       type PlayerTarget = { dbId: number; mlbId: number };
       const targets: PlayerTarget[] = [];
-      for (const p of mlbDbPlayers) {
-        const normDb = normalizeName(p.fullName);
-        // Exact match first
-        let found = mlbRoster.find(r => normalizeName(r.fullName) === normDb);
-        if (!found) {
-          // Levenshtein ≤ 2
-          let best: typeof mlbRoster[0] | null = null;
+      for (const r of mlbRoster) {
+        if (!r.fullName) continue;
+        const normDb = normalizeName(r.fullName);
+        let dbId = normToDbId.get(normDb);
+        if (!dbId) {
+          // Levenshtein ≤ 2 fallback
           let bestD = 3;
-          for (const r of mlbRoster) {
-            const d = lev(normDb, normalizeName(r.fullName));
-            if (d < bestD) { bestD = d; best = r; }
+          for (const [n, id] of normToDbId) {
+            const d = lev(normDb, n);
+            if (d < bestD) { bestD = d; dbId = id; }
           }
-          if (best) found = best;
         }
-        if (found) targets.push({ dbId: p.id, mlbId: found.id });
+        if (dbId) targets.push({ dbId, mlbId: r.id });
       }
 
-      logger.info({ season, matched: targets.length, total: mlbDbPlayers.length },
+      logger.info({ season, matched: targets.length, total: allMlbPlayers.length },
         "MLB: players matched to roster");
 
       // Fetch hitting + pitching logs for each matched player (batched 5 at a time)
@@ -462,13 +556,12 @@ const NHL_TEAMS = [
 
 async function backfillNHL(
   allDbPlayers: typeof playersTable.$inferSelect[],
-  seasons: string[],   // e.g. ["20232024", "20242025"]
+  seasons: string[],   // e.g. ["20232024", "20242025", "20252026"]
 ): Promise<number> {
-  const nhlDbPlayers = allDbPlayers.filter(p => p.sport === "NHL");
-  if (nhlDbPlayers.length === 0) return 0;
-
+  // No early exit — we auto-populate players from NHL rosters below.
   const dbNormMap = new Map<string, number>();
-  for (const p of nhlDbPlayers) dbNormMap.set(normalizeName(p.fullName), p.id);
+  for (const p of allDbPlayers.filter(q => q.sport === "NHL"))
+    dbNormMap.set(normalizeName(p.fullName), p.id);
 
   // Build abbreviation → DB team ID map once for opponent lookups
   const nhlTeamRows = await db
@@ -480,8 +573,12 @@ async function backfillNHL(
   let grandTotal = 0;
 
   for (const season of seasons) {
-    // Build NHL name→id map from all 32 team rosters
+    // Build NHL name→id map from all 32 team rosters; also collect new players to insert
     const nhlIdMap = new Map<string, number>(); // normalised name → NHL player id
+
+    // Collect full player info for auto-insert
+    type RosterEntry = { normName: string; fullName: string; first: string; last: string; nhlId: number; position: string | null; teamAbbr: string };
+    const rosterEntries: RosterEntry[] = [];
 
     await batch(NHL_TEAMS, 8, async (abbr) => {
       try {
@@ -491,7 +588,15 @@ async function backfillNHL(
             const first = p.firstName?.default ?? "";
             const last  = p.lastName?.default ?? "";
             if (!first || !last || !p.id) continue;
-            nhlIdMap.set(normalizeName(`${first} ${last}`), p.id as number);
+            const fullName = `${first} ${last}`;
+            const normName = normalizeName(fullName);
+            nhlIdMap.set(normName, p.id as number);
+            rosterEntries.push({
+              normName, fullName, first, last,
+              nhlId:    p.id as number,
+              position: group === "goalies" ? "G" : group === "defensemen" ? "D" : "F",
+              teamAbbr: abbr,
+            });
           }
         }
       } catch { /* team may not exist in this season */ }
@@ -500,12 +605,40 @@ async function backfillNHL(
 
     logger.info({ season, rosterSize: nhlIdMap.size }, "NHL: rosters collected");
 
+    // ── Auto-populate NHL players from this season's rosters ─────────────────
+    const toInsert: typeof playersTable.$inferInsert[] = [];
+    for (const e of rosterEntries) {
+      if (dbNormMap.has(e.normName)) continue;
+      dbNormMap.set(e.normName, -1); // placeholder to prevent duplicate inserts
+      const dbTeamId = nhlTeamMap.get(e.teamAbbr) ?? null;
+      toInsert.push({
+        sport:     "NHL",
+        fullName:  e.fullName,
+        firstName: e.first,
+        lastName:  e.last,
+        teamId:    dbTeamId,
+        position:  e.position,
+        status:    "active",
+      });
+    }
+    if (toInsert.length > 0) {
+      for (let i = 0; i < toInsert.length; i += 100) {
+        await db.insert(playersTable).values(toInsert.slice(i, i + 100)).onConflictDoNothing();
+      }
+      // Rebuild dbNormMap with real IDs
+      const fresh = await db.select().from(playersTable).where(eq(playersTable.sport, "NHL"));
+      dbNormMap.clear();
+      for (const p of fresh) dbNormMap.set(normalizeName(p.fullName), p.id);
+      logger.info({ season, inserted: toInsert.length, total: dbNormMap.size }, "NHL: roster pre-population complete");
+    }
+    // ── End auto-populate ─────────────────────────────────────────────────────
+
     // Match our DB players to NHL IDs
     type Target = { dbId: number; nhlId: number };
     const targets: Target[] = [];
     for (const [normName, dbId] of dbNormMap) {
       const nhlId = nhlIdMap.get(normName);
-      if (nhlId) targets.push({ dbId, nhlId });
+      if (nhlId && dbId > 0) targets.push({ dbId, nhlId });
     }
 
     logger.info({ season, matched: targets.length }, "NHL: players matched");
