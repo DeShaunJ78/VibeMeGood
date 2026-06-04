@@ -1195,17 +1195,24 @@ export default function SlateBoard() {
                 <div className="h-3 border-l border-slate-800" />
                 {watchCount > 0 && (
                   <Badge className="font-mono text-xs bg-amber-900/40 text-amber-300 border border-amber-700/40 px-2 py-0.5">
-                    <Eye className="w-3 h-3 mr-1 inline" />{watchCount} watched
+                    <Eye className="w-3 h-3 mr-1 inline" />
+                    {actionTagFilter === "WATCH"
+                      ? `${watchCount} / ${playerRows.length} watched`
+                      : `${watchCount} watched`}
                   </Badge>
                 )}
                 {playCount > 0 && (
                   <Badge className="font-mono text-xs bg-emerald-900/40 text-emerald-300 border border-emerald-700/40 px-2 py-0.5">
-                    {playCount} PLAY
+                    {actionTagFilter === "PLAY"
+                      ? `${playCount} / ${playerRows.length} PLAY`
+                      : `${playCount} PLAY`}
                   </Badge>
                 )}
                 {noPlayCount > 0 && (
                   <Badge className="font-mono text-xs bg-rose-900/40 text-rose-300 border border-rose-700/40 px-2 py-0.5">
-                    {noPlayCount} gated
+                    {actionTagFilter === "NO-PLAY"
+                      ? `${noPlayCount} / ${playerRows.length} gated`
+                      : `${noPlayCount} gated`}
                   </Badge>
                 )}
               </div>
