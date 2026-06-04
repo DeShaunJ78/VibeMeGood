@@ -695,9 +695,12 @@ export default function SlateBoard() {
 
   // When the sport changes the available windows change too — reset to "upcoming"
   // so the view is never empty (wrong window selected for new sport).
+  // Also reset the chip filter whenever sport is cleared back to "all" so stale
+  // chip filters never silently narrow an all-sports view.
   const prevSport = useRef(sport);
   useEffect(() => {
     if (prevSport.current !== sport && sport !== "") {
+      if (sport === "all") setActionTagFilter("all");
       prevSport.current = sport;
       setSelectedWindow("upcoming");
     }
