@@ -340,7 +340,7 @@ export async function computeProjection(
 
   // Line type explanation
   const lineTypeExplain =
-    lineType === "goblin" ? `Goblin line — set ${Math.round((1 - stdAdj) * 100 + (stdAdj - 1) * 100)}% wider std, naturally easier to beat`
+    lineType === "goblin" ? `Goblin line — std widened ${Math.round((stdAdj - 1) * 100)}%, naturally easier to beat`
     : lineType === "demon" ? "Demon line — set artificially high, lower P(over) expected"
     : "Standard line";
 

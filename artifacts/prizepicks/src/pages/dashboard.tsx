@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useGetDashboardSummary,
   useListAlerts, getListAlertsQueryKey,
@@ -216,6 +216,16 @@ export default function Dashboard() {
     query: { queryKey: ["/api/dashboard/summary"] },
   });
 
+  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const { data: readiness } = useQuery<{
+    playersWithLogs: number; gameLogCount: number; calibrationBuckets: number;
+    isDataReady: boolean; isCalibrationReady: boolean;
+  }>({
+    queryKey: ["data-readiness"],
+    queryFn: () => fetch(`${base}/api/data-readiness`).then(r => r.json()),
+    staleTime: 5 * 60_000,
+  });
+
   const topProjProps: any[] = (data as any)?.topProjProps ?? [];
 
   return (
@@ -231,6 +241,19 @@ export default function Dashboard() {
           LIVE DATA
         </div>
       </div>
+
+      {/* Data-readiness warning */}
+      {readiness && !readiness.isDataReady && (
+        <div className="flex items-start gap-3 px-4 py-3 rounded-lg border border-amber-700/50 bg-amber-900/10 text-amber-300 text-xs font-mono">
+          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <span className="font-semibold">Model not seeded — scores may be unreliable.</span>
+            {" "}Only <strong>{readiness.playersWithLogs}</strong> player{readiness.playersWithLogs === 1 ? "" : "s"} have game logs (need 100+
+            {!readiness.isCalibrationReady ? `, and calibration has only ${readiness.calibrationBuckets} buckets` : ""}).
+            {" "}Go to <strong>Settings → Step 3 Backfill History</strong> to populate the model.
+          </div>
+        </div>
+      )}
 
       {isLoading || !data ? (
         <>

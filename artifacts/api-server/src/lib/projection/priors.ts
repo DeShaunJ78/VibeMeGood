@@ -26,7 +26,7 @@ export interface Prior {
 }
 
 /** Minimum games for a PLAY-eligible projection */
-export const MIN_GAMES_FOR_PLAY = 1;
+export const MIN_GAMES_FOR_PLAY = 5;
 
 /** Shrinkage strength — equivalent to this many "prior games" */
 export const SHRINKAGE_K = 8;

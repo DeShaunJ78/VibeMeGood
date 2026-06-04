@@ -5,6 +5,7 @@ import {
 } from "@workspace/db/schema";
 import { gte, and, eq, inArray, desc } from "drizzle-orm";
 import { detectAllSharpSignals, detectSharpMoney } from "../lib/propedge/sharp-detector";
+import { broadcastSyncStatus } from "../lib/sse";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -59,9 +60,11 @@ router.post("/sharp/compute", async (req, res) => {
     }
 
     logger.info({ sharpCount, publicCount, neutralCount, total: signalMap.size }, "Sharp signals computed");
+    broadcastSyncStatus("sharp", "success", `${signalMap.size} lines`);
     res.json({ status: "ok", sharpCount, publicCount, neutralCount, total: signalMap.size });
   } catch (err) {
     logger.error(err, "Sharp compute failed");
+    broadcastSyncStatus("sharp", "error", err instanceof Error ? err.message : "Unknown error");
     res.status(500).json({ error: "Internal server error" });
   }
 });

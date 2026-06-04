@@ -41,21 +41,21 @@ async function fetchHealth(): Promise<HealthData> {
 
 async function triggerSync(action: string): Promise<Response | null> {
   const map: Record<string, string> = {
-    "external-odds":  "/api/sync/external-odds",
-    "prop-scores":    "/api/sync/external-odds",
-    "projections":    "/api/sync/projections",
-    "injuries":       "/api/sync/injuries",
-    "variance":       "/api/sync/variance",
-    "pace":           "/api/admin/sync/pace",
-    "sharp":          "/api/sharp/compute",
-    "nfl-advanced":   "/api/admin/sync/nfl-advanced",
-    "calibration":      "/api/sync/calibration",
-    "historical-stats": "/api/sync/historical-stats",
-    "backfill-game-ids":      "/api/sync/backfill-game-ids",
-    "matchup-history":        "/api/sync/matchup-history",
-    "game-logs":              "/api/sync/game-logs",
-    "game-schedule":          "/api/sync/game-schedule",
-    "game-schedule-history":  "/api/sync/game-schedule-history",
+    "external-odds":        "/api/sync/external-odds",
+    "rescore-props":        "/api/sync/rescore-props",
+    "projections":          "/api/sync/projections",
+    "injuries":             "/api/sync/injuries",
+    "variance":             "/api/sync/variance",
+    "pace":                 "/api/admin/sync/pace",
+    "sharp":                "/api/sharp/compute",
+    "nfl-advanced":         "/api/admin/sync/nfl-advanced",
+    "calibration":          "/api/sync/calibration",
+    "historical-stats":     "/api/sync/historical-stats",
+    "backfill-game-ids":    "/api/sync/backfill-game-ids",
+    "matchup-history":      "/api/sync/matchup-history",
+    "game-logs":            "/api/sync/game-logs",
+    "game-schedule":        "/api/sync/game-schedule",
+    "game-schedule-history":"/api/sync/game-schedule-history",
   };
   const path = map[action];
   if (!path) return null;
@@ -68,19 +68,20 @@ async function triggerSync(action: string): Promise<Response | null> {
 // Actions not listed are synchronous (resolve from the HTTP response) or fall
 // back to a safety timeout.
 const JOB_NAME_BY_ACTION: Record<string, string> = {
-  "external-odds":     "external-odds",
-  "prop-scores":       "external-odds",
-  "projections":       "projections",
-  "injuries":          "sync-injuries",
-  "variance":          "variance",
-  "game-schedule":     "game-schedule",
-  "matchup-history":   "matchup-history",
-  "backfill-game-ids": "backfill-game-ids",
-  "game-logs":             "game-logs",
-  "game-schedule-history": "game-schedule-history",
-  "historical-stats":  "historical-stats",
-  "calibration":       "calibration",
-  "nfl-advanced":      "nfl-advanced-metrics",
+  "external-odds":        "external-odds",
+  "rescore-props":        "rescore-props",
+  "projections":          "projections",
+  "injuries":             "sync-injuries",
+  "variance":             "variance",
+  "game-schedule":        "game-schedule",
+  "matchup-history":      "matchup-history",
+  "backfill-game-ids":    "backfill-game-ids",
+  "game-logs":            "game-logs",
+  "game-schedule-history":"game-schedule-history",
+  "historical-stats":     "historical-stats",
+  "calibration":          "calibration",
+  "nfl-advanced":         "nfl-advanced-metrics",
+  "sharp":                "sharp",
 };
 
 function StatusIcon({ status, size = 16 }: { status: CheckStatus; size?: number }) {
@@ -184,20 +185,35 @@ function Section({
   );
 }
 
-const QUICK_FIXES = [
-  { label: "Sync Odds",        action: "external-odds", endpoint: "/api/sync/external-odds" },
-  { label: "Rescore Props",    action: "prop-scores",   endpoint: "/api/sync/external-odds" },
-  { label: "Sync Projections", action: "projections",   endpoint: "/api/sync/projections" },
-  { label: "Sync Injuries",    action: "injuries",      endpoint: "/api/sync/injuries" },
-  { label: "Compute Variance", action: "variance",      endpoint: "/api/sync/variance" },
-  { label: "Sync Pace",        action: "pace",          endpoint: "/api/admin/sync/pace" },
-  { label: "Sync Sharp",       action: "sharp",         endpoint: "/api/sharp/compute" },
-  { label: "Run Calibration",  action: "calibration",      endpoint: "/api/sync/calibration" },
-  { label: "Backfill History", action: "historical-stats", endpoint: "/api/sync/historical-stats" },
-  { label: "Backfill Game IDs", action: "backfill-game-ids", endpoint: "/api/sync/backfill-game-ids" },
-  { label: "Compute Matchups",  action: "matchup-history",   endpoint: "/api/sync/matchup-history" },
-  { label: "Sync Game Logs",       action: "game-logs",            endpoint: "/api/sync/game-logs" },
-  { label: "Sync Schedule History", action: "game-schedule-history", endpoint: "/api/sync/game-schedule-history" },
+interface PipelineStep {
+  step: number;
+  label: string;
+  action: string;
+  description: string;
+  isBrowserOnly?: boolean;
+  isLong?: boolean;
+}
+
+const PIPELINE_STEPS: PipelineStep[] = [
+  { step: 1, label: "Import PP Lines",    action: "",                  description: "Browser only — use the bookmarklet in your PP tab or paste JSON in the Settings page.", isBrowserOnly: true },
+  { step: 2, label: "Sync Schedule",      action: "game-schedule",     description: "Seeds the games table with today's matchups and team context." },
+  { step: 3, label: "Backfill History",   action: "historical-stats",  description: "Downloads all NBA/MLB/NHL/NFL game logs. First run takes 15–30 min.", isLong: true },
+  { step: 4, label: "Compute Matchups",   action: "matchup-history",   description: "Builds head-to-head history so the model adjusts for tough/soft matchups." },
+  { step: 5, label: "Sync Projections",   action: "projections",       description: "Runs Bayesian + distribution math (Poisson/NegBin/ZIP) on all active lines." },
+  { step: 6, label: "Run Calibration",    action: "calibration",       description: "Rebuilds probability buckets from historical logs. Requires Backfill first." },
+  { step: 7, label: "Sync Odds",          action: "external-odds",     description: "Fetches sportsbook lines from The Odds API. Costs API credits." },
+  { step: 8, label: "Rescore Props",      action: "rescore-props",     description: "Recalculates edge/action/PLAY scores. Free — no API call, no credits used." },
+  { step: 9, label: "Compute Variance",   action: "variance",          description: "Simulates floor/ceiling distributions for each line." },
+];
+
+const UTILITY_STEPS = [
+  { label: "Sync Injuries",      action: "injuries" },
+  { label: "Sync Game Logs",     action: "game-logs" },
+  { label: "NFL Advanced",       action: "nfl-advanced" },
+  { label: "Sync Pace",          action: "pace" },
+  { label: "Sync Sharp",         action: "sharp" },
+  { label: "Backfill Game IDs",  action: "backfill-game-ids" },
+  { label: "Schedule History",   action: "game-schedule-history" },
 ];
 
 export default function SystemHealth() {
@@ -274,26 +290,45 @@ export default function SystemHealth() {
     refetch();
   }, []);
 
-  // Live job completion. The server broadcasts `sync_status` the instant a job
-  // truly finishes; we re-run the health check then so freshness rows flip to
-  // green at the right moment — for every job, present and future. This is the
-  // single source of "is it done", replacing brittle per-button timers.
+  // Live job completion — auto-reconnecting SSE so a network blip doesn't
+  // leave buttons spinning forever. Exponential backoff up to 30s.
   useEffect(() => {
     const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-    const es = new EventSource(`${base}/api/events`);
-    es.addEventListener("sync_status", (e) => {
+    let es: EventSource;
+    let retryMs = 1000;
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const handler = (e: Event) => {
       let d: { job?: string; status?: string };
       try { d = JSON.parse((e as MessageEvent).data); } catch { return; }
       if (d.status !== "success" && d.status !== "error") return;
       refetchRef.current();
-      // Strict match only: settle the in-flight Fix when ITS job finishes.
-      // Never wildcard-settle on an unrelated job (that flips the wrong button).
       const p = pendingFix.current;
       if (p && p.jobName !== null && p.jobName === d.job) {
         settleFixRef.current(d.status === "success");
       }
-    });
+    };
+
+    function connect() {
+      es = new EventSource(`${base}/api/events`);
+      es.addEventListener("sync_status", handler);
+      es.addEventListener("open", () => { retryMs = 1000; });
+      es.addEventListener("error", () => {
+        es.close();
+        if (!cancelled) {
+          retryTimer = setTimeout(() => {
+            retryMs = Math.min(retryMs * 2, 30000);
+            connect();
+          }, retryMs);
+        }
+      });
+    }
+
+    connect();
     return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
       es.close();
       if (pendingFix.current?.timer) clearTimeout(pendingFix.current.timer);
     };
@@ -309,7 +344,8 @@ export default function SystemHealth() {
   }, [autoRefresh, refetch]);
 
   const handleFix = async (action: string) => {
-    const label = QUICK_FIXES.find(f => f.action === action)?.label ?? action;
+    const allSteps = [...PIPELINE_STEPS, ...UTILITY_STEPS];
+    const label = allSteps.find(s => s.action === action)?.label ?? action;
     if (pendingFix.current?.timer) clearTimeout(pendingFix.current.timer);
     pendingFix.current = { action, jobName: JOB_NAME_BY_ACTION[action] ?? null, label, timer: null };
     setFixing(action);
@@ -404,34 +440,91 @@ export default function SystemHealth() {
         </div>
       )}
 
+      {/* ── Data Pipeline ── */}
+      <div className="border border-border/40 rounded-lg bg-slate-900/50 overflow-hidden">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40 bg-slate-800/40">
+          <Zap size={13} className="text-yellow-400" />
+          <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground font-semibold">Data Pipeline</span>
+          <span className="text-[10px] text-muted-foreground/60 font-mono ml-auto">Run steps in order for a fresh setup</span>
+        </div>
+        <div className="divide-y divide-border/20">
+          {PIPELINE_STEPS.map(step => {
+            const st = fixStatus[step.action];
+            const isRunning = fixing === step.action;
+            return (
+              <div key={step.step} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-800/20 transition-colors">
+                <span className={cn(
+                  "flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold font-mono",
+                  step.isBrowserOnly
+                    ? "bg-slate-700/60 text-slate-400 border border-slate-600/50"
+                    : st === "done"
+                      ? "bg-emerald-900/60 text-emerald-400 border border-emerald-700/50"
+                      : "bg-slate-800 text-muted-foreground border border-border/50",
+                )}>{step.step}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm text-foreground">{step.label}</span>
+                    {step.isBrowserOnly && (
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 border border-slate-600/40">BROWSER ONLY</span>
+                    )}
+                    {step.isLong && !step.isBrowserOnly && (
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400 border border-amber-700/30">15–30 MIN</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/70 font-mono mt-0.5 truncate">{step.description}</p>
+                </div>
+                {!step.isBrowserOnly && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className={cn(
+                      "shrink-0 h-7 text-[11px] font-mono px-3 gap-1.5 border-border/50",
+                      isRunning   && "opacity-60",
+                      st === "done"  && "border-emerald-700/50 text-emerald-400",
+                      st === "error" && "border-red-700/50 text-red-400",
+                    )}
+                    onClick={() => handleFix(step.action)}
+                    disabled={!!fixing}
+                  >
+                    {isRunning ? <RefreshCw size={10} className="animate-spin" />
+                      : st === "done"  ? <CheckCircle2 size={10} />
+                      : st === "error" ? <XCircle size={10} />
+                      : <Zap size={10} />}
+                    {isRunning ? "Running…" : st === "done" ? "Done" : st === "error" ? "Error" : "Run"}
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Utilities ── */}
       <div className="border border-border/40 rounded-lg bg-slate-900/50 p-4">
-        <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3">Quick Fix</p>
+        <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3">Utilities — run as needed</p>
         <div className="flex flex-wrap gap-2">
-          {QUICK_FIXES.map(f => {
-            const st = fixStatus[f.action];
+          {UTILITY_STEPS.map(u => {
+            const st = fixStatus[u.action];
+            const isRunning = fixing === u.action;
             return (
               <Button
-                key={f.action}
+                key={u.action}
                 size="sm"
                 variant="outline"
                 className={cn(
                   "text-xs font-mono h-8 gap-1.5 border-border/50",
-                  st === "running" && "opacity-60",
-                  st === "done"    && "border-emerald-700/50 text-emerald-400",
-                  st === "error"   && "border-red-700/50 text-red-400",
+                  isRunning    && "opacity-60",
+                  st === "done"  && "border-emerald-700/50 text-emerald-400",
+                  st === "error" && "border-red-700/50 text-red-400",
                 )}
-                onClick={() => handleFix(f.action)}
+                onClick={() => handleFix(u.action)}
                 disabled={!!fixing}
               >
-                {st === "running" ? (
-                  <><RefreshCw size={11} className="animate-spin" />{f.label}</>
-                ) : st === "done" ? (
-                  <><CheckCircle2 size={11} />{f.label}</>
-                ) : st === "error" ? (
-                  <><XCircle size={11} />{f.label}</>
-                ) : (
-                  <><Zap size={11} />{f.label}</>
-                )}
+                {isRunning ? <RefreshCw size={11} className="animate-spin" />
+                  : st === "done"  ? <CheckCircle2 size={11} />
+                  : st === "error" ? <XCircle size={11} />
+                  : <Zap size={11} />}
+                {u.label}
               </Button>
             );
           })}

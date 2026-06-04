@@ -16,7 +16,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge, BestValueBadge } from "@/components/ui/badges";
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
 import { TeamPicksBoard } from "@/components/team-picks-board";
-import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight, Filter, ChevronDown, ChevronRight, X, Clock } from "lucide-react";
+import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, AlertTriangle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight, Filter, ChevronDown, ChevronRight, X, Clock } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ReferenceLine, Cell, ResponsiveContainer, AreaChart, Area } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { useEntry, type EntryPick } from "@/lib/entry-context";
@@ -571,6 +571,18 @@ export default function SlateBoard() {
     refetchInterval: 60_000,
   });
 
+  const { data: readiness } = useQuery<{
+    playersWithLogs: number; gameLogCount: number; calibrationBuckets: number;
+    isDataReady: boolean; isCalibrationReady: boolean;
+  }>({
+    queryKey: ["data-readiness"],
+    queryFn: async () => {
+      const b = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+      return fetch(`${b}/api/data-readiness`).then(r => r.json());
+    },
+    staleTime: 5 * 60_000,
+  });
+
   function toggleSort(col: string) {
     if (sortCol === col) {
       setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -1112,6 +1124,17 @@ export default function SlateBoard() {
 
   return (
     <div className="space-y-4 h-full flex flex-col">
+      {/* Data-readiness warning */}
+      {readiness && !readiness.isDataReady && (
+        <div className="flex items-start gap-3 px-4 py-2.5 rounded-lg border border-amber-700/50 bg-amber-900/10 text-amber-300 text-xs font-mono shrink-0">
+          <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+          <span>
+            <strong>Model not seeded:</strong> only {readiness.playersWithLogs} player{readiness.playersWithLogs === 1 ? "" : "s"} have game logs (need 100+). Scores shown here may be unreliable — go to{" "}
+            <strong>Settings → Step 3 Backfill History</strong> to populate the model.
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="space-y-3 border-b border-border pb-4 shrink-0">
         {/* Row 1: title + tabs (left) · status badges / mobile controls (right) */}

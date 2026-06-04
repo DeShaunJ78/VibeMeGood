@@ -24,4 +24,6 @@
 - [Shark knowledge injection](shark-knowledge-injection.md) — Shark prompt also pulls EVERY *.md in its knowledge folders; editing prompt+UI alone leaves stale framing; grep all of knowledge/.
 - [Settings data-health UI freshness](data-health-ui-freshness.md) — PP sync row greens off boardFreshnessAt (pp_lines age), generic rows off provider aggregation; don't use lastPullLogs (only 30).
 - [Sync completion signal](sync-completion-signal.md) — sync routes are fire-and-forget; completion = `sync_status` SSE event on /api/events, NOT a fixed-delay refetch; jobName ≠ route/action name.
+- [Data-readiness thresholds](data-readiness-thresholds.md) — isDataReady = playersWithLogs≥100; isCalibrationReady = calibrationBuckets≥50; exposed at GET /api/data-readiness; shown as amber banner on Dashboard + Slate.
+- [Rescore vs Sync Odds](rescore-vs-sync-odds.md) — POST /api/sync/rescore-props runs only recalcPropScores() (free, no API call); POST /api/sync/external-odds fetches live lines (costs Odds API credits). Never conflate the two.
 - [Roster auto-population](roster-auto-population.md) — backfill was silently dropping 95%+ of boxscore data; fix: pre-fetch all 30 NBA/32 NHL/MLB rosters and upsert unknown players before boxscore pass; TRUNCATE calibration + re-run calibration job after first full run.

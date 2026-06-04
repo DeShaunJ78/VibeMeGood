@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { dataPullLogsTable, alertsTable, syncRunsTable, playersTable, injuriesTable, ppLinesTable, gamesTable } from "@workspace/db/schema";
-import { eq, and, isNull, or, gte, lte } from "drizzle-orm";
+import { dataPullLogsTable, alertsTable, syncRunsTable, playersTable, injuriesTable, ppLinesTable, gamesTable, playerGameLogsTable, probabilityCalibrationTable } from "@workspace/db/schema";
+import { eq, and, isNull, or, gte, lte, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { broadcastSyncStatus, broadcast } from "../lib/sse";
 import { processPpData } from "../lib/sync/prizepicks";
@@ -346,6 +346,15 @@ router.post("/sync/projections", async (req, res) => {
   await runSync("nba-stats", "projections", syncProjectionsImpl, res);
 });
 
+// Rescore props only — recalculates edge/action scores from existing projections.
+// Does NOT call The Odds API so costs zero credits.
+router.post("/sync/rescore-props", async (req, res) => {
+  await runSync("internal", "rescore-props", async () => {
+    await recalcPropScores();
+    return 0;
+  }, res);
+});
+
 router.post("/sync/scores", async (req, res) => {
   // Logs under "espn" (ESPN game logs), NOT "prizepicks" — PP's data-health dot
   // must reflect only the browser import, never a server-side scores pull.
@@ -474,6 +483,32 @@ router.post("/sync/all", async (req, res) => {
   }
 
   broadcastSyncStatus("all", "success", "All syncs complete");
+});
+
+// Lightweight data-readiness check — used by the UI to show bootstrap warnings.
+router.get("/data-readiness", async (_req, res) => {
+  try {
+    const [logStats] = await db.select({
+      cnt:     sql<number>`count(*)`,
+      players: sql<number>`count(distinct ${playerGameLogsTable.playerId})`,
+    }).from(playerGameLogsTable);
+    const [calStats] = await db.select({
+      cnt: sql<number>`count(*)`,
+    }).from(probabilityCalibrationTable);
+    const gameLogCount       = Number(logStats?.cnt ?? 0);
+    const playersWithLogs    = Number(logStats?.players ?? 0);
+    const calibrationBuckets = Number(calStats?.cnt ?? 0);
+    res.json({
+      gameLogCount,
+      playersWithLogs,
+      calibrationBuckets,
+      isDataReady:        playersWithLogs >= 100,
+      isCalibrationReady: calibrationBuckets >= 50,
+    });
+  } catch (err) {
+    logger.error({ err }, "data-readiness check failed");
+    res.status(500).json({ gameLogCount: 0, playersWithLogs: 0, calibrationBuckets: 0, isDataReady: false, isCalibrationReady: false });
+  }
 });
 
 export default router;
