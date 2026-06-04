@@ -5,6 +5,7 @@ import {
   ourProjectionsTable, watchlistItemsTable, injuriesTable,
   entriesTable, playersTable, teamsTable, ppLinesTable,
   propScoresTable, gamesTable, probabilityCalibrationTable,
+  playerStreaksTable,
 } from "@workspace/db/schema";
 import { eq, desc, isNotNull, inArray, and, asc, gte, lte, sql } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
@@ -19,7 +20,7 @@ async function buildAnalystContext(): Promise<string> {
   const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const dayEnd   = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
 
-  const [activeLinesRaw, allTeams, todayGames, injuries, recentEntries, pendingEntries, watchRows, calStats] =
+  const [activeLinesRaw, allTeams, todayGames, injuries, recentEntries, pendingEntries, watchRows, calStats, topStreaks] =
     await Promise.all([
       // Full active slate: lines joined with projections and scores
       db.select({
@@ -73,6 +74,19 @@ async function buildAnalystContext(): Promise<string> {
       db.select().from(watchlistItemsTable).limit(20),
 
       db.select({ cnt: sql<number>`count(*)` }).from(probabilityCalibrationTable),
+
+      db.select({
+        playerName:   playersTable.fullName,
+        sport:        playersTable.sport,
+        statType:     playerStreaksTable.statType,
+        streakType:   playerStreaksTable.streakType,
+        streakLength: sql<number>`abs(${playerStreaksTable.currentStreak})`,
+      })
+        .from(playerStreaksTable)
+        .innerJoin(playersTable, eq(playerStreaksTable.playerId, playersTable.id))
+        .where(sql`abs(${playerStreaksTable.currentStreak}) >= 3`)
+        .orderBy(desc(sql<number>`abs(${playerStreaksTable.currentStreak})`))
+        .limit(8),
     ]);
 
   const teamMap = Object.fromEntries(allTeams.map(t => [t.id, t]));
@@ -208,6 +222,14 @@ async function buildAnalystContext(): Promise<string> {
       ? pendingEntries.map(e =>
           `  • ${e.pickCount}-pick ${e.entryType} — $${e.stake} → $${e.potentialPayout}${e.notes ? ` — "${e.notes}"` : ""}`)
       : ["  None"]),
+    "",
+    "── HOT STREAKS (active ≥3-game over/under runs) ───────────────────────",
+    ...(topStreaks.length > 0
+      ? topStreaks.map(s => {
+          const arrow = s.streakType === "over" ? "▲ OVER" : "▼ UNDER";
+          return `  • ${s.playerName} (${s.sport}) — ${s.statType} ${arrow} × ${s.streakLength} games`;
+        })
+      : ["  None tracked yet (import PP lines and let the model run to populate)."]),
   ];
 
   return blocks.join("\n");
@@ -305,7 +327,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res): Promise<v
     const contextSnapshot = await buildAnalystContext();
 
     const systemPrompt = [
-      "You are an expert sports analytics AI for a private PrizePicks analyst. You have full access to today's live slate including calibrated probability scores, prop scoring grades (PLAY/ACTION/WATCH/NO-PLAY), injury reports, game schedules, and the analyst's performance history — all provided below.",
+      "You are an expert sports analytics AI for a private PrizePicks analyst. You have full access to today's live slate including calibrated probability scores, prop scoring grades (PLAY/ACTION/WATCH/NO-PLAY), injury reports, game schedules, the analyst's performance history, and active player streaks — all provided below.",
       "",
       "Core behaviors:",
       "• When asked for picks: lead with PLAY props, then ACTION. Never recommend WATCH or NO-PLAY as primary picks.",
@@ -324,6 +346,21 @@ router.post("/anthropic/conversations/:id/messages", async (req, res): Promise<v
       "  State combined entry EV = (P1×P2×…×Pn) × multiplier when making entry recommendations.",
       "• If PLAY count is 0, say so honestly and recommend ACTION props with appropriate caveats.",
       "• The model needs ≥5 games per player — 'N:?' or small N means less reliable.",
+      "• HOT STREAKS section: players on ≥3-game over/under runs. A streak ≥5 is a strong pattern.",
+      "  Cross-reference with PLAY/ACTION tags — streak + PLAY = high-conviction pick.",
+      "  Under streaks on high-line players = potential fade confirmation.",
+      "",
+      "Intelligence features available in the app:",
+      "• Streak Tracker — multi-game over/under streaks, sport filter, min-streak filter",
+      "• CLV Tracker — closing line value history (positive CLV = beat the market, best long-run process signal)",
+      "• Matchup Analysis — historical over rate vs specific opponents",
+      "• Lineup Factory — generates optimal Power/Flex entries from the slate",
+      "• Stability Radar — IQR/variance consistency per player/stat",
+      "• Fatigue Tracker — back-to-back and travel impact on counting stats",
+      "• Usage Signals — minutes/usage trend vs season average",
+      "• Model Calibration — Brier Score 0.2104, 36,681 samples (0.25 = random; lower = better)",
+      "• Model Audit — 74.9% hit rate on high-confidence predictions",
+      "• Slate Board has Player / Team / Culture tabs for different pick categories",
       "",
       contextSnapshot,
     ].join("\n");

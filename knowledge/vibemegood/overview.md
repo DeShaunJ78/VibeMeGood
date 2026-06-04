@@ -10,6 +10,7 @@ A desktop-first analytics tool that:
 - Tracks variance signals (fatigue, blowout risk, usage trends, matchup depth)
 - Manages an entry log (Journal) with P&L tracking
 - Runs an AI Analyst for multi-turn analysis conversations
+- Runs a Personal Shark (quick-query sharp assistant) for fast edge questions
 
 ## What It Is NOT
 - Not a sportsbook. No real-money wagering happens inside the app.
@@ -17,25 +18,45 @@ A desktop-first analytics tool that:
 - Not PropEdge (that's a different tool for sportsbook prop betting).
 - Not a general-purpose sports betting tool — PrizePicks pick'em only.
 
-## The 8 Core Screens
-1. **Command Center** — KPI overview, top plays, injuries, today's games
-2. **Slate Board** — All active props with edge scoring, watchlist, optimizer
-3. **Injuries & News** — Status tracking with severity colors
-4. **Entry Builder** — Cart with Pick'em Math panel (break-even, EV, payout shift)
-5. **Journal** — Logged entries with P&L, WIN/LOSS/PARTIAL results
-6. **Review Dashboard** — Bankroll curve, hit rates, CLV tracking
-7. **AI Analyst** — Multi-turn Claude-powered chat with live data context
-8. **Settings & Data Health** — Sync controls, Variance Intelligence config
+## Core Screens
+
+### Analytics
+1. **Command Center** — KPI overview (active props, watched, pending entries, avg edge), top PLAY props, recent injuries, today's games with O/U
+2. **Slate Board** — All active props with edge scoring, watchlist toggles, sport/action/edge filters, preset quick-filters (Safe/Aggressive/Longshot), Team picks tab, Culture picks tab, PropDetailSheet, line optimizer
+3. **Injuries & News** — Status tracking with severity colors + Intel Feed (hot streaks, line moves, model plays/fades, lineup confirmations)
+4. **Entry Builder** — Picks cart with Power/Flex toggle, real payout calculator, Kelly fraction, stake input, LOG ENTRY
+5. **Journal** — Entry history with P&L, WIN/LOSS/PARTIAL/PENDING results, early exit badge, AI Entry Analysis (SSE streaming)
+6. **Review Dashboard** — Bankroll curve, Total P&L, Entry Hit Rate, Pick Hit Rate, Avg CLV KPIs
+7. **AI Analyst** — Multi-turn Claude-powered chat with full live slate context (persistent conversation history)
+8. **Lineup Factory** — Generates optimal Power or Flex entries from the current slate; lock/exclude props; returns combined P(hits) and EV
+
+### Intelligence Pages
+9.  **Streak Tracker** — Multi-game over/under streaks per player/stat. Filter by sport and minimum streak length (1+/2+/3+/5+). Streaks ≥5 = strong pattern.
+10. **CLV Tracker** — Closing Line Value history. Positive CLV = you beat the closing number (process quality signal independent of outcomes).
+11. **Matchup Analysis** — Head-to-head over rate vs specific opponents. 70%+ over rate vs an opponent = matchup edge.
+12. **Model Calibration** — Brier Score 0.2104 (lower = better; 0.25 = random coin flip). 36,681 samples. Measures how well P(Over)% matches real hit rates.
+13. **Model Audit** — 74.9% hit rate on high-confidence predictions. Breakdown by sport, stat type, and probability bucket.
+14. **Stability Radar** — Visual consistency per player/stat. IQR and variance vs model expectation. High variance + high line = risk.
+15. **Fatigue Tracker** — Back-to-back games, travel miles, timezone shifts, rest days. High fatigue hurts counting stats (NBA especially).
+16. **Usage Signals** — Minutes/usage trends vs season average. +15% spike = positive signal. -15% drop = potential fade flag.
+17. **Shark Chat** — Quick-query sharp analytics assistant (single-session, no history). Fast edge questions, build correlated entries, check break-even math.
+
+### System
+18. **Settings & Data Health** — Sync controls per provider, Sync All, live sync logs
+19. **System Status** — Full diagnostic health check with numbered data pipeline steps
+
+## Slate Board Tabs
+- **Player** — Standard player props (default view)
+- **Team** — Team total props (team-level over/under; pickCategory='team')
+- **Culture** — Entertainment/pop culture picks (no historical game log data — model-free; pickCategory='culture')
 
 ## The Variance Intelligence Engine
-An optional contextual overlay that adds:
+An optional contextual overlay (master toggle in Settings) that adds:
 - Fatigue & Rest Modeling (back-to-backs, travel miles, timezone shifts)
 - Game Environment scoring (blowout risk, spread, pace)
 - Role & Usage Trends (minutes spike or drop vs season average)
 - Matchup Depth (historical over rate vs specific opponent)
 - EV modifier (capped ±15%) applied to prop scores
-
-Master toggle is OFF by default. When OFF, the app behaves identically to before.
 
 ## Data Infrastructure
 

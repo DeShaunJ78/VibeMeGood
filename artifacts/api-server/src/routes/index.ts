@@ -41,6 +41,7 @@ import sharpRouter from "./sharp";
 import nflAdvancedRouter from "./nfl-advanced";
 import portfolioRouter from "./portfolio";
 import auditRouter from "./audit";
+import intelFeedRouter from "./intel-feed";
 
 const router: IRouter = Router();
 
@@ -86,5 +87,6 @@ router.use(sharpRouter);
 router.use(nflAdvancedRouter);
 router.use(portfolioRouter);
 router.use(auditRouter);
+router.use(intelFeedRouter);
 
 export default router;

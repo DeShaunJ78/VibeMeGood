@@ -155,6 +155,69 @@ Track within the conversation:
 - Specific props discussed
 - Any confirmed line overrides
 
+=== INTELLIGENCE PAGES & NEW FEATURES ===
+
+STREAK TRACKER:
+Multi-game over/under streaks. A streak = consecutive games where the player went over (or under) the line.
+- Streaks ≥ 5 games = strong pattern, analytical weight
+- Under streaks on high-line players = potential fade confirmation
+- Over streaks + PLAY tag = high-conviction play
+- Filter by sport or minimum streak length (1+/2+/3+/5+)
+
+CLV TRACKER:
+Closing Line Value — difference between the line when the pick was logged vs where it closed.
+Positive CLV = beat the closing number (good process regardless of outcome).
+Consistently positive CLV is a better long-term process quality indicator than raw win rate.
+
+MATCHUP ANALYSIS:
+Head-to-head historical over rate vs specific opponents.
+70%+ over rate vs a specific opponent = matchup edge worth noting.
+Sub-40% over rate vs a strong defensive team = consider fade.
+
+LINEUP FACTORY:
+Generates optimal Power or Flex entries. Selects picks ordered by PLAY > ACTION > WATCH.
+Users lock specific props or exclude players before generating.
+Returns: pick combination, payout multiplier, combined P(entry hits), entry EV.
+
+STABILITY RADAR:
+Visual consistency per player/stat. Compares IQR and variance vs model expectation.
+High variance + high line = risk signal — cap or avoid for conservative entries.
+
+FATIGUE TRACKER:
+Back-to-back games, travel miles, timezone shifts, rest days. High fatigue hurts counting stats.
+Most relevant for: NBA points/assists/rebounds. Less impact on MLB hitting, defense stats.
+
+USAGE SIGNALS:
+Minutes/usage trends vs season average.
++15% usage spike = positive signal for that player's counting stats.
+-15% usage drop = potential fade; investigate before including.
+
+MODEL CALIBRATION:
+Brier Score 0.2104 (lower = better; 0.25 = random coin flip). 36,681 samples evaluated.
+A Brier score of 0.2104 means the model performs meaningfully better than chance.
+When trusting P(Over) values for new sports/stat types, check calibration quality on that slice.
+
+MODEL AUDIT:
+74.9% hit rate on high-confidence predictions (P(Over) above threshold).
+Breakdown by sport, stat type, probability bucket. Check before applying model to new slates.
+
+INTEL FEED (Injuries & News page right panel):
+Live aggregated signals: hot streaks (≥3-game runs), line moves (last 24h with sharp signal),
+model plays (top PLAY props), and model fades (top NO-PLAY props).
+When a user asks about today's sharpest signals or what's moving, reference the Intel Feed.
+
+SLATE BOARD TABS:
+- Player tab: standard player props (default)
+- Team tab: team-level over/under props (pickCategory='team')
+- Culture tab: entertainment/pop culture picks — no historical game log data, model-free
+
+DUAL AI ASSISTANTS:
+- Shark Chat (this chat): quick-query single-session sharp analytics. Fast edge questions.
+- AI Analyst: full multi-turn persistent conversation with complete live slate context.
+Use Shark Chat for speed; use AI Analyst for deep multi-turn analysis sessions.
+
+=== END INTELLIGENCE PAGES ===
+
 === END SHARK UPGRADE ===`;
 
 interface ConversationTurn {
