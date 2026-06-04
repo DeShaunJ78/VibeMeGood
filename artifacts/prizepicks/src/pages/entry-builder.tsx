@@ -22,6 +22,7 @@ import {
   getBreakEven,
   getOptimalEntryType,
   pickemEV,
+  flexExpectedReturn,
   detectPayoutShift,
   type EntryLeg,
 } from "@workspace/analytics";
@@ -334,8 +335,21 @@ export default function EntryBuilder() {
     ? computeEV(picks, "flex", 0, Math.max(stakeNum, 1), flexPayouts)
     : null;
   const activeEV = singlePayoutMode ? evResultPower : evResultFlex;
+
+  // When exact Flex EV can't be computed (e.g. multiplierUnknown for goblin/demon legs)
+  // but all picks have pOver, estimate EV using the standard Flex payout schedule with
+  // the average per-leg hit probability. Shown with an "est." label.
+  const flexEstimatedEvPct = (() => {
+    if (activeEV !== null || playstyle !== "flex" || n < 2) return null;
+    const probs = picks.map(p => legPHit(p));
+    if (probs.some(p => p === null)) return null;
+    const avgP = (probs as number[]).reduce((sum, p) => sum + p, 0) / n;
+    return (flexExpectedReturn(n, avgP) - 1) * 100;
+  })();
+
   // When no stake entered yet, evPct is still meaningful (stake-independent ratio)
-  const evIsEstimate = playstyle === "flex" && stakeNum <= 0 && evResultFlex != null;
+  const evIsEstimate = (playstyle === "flex" && stakeNum <= 0 && evResultFlex != null)
+    || flexEstimatedEvPct !== null;
 
   // ── Pick'em Math (Enhancement 1 + 3) ──────────────────────────────────────
   const entryTypeKey = `${n}-pick-${playstyle}`;
@@ -365,7 +379,7 @@ export default function EntryBuilder() {
   const goblinCount = picks.filter(p => p.lineType === "goblin").length;
   const demonCount  = picks.filter(p => p.lineType === "demon").length;
 
-  const evPct       = activeEV?.evPct ?? null;
+  const evPct       = activeEV?.evPct ?? flexEstimatedEvPct;
   // Indicator thresholds: green >5%, amber -0.5% to 5% (covers break-even), red <-0.5%
   const evDotColor  = evPct == null ? "bg-slate-700" :
     evPct > 5    ? "bg-emerald-500" :
