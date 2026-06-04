@@ -2,14 +2,56 @@
 // All formulas are pick'em-specific: fixed payouts, joint probability only.
 // EV = (∏ leg_probs) × multiplier − 1  (as a decimal; multiply by 100 for %)
 
+// ── Flex break-even (numerical) ───────────────────────────────────────────────
+// Flex has partial-credit payouts; break-even is the per-leg probability p where
+// E[return] = 1.  Solved by bisection over the actual PrizePicks payout table.
+
+function binomCoeff(n: number, k: number): number {
+  if (k < 0 || k > n) return 0;
+  if (k === 0 || k === n) return 1;
+  let c = 1;
+  for (let i = 0; i < k; i++) c = (c * (n - i)) / (i + 1);
+  return Math.round(c);
+}
+
+// PrizePicks Flex exact-hit payouts: { hits: multiplier }
+const FLEX_PAYOUTS: Record<number, Record<number, number>> = {
+  3: { 3: 5, 2: 1.25 },
+  4: { 4: 10, 3: 2.5 },
+  5: { 5: 20, 4: 4, 3: 1 },
+  6: { 6: 40, 5: 6, 4: 1.5 },
+};
+
+function flexExpectedReturn(n: number, p: number): number {
+  const schedule = FLEX_PAYOUTS[n];
+  if (!schedule) return 0;
+  const q = 1 - p;
+  let ev = 0;
+  for (const [kStr, mult] of Object.entries(schedule)) {
+    const k = Number(kStr);
+    ev += binomCoeff(n, k) * Math.pow(p, k) * Math.pow(q, n - k) * mult;
+  }
+  return ev;
+}
+
+/** Bisection root-find: per-leg p where E[flex return] = 1. */
+function flexBreakEven(n: number): number {
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 64; i++) {
+    const mid = (lo + hi) / 2;
+    if (flexExpectedReturn(n, mid) < 1) lo = mid; else hi = mid;
+  }
+  return Math.round(((lo + hi) / 2) * 10000) / 10000;
+}
+
 export const ENTRY_TYPES: Record<string, { multiplier: number; breakEven: number }> = {
   "2-pick-power": { multiplier: 3,  breakEven: 0.5774 },
   "3-pick-power": { multiplier: 6,  breakEven: 0.5503 },
   "4-pick-power": { multiplier: 10, breakEven: 0.5623 },
   "5-pick-power": { multiplier: 20, breakEven: 0.5493 }, // (1/20)^(1/5)
-  "5-pick-flex":  { multiplier: 8,  breakEven: 0.5283 },
+  "5-pick-flex":  { multiplier: 8,  breakEven: flexBreakEven(5) }, // ~43.8% via partial-credit payout table
   "6-pick-power": { multiplier: 40, breakEven: 0.5408 }, // (1/40)^(1/6)
-  "6-pick-flex":  { multiplier: 15, breakEven: 0.5188 },
+  "6-pick-flex":  { multiplier: 15, breakEven: flexBreakEven(6) }, // ~45.2% via partial-credit payout table
 };
 
 /**

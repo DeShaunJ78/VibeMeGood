@@ -360,6 +360,9 @@ export default function EntryBuilder() {
       ) * 100
     : null;
 
+  const goblinCount = picks.filter(p => p.lineType === "goblin").length;
+  const demonCount  = picks.filter(p => p.lineType === "demon").length;
+
   const evPct       = activeEV?.evPct ?? null;
   // Indicator thresholds: green >5%, amber -0.5% to 5% (covers break-even), red <-0.5%
   const evDotColor  = evPct == null ? "bg-slate-700" :
@@ -576,6 +579,24 @@ export default function EntryBuilder() {
                 <div className="h-3 border-l border-slate-700 mx-1 shrink-0" />
                 <span className="text-[10px] font-mono text-emerald-500/70 shrink-0">
                   {optimalKey} is optimal for {n} legs ({(getBreakEven(optimalKey) * 100).toFixed(1)}% break-even per leg)
+                </span>
+              </>
+            )}
+
+            {/* Goblin/demon composition warnings */}
+            {goblinCount > 0 && (
+              <>
+                <div className="h-3 border-l border-slate-700 mx-1 shrink-0" />
+                <span className="text-[10px] font-mono text-amber-400/90 shrink-0">
+                  ⚠ {goblinCount} goblin leg{goblinCount > 1 ? "s" : ""} — lower payout tier reduces entry EV; prefer ★BV standard lines
+                </span>
+              </>
+            )}
+            {demonCount > 0 && (
+              <>
+                <div className="h-3 border-l border-slate-700 mx-1 shrink-0" />
+                <span className="text-[10px] font-mono text-sky-400/80 shrink-0">
+                  ⚡ {demonCount} demon leg{demonCount > 1 ? "s" : ""} — confirm enhanced multiplier is set or EV may be overstated
                 </span>
               </>
             )}
