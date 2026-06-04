@@ -410,6 +410,7 @@ paths:
         - { name: playerId, in: query, schema: { type: integer } }
         - { name: gameId, in: query, schema: { type: integer } }
         - { name: since, in: query, schema: { type: string, format: date-time } }
+        - { name: slateOnly, in: query, schema: { type: boolean }, description: "When true, only return injuries for players on the active slate, injuries linked to non-final games, or recently-added manual reports (last 7 days)." }
       responses:
         "200":
           description: Injuries

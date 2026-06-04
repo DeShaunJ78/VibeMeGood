@@ -487,7 +487,8 @@ export const ListInjuriesQueryParams = zod.object({
   "sport": zod.coerce.string().optional(),
   "playerId": zod.coerce.number().optional(),
   "gameId": zod.coerce.number().optional(),
-  "since": zod.date().optional()
+  "since": zod.date().optional(),
+  "slateOnly": zod.coerce.boolean().optional().describe('When true, only return injuries for players on the active slate, injuries linked to non-final games, or recently-added manual reports (last 7 days).')
 })
 
 export const ListInjuriesResponseItem = zod.object({

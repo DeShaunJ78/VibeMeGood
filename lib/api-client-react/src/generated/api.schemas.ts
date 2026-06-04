@@ -1228,6 +1228,10 @@ sport?: string;
 playerId?: number;
 gameId?: number;
 since?: string;
+/**
+ * When true, only return injuries for players on the active slate, injuries linked to non-final games, or recently-added manual reports (last 7 days).
+ */
+slateOnly?: boolean;
 };
 
 export type ListLineupConfirmationsParams = {

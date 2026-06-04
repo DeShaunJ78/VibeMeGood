@@ -1,23 +1,57 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { injuriesTable, playersTable, teamsTable } from "@workspace/db/schema";
-import { eq, and, gte, inArray, type SQL } from "drizzle-orm";
+import { injuriesTable, playersTable, teamsTable, gamesTable, ppLinesTable } from "@workspace/db/schema";
+import { eq, and, gte, inArray, isNotNull, type SQL } from "drizzle-orm";
 import type { InferSelectModel } from "drizzle-orm";
 
 const router = Router();
 
 router.get("/injuries", async (req, res): Promise<void> => {
   try {
-    const { sport, playerId, gameId, since } = req.query as Record<string, string>;
+    const { sport, playerId, gameId, since, slateOnly } = req.query as Record<string, string>;
     const conditions: SQL[] = [];
     if (sport) conditions.push(eq(injuriesTable.sport, sport));
     if (playerId) conditions.push(eq(injuriesTable.playerId, Number(playerId)));
     if (gameId) conditions.push(eq(injuriesTable.gameId, Number(gameId)));
     if (since) conditions.push(gte(injuriesTable.reportedAt, new Date(since)));
 
-    const injuries = conditions.length
+    let injuries = conditions.length
       ? await db.select().from(injuriesTable).where(and(...conditions))
       : await db.select().from(injuriesTable);
+
+    // Slate-relevance filter: only show injuries that matter for today's board.
+    // Rules (evaluated in order, first match wins):
+    //   (A) "Breaking news" — reported within 12 h, always show.
+    //   (B) Linked to a game that starts today or later (midnight local time).
+    //   (C) No game link (manually entered) + reported within 7 days.
+    // Anything else — stale injury for a finished or past-dated game — is hidden.
+    if (slateOnly === "true" && injuries.length > 0) {
+      // (A) 12-hour breaking-news window
+      const breakingCutoff = new Date(Date.now() - 12 * 60 * 60 * 1000);
+
+      // (B) Games starting today (midnight UTC) or later
+      const injuryGameIds = [...new Set(injuries.filter(i => i.gameId).map(i => i.gameId as number))];
+      const upcomingGameIds = new Set<number>();
+      if (injuryGameIds.length > 0) {
+        const todayMidnight = new Date();
+        todayMidnight.setUTCHours(0, 0, 0, 0);
+        const upcomingGames = await db
+          .select({ id: gamesTable.id })
+          .from(gamesTable)
+          .where(and(inArray(gamesTable.id, injuryGameIds), gte(gamesTable.startTime, todayMidnight)));
+        upcomingGames.forEach(g => upcomingGameIds.add(g.id));
+      }
+
+      // (C) 7-day recency window for manually-added reports (no game link)
+      const manualCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+      injuries = injuries.filter(inj => {
+        if (inj.reportedAt >= breakingCutoff) return true;                         // (A)
+        if (inj.gameId && upcomingGameIds.has(inj.gameId)) return true;           // (B)
+        if (!inj.gameId && inj.reportedAt >= manualCutoff) return true;           // (C)
+        return false;
+      });
+    }
 
     if (injuries.length === 0) {
       res.json([]);

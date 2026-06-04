@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useListInjuries, getListInjuriesQueryKey, useListLineupConfirmations, getListLineupConfirmationsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,11 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Activity, CheckCircle2, PlusCircle } from "lucide-react";
+import { Clock, Activity, CheckCircle2, PlusCircle, LayoutList } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 export default function Injuries() {
   const [sport, setSport] = useState<string>("all");
+  const [slateOnly, setSlateOnly] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({ playerName: "", playerTeam: "", sport: "NBA", status: "Questionable", note: "" });
   const [submitting, setSubmitting] = useState(false);
@@ -37,9 +38,16 @@ export default function Injuries() {
     setSubmitting(false);
   }
 
+  const injuryParams = {
+    ...(sport !== "all" ? { sport } : {}),
+    ...(slateOnly ? { slateOnly: true as const } : {}),
+  };
+  const hasParams = Object.keys(injuryParams).length > 0;
+  const queryParams = hasParams ? injuryParams : undefined;
+
   const { data: injuries, isLoading: loadingInjuries } = useListInjuries(
-    sport !== "all" ? { sport } : undefined,
-    { query: { queryKey: getListInjuriesQueryKey(sport !== "all" ? { sport } : undefined) } }
+    queryParams,
+    { query: { queryKey: getListInjuriesQueryKey(queryParams) } }
   );
 
   const { data: lineups, isLoading: loadingLineups } = useListLineupConfirmations(
@@ -52,10 +60,21 @@ export default function Injuries() {
     <div className="space-y-6 h-full flex flex-col">
       <div className="flex items-center justify-between border-b border-border pb-4 shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">Injuries & News Feed</h1>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <div className="text-xs font-mono text-muted-foreground flex items-center gap-1">
             <Clock className="w-3 h-3" /> Updated just now
           </div>
+          <button
+            onClick={() => setSlateOnly(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono border transition-colors ${
+              slateOnly
+                ? "bg-primary/10 border-primary/40 text-primary"
+                : "bg-slate-900 border-slate-700 text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <LayoutList className="w-3 h-3" />
+            {slateOnly ? "Slate relevant" : "Showing all"}
+          </button>
           <Select value={sport} onValueChange={setSport}>
             <SelectTrigger className="w-32 bg-slate-900 border-slate-800 font-mono text-sm">
               <SelectValue placeholder="Sport" />
@@ -77,6 +96,9 @@ export default function Injuries() {
           <div className="p-4 border-b border-slate-800 bg-slate-950 flex items-center gap-2">
             <Activity className="w-4 h-4 text-rose-500" />
             <h2 className="font-bold">Injury Reports</h2>
+            {injuries && injuries.length > 0 && (
+              <span className="ml-auto text-xs font-mono text-muted-foreground">{injuries.length} report{injuries.length !== 1 ? "s" : ""}</span>
+            )}
           </div>
           <div className="flex-1 overflow-auto p-4 space-y-4">
             {loadingInjuries ? (
@@ -84,11 +106,24 @@ export default function Injuries() {
             ) : injuries?.length === 0 ? (
               <div className="text-center py-12 space-y-3 px-4">
                 <Activity className="w-10 h-10 text-muted-foreground/40 mx-auto" />
-                <div className="text-sm font-medium text-muted-foreground">No injury data yet</div>
-                <div className="text-xs text-muted-foreground/70 max-w-sm mx-auto leading-relaxed">
-                  Automated injury sync requires a connected feed (Rotowire or ESPN).
-                  You can manually add injury notes below, or this page will populate once a feed is connected.
-                </div>
+                {slateOnly ? (
+                  <>
+                    <div className="text-sm font-medium text-muted-foreground">No slate-relevant injuries</div>
+                    <div className="text-xs text-muted-foreground/70 max-w-sm mx-auto leading-relaxed">
+                      No injury flags for players on today's active lines. You can{" "}
+                      <button onClick={() => setSlateOnly(false)} className="text-primary underline underline-offset-2">show all reports</button>{" "}
+                      or add a manual note below.
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-sm font-medium text-muted-foreground">No injury data yet</div>
+                    <div className="text-xs text-muted-foreground/70 max-w-sm mx-auto leading-relaxed">
+                      Automated injury sync requires a connected feed (Rotowire or ESPN).
+                      You can manually add injury notes below, or this page will populate once a feed is connected.
+                    </div>
+                  </>
+                )}
                 <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} className="gap-1.5 font-mono text-xs border-slate-700 mt-2">
                   <PlusCircle className="w-3.5 h-3.5" /> Add Manual Injury Note
                 </Button>
@@ -116,6 +151,11 @@ export default function Injuries() {
                 </Card>
               ))
             )}
+          </div>
+          <div className="p-3 border-t border-slate-800">
+            <Button size="sm" variant="ghost" onClick={() => setAddOpen(true)} className="gap-1.5 font-mono text-xs text-muted-foreground hover:text-foreground w-full">
+              <PlusCircle className="w-3.5 h-3.5" /> Add Manual Note
+            </Button>
           </div>
         </div>
 
