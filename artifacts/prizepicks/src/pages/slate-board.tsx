@@ -1237,7 +1237,7 @@ export default function SlateBoard() {
                         : "border-emerald-800/40 text-emerald-500/80"
                     }`}
                   >
-                    {playCount} PLAY
+                    {actionTagFilter === "PLAY" ? `${playCount} / ${playerRows.length} PLAY` : `${playCount} PLAY`}
                   </button>
                 )}
                 {watchCount > 0 && (
@@ -1249,7 +1249,7 @@ export default function SlateBoard() {
                         : "border-amber-800/40 text-amber-500/80"
                     }`}
                   >
-                    {watchCount} 👁
+                    {actionTagFilter === "WATCH" ? `${watchCount} / ${playerRows.length} 👁` : `${watchCount} 👁`}
                   </button>
                 )}
                 {noPlayCount > 0 && (
@@ -1261,7 +1261,7 @@ export default function SlateBoard() {
                         : "border-rose-800/40 text-rose-500/80"
                     }`}
                   >
-                    {noPlayCount} gated
+                    {actionTagFilter === "NO-PLAY" ? `${noPlayCount} / ${playerRows.length} gated` : `${noPlayCount} gated`}
                   </button>
                 )}
               </div>
