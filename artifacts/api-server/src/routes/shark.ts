@@ -81,16 +81,41 @@ Demon lines (😈) = line above ~120% of projection — easy under, lower payout
 Standard lines = between 60-120% of projection — where real edge lives
 ★ BEST VALUE = this tier has the highest calibrated EV for this player
 
+PAYOUT MULTIPLIERS (exact — never guess these):
+Power:  2-pick=3×  | 3-pick=6×  | 4-pick=10× | 5-pick=20× | 6-pick=40×
+Flex:   3-pick: 3/3=5× 2/3=1.25× | 4-pick: 4/4=10× 3/4=2.5× | 5-pick: 5/5=20× 4/5=4× 3/5=1×
+        6-pick: 6/6=40× 5/6=6× 4/6=1.5×
+
+Break-even P(hit) per leg for Power (all must hit):
+Power 2: 57.7% | Power 3: 63.0% | Power 4: 66.9% | Power 5: 72.5% | Power 6: 75.8%
+(formula: 1 / multiplier^(1/N) per leg — all legs must clear this to have positive EV)
+
 BANKROLL GUIDANCE:
-For PrizePicks:
-Power 2 break-even = 50%
-Kelly fraction = edge% / payout
+Kelly fraction = edge% / payout_multiplier_per_leg
 Recommend Half Kelly for safety
 
-Example: P(Over) = 62% on Power 2
-Edge = 12% above break-even
-Kelly = 12% / 1.0 = 12% of bankroll
-Half Kelly = 6% per entry
+Example: P(Over) = 62% on Power 2 leg (break-even 57.7%)
+Edge = 4.3% | Kelly ≈ 4.3% / 3.0 ≈ 1.4% of bankroll per entry
+Half Kelly = 0.7% per entry
+
+PROFIT OPTIMIZATION (when user asks for max profit / best EV / highest edge):
+Do NOT just chase P(Over)%. The correct target is:
+  EV = P(leg hits) × payout_multiplier
+For multi-leg entries:
+  Entry EV = (P1 × P2 × ... × Pn) × entry_multiplier × stake
+
+GOBLIN LINE TRAP — critical:
+Goblin lines (0.5, extremely low) have sky-high P(Over) but PrizePicks knows this and
+prices them accordingly with lower tier multipliers. They do NOT pay the same 3×/6×/10×
+as standard lines on many platforms — or if they do, the edge is already priced in.
+
+When user asks for MAX PROFIT, BEST VALUE, or HIGHEST EV:
+1. First show ★BV (BEST VALUE) props — these are already verified to have higher P×M than goblin/demon alternatives for the same player
+2. Prefer standard-line PLAY props over goblin PLAY props
+3. Only include goblin lines if no standard PLAY exists for that player AND the goblin is ★BV
+4. State the combined entry EV explicitly: (P1×P2×...×Pn) × multiplier
+
+HIGH HIT-RATE ≠ HIGH PROFIT — never confuse the two when making recommendations.
 
 SHARP QUERIES:
 Support these naturally:
@@ -226,7 +251,9 @@ async function buildSharkSlateContext(): Promise<string> {
     const lines: string[] = [
       `=== TODAY'S LIVE SLATE — ${today.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} ===`,
       `Model: Poisson/NegBin/ZIP/Log-normal distributions, Bayesian shrinkage, ${calBuckets} calibration buckets.`,
-      `P(Over) values are CALIBRATED against historical hit rates. Power 2 break-even: 50%.`,
+      `P(Over) values are CALIBRATED against historical hit rates.`,
+      `Power payouts: 2=3× | 3=6× | 4=10× | 5=20× | 6=40×. Break-even per leg: P2=57.7% P3=63.0% P4=66.9% P5=72.5% P6=75.8%`,
+      `★BV = highest calibrated EV tier for that player. Prefer ★BV standard lines over goblins for max profit.`,
       "",
     ];
 
