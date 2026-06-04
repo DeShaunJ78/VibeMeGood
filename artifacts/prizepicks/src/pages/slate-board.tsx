@@ -697,18 +697,20 @@ export default function SlateBoard() {
   // so the view is never empty (wrong window selected for new sport).
   // Also reset the chip filter whenever sport is cleared back to "all" so stale
   // chip filters never silently narrow an all-sports view.
-  // Exception: when a preset is active, it intentionally sets sport="all" AND an
-  // actionTag simultaneously (e.g. Safe → sport="all" + PLAY). React batches those
-  // state updates, so by the time this effect fires activePreset is already set —
-  // guard against clearing the chip in that case.
+  // Exception: preset activations intentionally set sport="all" + an actionTag at
+  // the same time (e.g. Safe → PLAY). We guard using a ref set synchronously in
+  // the preset onClick before any state updates, so the effect always sees the
+  // correct intent regardless of React batching order.
   const prevSport = useRef(sport);
+  const isPresetChangeRef = useRef(false);
   useEffect(() => {
     if (prevSport.current !== sport && sport !== "") {
-      if (sport === "all" && !activePreset) setActionTagFilter("all");
+      if (sport === "all" && !isPresetChangeRef.current) setActionTagFilter("all");
+      isPresetChangeRef.current = false;
       prevSport.current = sport;
       setSelectedWindow("upcoming");
     }
-  }, [sport, activePreset]);
+  }, [sport]);
 
   const { data: slate, isLoading: slateLoading } = useGetSlate(slateParams, {
     query: { queryKey: getGetSlateQueryKey(slateParams), enabled: sportResolved },
@@ -1392,6 +1394,7 @@ export default function SlateBoard() {
                     onClick={() => {
                       if (isActive) { setSport("all"); setLineTypeFilter("all"); setMinEdge(""); setActionTagFilter("all"); setSharpOnly(false); setActivePreset(null); return; }
                       const cfg = getSaved() ?? p;
+                      isPresetChangeRef.current = true;
                       if (cfg.sport !== undefined) setSport(cfg.sport); else setSport("all");
                       if (cfg.lineType !== undefined) setLineTypeFilter(cfg.lineType); else setLineTypeFilter("all");
                       if (cfg.minEdge !== undefined) setMinEdge(cfg.minEdge); else setMinEdge("");
