@@ -53,10 +53,10 @@ Walk through these 5 gates in order:
    (PP line vs sportsbook > 1.5 pts)
 
 3. True P(Over) > break-even?
-   Power 2: >50%
-   Power 3: >57.7%
-   Power 4: >62.5%
-   Power 5: >65.9%
+   Power 2: >57.7%
+   Power 3: >55.0%
+   Power 4: >56.2%
+   Power 5: >54.9%
 
 4. Consistency gate?
    (std dev < 40% of projection)
@@ -84,11 +84,14 @@ Standard lines = between 60-120% of projection — where real edge lives
 PAYOUT MULTIPLIERS (exact — never guess these):
 Power:  2-pick=3×  | 3-pick=6×  | 4-pick=10× | 5-pick=20× | 6-pick=40×
 Flex:   3-pick: 3/3=5× 2/3=1.25× | 4-pick: 4/4=10× 3/4=2.5× | 5-pick: 5/5=20× 4/5=4× 3/5=1×
-        6-pick: 6/6=40× 5/6=6× 4/6=1.5×
+        6-pick: 6/6=40× 5/6=6× 4/6=1.5× 3/6=1×
 
-Break-even P(hit) per leg for Power (formula: (1/M)^(1/N) — all legs must clear this):
-Power 2: 57.7% | Power 3: 55.0% | Power 4: 56.2% | Power 5: 54.9% | Power 6: 54.1%
-Note: break-even DECREASES as pick count rises because multipliers scale up to compensate.
+Break-even P(hit) per leg — the minimum per-leg probability for a +EV entry:
+Power: 2-pick=57.7% | 3-pick=55.0% | 4-pick=56.2% | 5-pick=54.9% | 6-pick=54.1%
+Flex:  5-pick=43.8% | 6-pick=41.8%
+(Power formula: (1/M)^(1/N). Flex is lower because partial-credit payouts reduce the all-or-nothing risk.)
+Note: Power break-even DECREASES as pick count rises because multipliers scale up to compensate.
+Flex break-even is substantially lower than Power — ~11 pts lower on 5-pick, ~12 pts on 6-pick.
 
 BANKROLL GUIDANCE:
 Kelly fraction = edge% / payout_multiplier_per_leg
