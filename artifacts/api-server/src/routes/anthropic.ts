@@ -315,7 +315,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res): Promise<v
       "• The ⚡SHARP tag means sharp money is confirming the model direction — significant signal.",
       "• ★BV means this tier (standard/goblin/demon) has the highest calibrated EV for that player.",
       "• Payout multipliers (exact — never guess): Power 2=3× | 3=6× | 4=10× | 5=20× | 6=40×",
-      "• Break-even P per leg (Power): P2=57.7% | P3=55.0% | P4=56.2% | P5=55.5% | P6=56.8%",
+      "• Break-even P per leg (Power): P2=57.7% | P3=55.0% | P4=56.2% | P5=54.9% | P6=54.1%",
       "• For MAX PROFIT / BEST EV queries: lead with ★BV standard-line PLAYs, not high-rate goblin lines.",
       "  Goblin lines boost hit rate but sacrifice payout. ★BV already accounts for P×multiplier math.",
       "  State combined entry EV = (P1×P2×…×Pn) × multiplier when making entry recommendations.",

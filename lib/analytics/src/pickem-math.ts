@@ -6,9 +6,9 @@ export const ENTRY_TYPES: Record<string, { multiplier: number; breakEven: number
   "2-pick-power": { multiplier: 3,  breakEven: 0.5774 },
   "3-pick-power": { multiplier: 6,  breakEven: 0.5503 },
   "4-pick-power": { multiplier: 10, breakEven: 0.5623 },
-  "5-pick-power": { multiplier: 12, breakEven: 0.5743 },
+  "5-pick-power": { multiplier: 20, breakEven: 0.5493 }, // (1/20)^(1/5)
   "5-pick-flex":  { multiplier: 8,  breakEven: 0.5283 },
-  "6-pick-power": { multiplier: 25, breakEven: 0.5743 },
+  "6-pick-power": { multiplier: 40, breakEven: 0.5408 }, // (1/40)^(1/6)
   "6-pick-flex":  { multiplier: 15, breakEven: 0.5188 },
 };
 

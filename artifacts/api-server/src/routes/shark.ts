@@ -86,9 +86,9 @@ Power:  2-pick=3×  | 3-pick=6×  | 4-pick=10× | 5-pick=20× | 6-pick=40×
 Flex:   3-pick: 3/3=5× 2/3=1.25× | 4-pick: 4/4=10× 3/4=2.5× | 5-pick: 5/5=20× 4/5=4× 3/5=1×
         6-pick: 6/6=40× 5/6=6× 4/6=1.5×
 
-Break-even P(hit) per leg for Power (all must hit):
-Power 2: 57.7% | Power 3: 63.0% | Power 4: 66.9% | Power 5: 72.5% | Power 6: 75.8%
-(formula: 1 / multiplier^(1/N) per leg — all legs must clear this to have positive EV)
+Break-even P(hit) per leg for Power (formula: (1/M)^(1/N) — all legs must clear this):
+Power 2: 57.7% | Power 3: 55.0% | Power 4: 56.2% | Power 5: 54.9% | Power 6: 54.1%
+Note: break-even DECREASES as pick count rises because multipliers scale up to compensate.
 
 BANKROLL GUIDANCE:
 Kelly fraction = edge% / payout_multiplier_per_leg
@@ -252,7 +252,7 @@ async function buildSharkSlateContext(): Promise<string> {
       `=== TODAY'S LIVE SLATE — ${today.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} ===`,
       `Model: Poisson/NegBin/ZIP/Log-normal distributions, Bayesian shrinkage, ${calBuckets} calibration buckets.`,
       `P(Over) values are CALIBRATED against historical hit rates.`,
-      `Power payouts: 2=3× | 3=6× | 4=10× | 5=20× | 6=40×. Break-even per leg: P2=57.7% P3=63.0% P4=66.9% P5=72.5% P6=75.8%`,
+      `Power payouts: 2=3× | 3=6× | 4=10× | 5=20× | 6=40×. Break-even per leg: P2=57.7% P3=55.0% P4=56.2% P5=54.9% P6=54.1%`,
       `★BV = highest calibrated EV tier for that player. Prefer ★BV standard lines over goblins for max profit.`,
       "",
     ];
