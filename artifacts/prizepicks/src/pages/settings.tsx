@@ -272,7 +272,7 @@ function VarianceIntelSection({ settings, onUpdate }: { settings: UserSettings; 
   );
 }
 
-const SYNC_JOBS = [
+const SYNC_JOBS: Array<{ label: string; endpoint: string; staleDays?: number }> = [
   // PrizePicks lines are NOT server-syncable (PerimeterX 403s every server fetch).
   // Use the browser copy-paste import card below instead.
   { label: "Injury Reports",     endpoint: "/api/sync/injuries" },
@@ -282,8 +282,8 @@ const SYNC_JOBS = [
   { label: "Variance Compute",   endpoint: "/api/sync/variance" },
   { label: "Team Pace Ratings",  endpoint: "/api/admin/sync/pace" },
   { label: "Sync Games",         endpoint: "/api/sync/game-schedule" },
-  { label: "Run Calibration",   endpoint: "/api/sync/calibration" },
-  { label: "Backfill History",  endpoint: "/api/sync/historical-stats" },
+  { label: "Run Calibration",    endpoint: "/api/sync/calibration", staleDays: 7 },
+  { label: "Backfill History",   endpoint: "/api/sync/historical-stats" },
 ];
 
 // Maps a manual sync job to the data_pull_logs provider it refreshes, so each
@@ -295,6 +295,7 @@ const JOB_PROVIDER: Record<string, string> = {
   "/api/sync/scores":        "espn",
   "/api/sync/variance":      "internal",
   "/api/sync/game-schedule": "espn",
+  "/api/sync/calibration":   "calibration",
 };
 
 function StatusDot({ status }: { status: string }) {
@@ -605,11 +606,14 @@ export default function Settings() {
               const isRunning = syncingJob === job.endpoint;
               const ok = prov?.status === "success";
               const failed = prov?.status === "error";
+              const ageMs = prov?.lastSuccessAt ? Date.now() - new Date(prov.lastSuccessAt).getTime() : null;
+              const isStale = job.staleDays != null && ageMs != null && ageMs > job.staleDays * 86400000;
               const dotClass = isRunning ? "bg-amber-400 animate-pulse"
-                : ok ? "bg-emerald-400"
                 : failed ? "bg-rose-400"
+                : isStale ? "bg-amber-400"
+                : ok ? "bg-emerald-400"
                 : "bg-slate-600";
-              const borderClass = failed ? "border-rose-500/30" : ok ? "border-slate-800" : "border-slate-800";
+              const borderClass = failed ? "border-rose-500/30" : isStale ? "border-amber-500/20" : ok ? "border-slate-800" : "border-slate-800";
               return (
                 <div
                   key={job.endpoint}

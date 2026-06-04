@@ -1228,6 +1228,42 @@ export default function SlateBoard() {
                   <Clock className="w-2.5 h-2.5 shrink-0" />
                   {ppNeverSynced ? "not synced" : relativeTime(boardFreshnessAt!)}
                 </span>
+                {playCount > 0 && (
+                  <button
+                    onClick={() => setActionTagFilter(f => f === "PLAY" ? "all" : "PLAY")}
+                    className={`font-mono text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                      actionTagFilter === "PLAY"
+                        ? "bg-emerald-900/60 border-emerald-700/50 text-emerald-300"
+                        : "border-emerald-800/40 text-emerald-500/80"
+                    }`}
+                  >
+                    {playCount} PLAY
+                  </button>
+                )}
+                {watchCount > 0 && (
+                  <button
+                    onClick={() => setActionTagFilter(f => f === "WATCH" ? "all" : "WATCH")}
+                    className={`font-mono text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                      actionTagFilter === "WATCH"
+                        ? "bg-amber-900/60 border-amber-700/50 text-amber-300"
+                        : "border-amber-800/40 text-amber-500/80"
+                    }`}
+                  >
+                    {watchCount} 👁
+                  </button>
+                )}
+                {noPlayCount > 0 && (
+                  <button
+                    onClick={() => setActionTagFilter(f => f === "NO-PLAY" ? "all" : "NO-PLAY")}
+                    className={`font-mono text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                      actionTagFilter === "NO-PLAY"
+                        ? "bg-rose-900/60 border-rose-700/50 text-rose-300"
+                        : "border-rose-800/40 text-rose-500/80"
+                    }`}
+                  >
+                    {noPlayCount} gated
+                  </button>
+                )}
               </div>
             </div>
           )}

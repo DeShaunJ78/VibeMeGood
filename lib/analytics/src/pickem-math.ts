@@ -24,7 +24,7 @@ const FLEX_PAYOUTS: Record<number, Record<number, number>> = {
   6: { 6: 40, 5: 6, 4: 1.5, 3: 1 },
 };
 
-function flexExpectedReturn(n: number, p: number): number {
+export function flexExpectedReturn(n: number, p: number): number {
   const schedule = FLEX_PAYOUTS[n];
   if (!schedule) return 0;
   const q = 1 - p;

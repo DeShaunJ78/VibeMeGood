@@ -92,26 +92,63 @@ function MarkResultPanel({ entry, onDone }: { entry: any; onDone: () => void }) 
     }
   }
 
+  const allPicksGraded = Array.isArray(entry.picks) && entry.picks.length > 0
+    && entry.picks.every((p: any) => p.result !== "pending");
+
+  const picksSummary = (() => {
+    if (!allPicksGraded || !Array.isArray(entry.picks)) return null;
+    const hits = entry.picks.filter((p: any) => p.result === "hit").length;
+    const dnps = entry.picks.filter((p: any) => p.result === "dnp").length;
+    const effective = entry.picks.length - dnps;
+    const suggested: "win" | "loss" | "partial" = hits === effective ? "win" : hits === 0 ? "loss" : "partial";
+    return { hits, dnps, effective, suggested };
+  })();
+
+  const flexPartialHint = (() => {
+    if (entry.entryType !== "flex" || !Array.isArray(entry.picks) || !allPicksGraded) return null;
+    const n = entry.picks.length;
+    const hits = entry.picks.filter((p: any) => p.result === "hit").length;
+    const dnps = entry.picks.filter((p: any) => p.result === "dnp").length;
+    const effective = n - dnps;
+    const FLEX_M: Record<string, number> = {
+      "2/2": 3,
+      "3/3": 5, "2/3": 1.25,
+      "4/4": 10, "3/4": 2.5,
+      "5/5": 20, "4/5": 4, "3/5": 1,
+      "6/6": 40, "5/6": 6, "4/6": 1.5, "3/6": 1,
+    };
+    const mult = FLEX_M[`${hits}/${effective}`];
+    if (!mult) return null;
+    return Number(entry.stake) * mult;
+  })();
+
   if (confirmResult) {
     return (
       <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-3 space-y-2">
         <div className="text-[10px] font-mono text-muted-foreground uppercase">Confirm result</div>
         {confirmResult === "partial" ? (
-          <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              placeholder="Actual payout ($)"
-              value={partialPayout}
-              onChange={e => setPartialPayout(e.target.value)}
-              className="bg-slate-950 border-slate-700 font-mono text-sm h-8 w-40"
-              autoFocus
-            />
-            <Button size="sm" onClick={() => mark("partial")} disabled={patchEntry.isPending || !partialPayout} className="font-mono text-xs h-8 bg-amber-600 hover:bg-amber-700">
-              Confirm PARTIAL
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setConfirmResult(null)} className="font-mono text-xs h-8 text-muted-foreground">
-              Cancel
-            </Button>
+          <div className="flex flex-col gap-2">
+            {flexPartialHint != null && (
+              <div className="text-[10px] font-mono text-amber-400/80">
+                Flex calc: {entry.picks.filter((p: any) => p.result === "hit").length}/{entry.picks.length - entry.picks.filter((p: any) => p.result === "dnp").length} hits → expected ${flexPartialHint.toFixed(2)}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                placeholder={flexPartialHint != null ? `${flexPartialHint.toFixed(2)}` : "Actual payout ($)"}
+                value={partialPayout}
+                onChange={e => setPartialPayout(e.target.value)}
+                className="bg-slate-950 border-slate-700 font-mono text-sm h-8 w-40"
+                autoFocus
+              />
+              <Button size="sm" onClick={() => mark("partial")} disabled={patchEntry.isPending || !partialPayout} className="font-mono text-xs h-8 bg-amber-600 hover:bg-amber-700">
+                Confirm PARTIAL
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmResult(null)} className="font-mono text-xs h-8 text-muted-foreground">
+                Cancel
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="flex items-center gap-2">
@@ -133,38 +170,58 @@ function MarkResultPanel({ entry, onDone }: { entry: any; onDone: () => void }) 
   }
 
   return (
-    <div className="bg-slate-800/40 border border-slate-700/60 rounded-lg px-3 py-2 flex items-center gap-2">
-      <CheckCircle className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-      <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider shrink-0">Mark Result</span>
-      <div className="flex items-center gap-1.5 ml-1">
-        <Button
-          size="sm"
-          onClick={() => setConfirmResult("win")}
-          disabled={pending !== null || patchEntry.isPending}
-          className="font-mono text-xs h-7 px-3 bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 border border-emerald-800/60"
-        >
-          WIN
-        </Button>
-        <Button
-          size="sm"
-          onClick={() => setConfirmResult("loss")}
-          disabled={pending !== null || patchEntry.isPending}
-          className="font-mono text-xs h-7 px-3 bg-rose-900/60 hover:bg-rose-800 text-rose-300 border border-rose-800/60"
-        >
-          LOSS
-        </Button>
-        <Button
-          size="sm"
-          onClick={() => setConfirmResult("partial")}
-          disabled={pending !== null || patchEntry.isPending}
-          className="font-mono text-xs h-7 px-3 bg-amber-900/50 hover:bg-amber-800 text-amber-300 border border-amber-800/50"
-        >
-          PARTIAL
-        </Button>
+    <div className="bg-slate-800/40 border border-slate-700/60 rounded-lg px-3 py-2 space-y-2">
+      {picksSummary && !confirmResult && (
+        <div className={`flex items-center gap-2 text-[10px] font-mono px-1 py-1 rounded border ${
+          picksSummary.suggested === "win"
+            ? "bg-emerald-950/40 border-emerald-800/40 text-emerald-400"
+            : picksSummary.suggested === "loss"
+            ? "bg-rose-950/40 border-rose-800/40 text-rose-400"
+            : "bg-amber-950/40 border-amber-800/40 text-amber-400"
+        }`}>
+          <CheckCircle className="w-3 h-3 shrink-0" />
+          <span>All picks graded · {picksSummary.hits}/{picksSummary.effective} hits</span>
+          <button
+            onClick={() => setConfirmResult(picksSummary.suggested)}
+            className="ml-auto underline underline-offset-2 font-bold uppercase hover:opacity-80"
+          >
+            Mark {picksSummary.suggested}
+          </button>
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <CheckCircle className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider shrink-0">Mark Result</span>
+        <div className="flex items-center gap-1.5 ml-1">
+          <Button
+            size="sm"
+            onClick={() => setConfirmResult("win")}
+            disabled={pending !== null || patchEntry.isPending}
+            className="font-mono text-xs h-7 px-3 bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 border border-emerald-800/60"
+          >
+            WIN
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => setConfirmResult("loss")}
+            disabled={pending !== null || patchEntry.isPending}
+            className="font-mono text-xs h-7 px-3 bg-rose-900/60 hover:bg-rose-800 text-rose-300 border border-rose-800/60"
+          >
+            LOSS
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => setConfirmResult("partial")}
+            disabled={pending !== null || patchEntry.isPending}
+            className="font-mono text-xs h-7 px-3 bg-amber-900/50 hover:bg-amber-800 text-amber-300 border border-amber-800/50"
+          >
+            PARTIAL
+          </Button>
+        </div>
+        <span className="text-[10px] font-mono text-muted-foreground ml-auto">
+          potential: ${potentialPayout.toFixed(2)}
+        </span>
       </div>
-      <span className="text-[10px] font-mono text-muted-foreground ml-auto">
-        potential: ${potentialPayout.toFixed(2)}
-      </span>
     </div>
   );
 }

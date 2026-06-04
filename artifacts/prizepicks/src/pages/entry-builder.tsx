@@ -35,7 +35,7 @@ const FLEX_PAYOUTS: Record<number, Record<string, number>> = {
   3: { "3/3": 5, "2/3": 1.25 },
   4: { "4/4": 10, "3/4": 2.5 },
   5: { "5/5": 20, "4/5": 4, "3/5": 1 },
-  6: { "6/6": 40, "5/6": 6, "4/6": 1.5 },
+  6: { "6/6": 40, "5/6": 6, "4/6": 1.5, "3/6": 1 },
 };
 
 // ── EV computation helpers ──────────────────────────────────────────────────
@@ -331,9 +331,11 @@ export default function EntryBuilder() {
     ? computeEV(picks, "power", powerPayout, stakeNum, {})
     : null;
   const evResultFlex = playstyle === "flex" && !usesManual && !multiplierUnknown && n >= 2
-    ? computeEV(picks, "flex", 0, stakeNum, flexPayouts)
+    ? computeEV(picks, "flex", 0, Math.max(stakeNum, 1), flexPayouts)
     : null;
   const activeEV = singlePayoutMode ? evResultPower : evResultFlex;
+  // When no stake entered yet, evPct is still meaningful (stake-independent ratio)
+  const evIsEstimate = playstyle === "flex" && stakeNum <= 0 && evResultFlex != null;
 
   // ── Pick'em Math (Enhancement 1 + 3) ──────────────────────────────────────
   const entryTypeKey = `${n}-pick-${playstyle}`;
@@ -554,7 +556,7 @@ export default function EntryBuilder() {
               <div className={`w-2 h-2 rounded-full shrink-0 ${evDotColor}`} />
               <span className="text-[10px] font-mono text-slate-500 uppercase">Entry EV</span>
               <span className={`font-mono text-xs font-bold ${evTextColor}`}>
-                {evPct != null ? `${evPct >= 0 ? "+" : ""}${evPct.toFixed(1)}%` : "—"}
+                {evPct != null ? `${evPct >= 0 ? "+" : ""}${evPct.toFixed(1)}%${evIsEstimate ? " est." : ""}` : "—"}
               </span>
               {adjustedEvPct != null && (
                 <span className="text-[10px] font-mono text-slate-500">
