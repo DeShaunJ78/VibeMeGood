@@ -1,0 +1,36 @@
+Data Integrity & Calibration Improvements
+
+What & Why
+
+Four data-integrity issues cause the app to show stale or untrustworthy information without any indication to the user: (1) the calibration auto-settler skips same-day games entirely because game logs have no timestamp, permanently under-counting the most recent signal; (2) the Player Board shows no data-freshness indicator so you can't tell if you're looking at today's or yesterday's numbers; (3) FD slate auto-selection picks stale is_active=true slates instead of the current one; (4) the historical game-log backfill (already built) needs to be triggered on production and calibration rebuilt afterward.
+
+Done looks like
+
+Calibration auto-settle resolves same-day picks correctly by using actual game start times from the ESPN scoreboard (already used for MLB matchups) rather than date-only comparison
+Player Board rows show a compact "last updated" timestamp inline for both salary and projection data (e.g., "Sal 2h ago · Proj 45m ago") — visually muted, not intrusive
+FanDuel slate auto-selection picks the slate with the highest updatedAt among is_active=true slates for today's date, not the one with the most players (which selects stale bloated slates)
+When a FD or DK slate sync completes, any previously-active slates for the same sport+platform on a prior date are marked is_active=false (slate deactivation lifecycle step)
+Production calibration reflects full historical data after the backfill completes (buckets grow from ~100 to 150+, samples from 44K to 700K+)
+Out of scope
+
+Changing the calibration math or distribution routing (Phase 2 / existing design)
+Adding new stats or sports to calibration
+Full slate lifecycle management beyond deactivation on sync
+Steps
+
+Fix auto-settle same-day timing — Update engine.ts autoSettle to fetch game start times from the ESPN scoreboard endpoint (already used in mlb-matchups.ts) for the settle date. A pick settles against a game only if the game's actual start time is strictly after the pick's created-at timestamp, not just the date. Fall back to gameDate > pickDate (current behavior) when the scoreboard fetch fails.
+Add slate deactivation on sync — In the DK and FD salary sync upsert logic, after inserting/updating today's slate, mark all other is_active=true slates for the same sport + platform combination with a prior date as is_active=false. This prevents stale slates from accumulating and being incorrectly selected.
+Fix FD slate auto-selection — In the GET /api/players/board route's slate-selection query, change the FD tie-breaking from "most players" to "most recently updated" (ORDER BY updated_at DESC) among today's is_active=true slates. This ensures the current sync's slate wins over a stale high-player-count slate.
+Add data-freshness timestamps to Player Board — Add salaryUpdatedAt and projUpdatedAt fields to the /api/players/board response (already available from the dfs_player_salary.updatedAt and dfs_projections.updatedAt columns). Surface them in the Player Board as a compact tooltip or inline muted label per row header (one timestamp per column group, not per row).
+Trigger production backfill and rebuild — After deploying, curl the production server to trigger the historical backfill for NBA (from 2021-10-01), MLB (from 2021-04-01), and NHL (from 2021-10-01) via the admin endpoint built in the prior session. After each backfill completes, trigger POST /api/calibration/rebuild?sport=X for each sport. Document the final bucket and sample counts.
+Relevant files
+
+artifacts/api-server/src/lib/calibration/engine.ts
+artifacts/api-server/src/lib/sync/mlb-matchups.ts
+artifacts/api-server/src/lib/sync/dk-sync.ts
+artifacts/api-server/src/routes/players.ts
+artifacts/draft-duel/src/pages/player-board.tsx
+lib/db/src/schema/dfs-slates.ts
+lib/api-spec/openapi.yaml
+Dependencies
+Preview
