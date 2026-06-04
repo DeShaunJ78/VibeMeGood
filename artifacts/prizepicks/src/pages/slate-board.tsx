@@ -1546,7 +1546,7 @@ export default function SlateBoard() {
                   </button>
                 )}
               </div>
-              <Select value={sport} onValueChange={v => { setSport(v); setActionTagFilter("all"); setActivePreset(null); }}>
+              <Select value={sport} onValueChange={v => { setSport(v); }}>
                 <SelectTrigger className="w-28 bg-slate-900 border-slate-800 font-mono text-sm">
                   <SelectValue placeholder="Sport" />
                 </SelectTrigger>
@@ -2318,7 +2318,7 @@ export default function SlateBoard() {
           <div className="space-y-4 mt-4">
             <div>
               <label className="text-xs font-mono text-muted-foreground mb-1.5 block uppercase">Sport</label>
-              <Select value={sport} onValueChange={v => { setSport(v); setActionTagFilter("all"); setActivePreset(null); }}>
+              <Select value={sport} onValueChange={v => { setSport(v); }}>
                 <SelectTrigger className="w-full bg-slate-950 border-slate-700 font-mono text-sm">
                   <SelectValue placeholder="Sport" />
                 </SelectTrigger>
