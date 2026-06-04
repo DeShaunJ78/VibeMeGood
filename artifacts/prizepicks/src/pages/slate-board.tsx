@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef, type ReactNod
 import {
   useGetSlate, getGetSlateQueryKey, useGetSlateSports,
   useAddToWatchlist, useRemoveFromWatchlist, useSetPpLineOverrides,
+  useGetDataHealth,
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -506,6 +507,16 @@ function normalCDF(mean: number, std: number, line: number): number {
   return (1 - erf(z)) / 2;
 }
 
+function relativeTime(isoStr: string): string {
+  const diff = Date.now() - new Date(isoStr).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
 export default function SlateBoard() {
   const qc = useQueryClient();
   const { data: userSettings } = useUserSettings();
@@ -560,6 +571,12 @@ export default function SlateBoard() {
     lastOddsSync === null ||
     Date.now() - new Date(lastOddsSync).getTime() > 4 * 60 * 60 * 1000
   );
+
+  const { data: dataHealth } = useGetDataHealth();
+  const boardFreshnessAt = dataHealth?.boardFreshnessAt ?? null;
+  const boardAgeHours    = dataHealth?.boardAgeHours    ?? null;
+  const ppNeverSynced    = !boardFreshnessAt;
+  const ppStale          = !ppNeverSynced && boardAgeHours != null && boardAgeHours > 2;
 
   const { data: preLockStatus } = useQuery<{ preLockActive: boolean }>({
     queryKey: ["pre-lock-status"],
@@ -1163,6 +1180,19 @@ export default function SlateBoard() {
             <div className="flex items-center gap-2 shrink-0">
               {/* desktop status badges */}
               <div className="hidden md:flex items-center gap-2">
+                {/* PP lines freshness indicator */}
+                <span
+                  className={`font-mono text-[10px] flex items-center gap-1 ${
+                    ppNeverSynced ? "text-rose-500/70" : ppStale ? "text-amber-400/80" : "text-slate-500"
+                  }`}
+                  title={boardFreshnessAt ? `PP lines last imported ${relativeTime(boardFreshnessAt)}` : "PP lines not yet imported — use Settings to import"}
+                >
+                  <Clock className="w-2.5 h-2.5 shrink-0" />
+                  {ppNeverSynced
+                    ? "PP · not synced"
+                    : `PP · ${relativeTime(boardFreshnessAt!)}`}
+                </span>
+                <div className="h-3 border-l border-slate-800" />
                 {watchCount > 0 && (
                   <Badge className="font-mono text-xs bg-amber-900/40 text-amber-300 border border-amber-700/40 px-2 py-0.5">
                     <Eye className="w-3 h-3 mr-1 inline" />{watchCount} watched
