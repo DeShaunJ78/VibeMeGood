@@ -1173,7 +1173,7 @@ export default function SlateBoard() {
           <div className="flex items-center gap-1">
             <h1 className="hidden sm:block text-2xl font-bold tracking-tight mr-4">Slates</h1>
             <button
-              onClick={() => setTab("player")}
+              onClick={() => { setTab("player"); setActionTagFilter("all"); }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-mono transition-colors ${tab === "player" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground bg-slate-800/50"}`}
             >
               <User className="w-3.5 h-3.5" /> Player Picks
@@ -1182,14 +1182,14 @@ export default function SlateBoard() {
               )}
             </button>
             <button
-              onClick={() => setTab("team")}
+              onClick={() => { setTab("team"); setActionTagFilter("all"); }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-mono transition-colors ${tab === "team" ? "bg-violet-600 text-white" : "text-muted-foreground hover:text-foreground bg-slate-800/50"}`}
             >
               <Users className="w-3.5 h-3.5" /> Team Picks
               <Badge className="ml-1 bg-violet-700 text-white text-[10px] px-1 py-0 font-mono">NEW</Badge>
             </button>
             <button
-              onClick={() => setTab("culture")}
+              onClick={() => { setTab("culture"); setActionTagFilter("all"); }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-mono transition-colors ${tab === "culture" ? "bg-indigo-600 text-white" : "text-muted-foreground hover:text-foreground bg-slate-800/50"}`}
             >
               <Sparkles className="w-3.5 h-3.5" /> Culture
