@@ -21,6 +21,29 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+// PrizePicks league IDs that represent culture / specials / award picks (not sports props).
+// These never have a projection model, so we tag them separately.
+const CULTURE_LEAGUE_IDS = new Set(["266", "456", "422", "460"]);
+
+// Stat-type patterns that indicate a team-outcome pick (spread, moneyline, total, futures).
+// Conservative: only match clear team-result patterns to avoid mis-tagging player props.
+const TEAM_STAT_RE = /^(team total|spread cover|win moneyline|series win|total wins?|team points|team runs?|team goals?)\b/i;
+
+function inferPickCategory(leagueId: string, statType: string): "player" | "team" | "culture" {
+  if (CULTURE_LEAGUE_IDS.has(leagueId)) return "culture";
+  if (TEAM_STAT_RE.test(statType)) return "team";
+  return "player";
+}
+
+function inferTeamPickType(statType: string): string | null {
+  const s = statType.toLowerCase();
+  if (s.includes("moneyline") || s === "win") return "moneyline";
+  if (s.includes("spread")) return "spread";
+  if (s.includes("total") || s.includes("points") || s.includes("runs") || s.includes("goals")) return "total";
+  if (s.includes("series") || s.includes("championship") || s.includes("award") || s.includes("future")) return "future";
+  return null;
+}
+
 type PpNorm = {
   sport: string;
   teamAbbr: string;
@@ -31,6 +54,10 @@ type PpNorm = {
   lineType: string;
   imageUrl: string | null;
   position: string | null;
+  pickCategory: "player" | "team" | "culture";
+  teamPickType: string | null;
+  directionalityType: "over_under" | "yes_no";
+  leagueId: string;
 };
 
 // Processes a PP projections payload. Previously this did ~6 sequential DB
@@ -61,9 +88,11 @@ export async function processPpData(data: { data: any[]; included: any[] }): Pro
   const neededTeams = new Map<string, { sport: string; abbr: string }>();
   const neededPlayers = new Map<string, PpNorm>();
 
+  let firstProjLogged = false;
   for (const proj of (data.data || [])) {
+    const leagueId = String(proj.relationships?.league?.data?.id ?? "");
     const pAttr = playerAttrMap[proj.relationships?.new_player?.data?.id] || {};
-    const lAttr = leagueMap[proj.relationships?.league?.data?.id] || {};
+    const lAttr = leagueMap[leagueId] || {};
     const lineValue = parseFloat(proj.attributes?.line_score as string);
     if (isNaN(lineValue)) continue;
 
@@ -81,10 +110,28 @@ export async function processPpData(data: { data: any[]; included: any[] }): Pro
     const imageUrl = (pAttr.image_url as string | undefined) ?? null;
     const position = ((pAttr.position as string | undefined) ?? "").trim() || null;
 
+    const pickCategory = inferPickCategory(leagueId, statType);
+    const teamPickType = pickCategory === "team" ? inferTeamPickType(statType) : null;
+    const directionalityType: "over_under" | "yes_no" =
+      teamPickType === "moneyline" || teamPickType === "future" ? "yes_no" : "over_under";
+
+    // Debug: log raw projection attributes on first import so field names are visible
+    // in server logs when team/culture picks arrive for the first time.
+    if (!firstProjLogged) {
+      firstProjLogged = true;
+      logger.info({
+        sampleProjAttrs: proj.attributes,
+        sampleRelationshipKeys: Object.keys(proj.relationships ?? {}),
+        detectedCategory: pickCategory,
+        leagueId,
+      }, "PP import sample projection (first row)");
+    }
+
     const norm: PpNorm = {
       sport, teamAbbr, playerName,
       ppPlayerId: proj.relationships?.new_player?.data?.id,
       statType, lineValue, lineType, imageUrl, position,
+      pickCategory, teamPickType, directionalityType, leagueId,
     };
     norms.push(norm);
     if (teamAbbr) neededTeams.set(`${sport}|${teamAbbr}`, { sport, abbr: teamAbbr });
@@ -249,7 +296,9 @@ export async function processPpData(data: { data: any[]; included: any[] }): Pro
           lineValue: b.record.lineValue.toString(),
           lineType: b.record.lineType,
           gameId: b.gameId,
-          directionalityType: "over_under",
+          directionalityType: b.record.directionalityType,
+          pickCategory: b.record.pickCategory,
+          teamPickType: b.record.teamPickType ?? null,
           isActive: true,
           openedAt: new Date(),
           lastSyncedAt: new Date(),

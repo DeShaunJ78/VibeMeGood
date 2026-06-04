@@ -17,7 +17,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge, BestValueBadge } from "@/components/ui/badges";
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
 import { TeamPicksBoard } from "@/components/team-picks-board";
-import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, AlertTriangle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight, Filter, ChevronDown, ChevronRight, X, Clock } from "lucide-react";
+import { CulturePicksBoard } from "@/components/culture-picks-board";
+import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, AlertTriangle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight, Filter, ChevronDown, ChevronRight, X, Clock, Sparkles } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ReferenceLine, Cell, ResponsiveContainer, AreaChart, Area } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { useEntry, type EntryPick } from "@/lib/entry-context";
@@ -533,7 +534,7 @@ export default function SlateBoard() {
   const totalEntries = allEntriesForCount?.length ?? 0;
   const presetsUnlocked = totalEntries >= 30;
   const varianceEnabled = userSettings?.varianceIntelEnabled ?? false;
-  const [tab, setTab] = useState<"player" | "team">("player");
+  const [tab, setTab] = useState<"player" | "team" | "culture">("player");
   // "" = unresolved; auto-defaults to the most-populated sport once counts load.
   // Persists the user's manual choice across sessions.
   const [sport, setSport] = useState<string>(() => {
@@ -808,6 +809,7 @@ export default function SlateBoard() {
 
   const allRows = [...mergedRows, ...miOnlyRows];
   const teamRows = allRows.filter((r) => r.pickCategory === "team");
+  const cultureRows = allRows.filter((r) => r.pickCategory === "culture");
   const notSynced = allMiRows.length === 0 && !miLoading && sport === "all";
 
   // Distinct game-time windows derived from the loaded slate. Each unique
@@ -832,7 +834,7 @@ export default function SlateBoard() {
   }, [slate]);
 
   const playerRows = useMemo(() => {
-    let rows = allRows.filter((r) => r.pickCategory !== "team");
+    let rows = allRows.filter((r) => r.pickCategory !== "team" && r.pickCategory !== "culture");
     // Slate window — default hides completed games, specific windows isolate one time slot.
     if (selectedWindow === "upcoming") {
       rows = rows.filter(r => r.gameStatus !== "final");
@@ -1174,12 +1176,30 @@ export default function SlateBoard() {
               <Users className="w-3.5 h-3.5" /> Team Picks
               <Badge className="ml-1 bg-violet-700 text-white text-[10px] px-1 py-0 font-mono">NEW</Badge>
             </button>
+            <button
+              onClick={() => setTab("culture")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-mono transition-colors ${tab === "culture" ? "bg-indigo-600 text-white" : "text-muted-foreground hover:text-foreground bg-slate-800/50"}`}
+            >
+              <Sparkles className="w-3.5 h-3.5" /> Culture
+              {tab === "culture" && cultureRows.length > 0 && (
+                <span className="ml-1 bg-indigo-400/20 text-xs px-1.5 rounded-full font-mono">{cultureRows.length}</span>
+              )}
+              <Badge className="ml-1 bg-indigo-700 text-white text-[10px] px-1 py-0 font-mono">NEW</Badge>
+            </button>
           </div>
 
           {tab === "team" && teamRows.length > 0 && (
             <div className="md:hidden flex items-center gap-2 shrink-0">
               <span className="font-mono text-[10px] text-slate-500 shrink-0">
                 {teamRows.length} rows
+              </span>
+            </div>
+          )}
+
+          {tab === "culture" && cultureRows.length > 0 && (
+            <div className="md:hidden flex items-center gap-2 shrink-0">
+              <span className="font-mono text-[10px] text-slate-500 shrink-0">
+                {cultureRows.length} rows
               </span>
             </div>
           )}
@@ -2203,7 +2223,9 @@ export default function SlateBoard() {
           </div>
         </div>
       ) : (
-        <TeamPicksBoard rows={teamRows} isLoading={isLoading} onSelectProp={setSelectedPropId} />
+        tab === "team"
+          ? <TeamPicksBoard rows={teamRows} isLoading={isLoading} onSelectProp={setSelectedPropId} />
+          : <CulturePicksBoard rows={cultureRows} isLoading={isLoading} onSelectProp={setSelectedPropId} />
       )}
 
       {/* Mobile filter drawer */}
