@@ -90,8 +90,8 @@ const CHECKS: Check[] = [
   },
   {
     category: "format",
-    name: "prop_scores.action_tag in (PLAY|WATCH|PASS|NO-PLAY)",
-    sql: `SELECT count(*)::int AS n FROM prop_scores WHERE action_tag NOT IN ('PLAY','WATCH','PASS','NO-PLAY')`,
+    name: "prop_scores.action_tag in (PLAY|ACTION|WATCH|PASS|NO-PLAY)",
+    sql: `SELECT count(*)::int AS n FROM prop_scores WHERE action_tag NOT IN ('PLAY','ACTION','WATCH','PASS','NO-PLAY')`,
   },
   {
     // teams holds free-form cross-sport identifiers (golf players, esports orgs,

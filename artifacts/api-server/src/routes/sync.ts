@@ -100,6 +100,17 @@ router.post("/sync/historical-stats", async (req, res) => {
     const result = await backfillHistoricalStats({ nba, mlb, nhl, nfl });
     logger.info(result, "Historical backfill complete");
     broadcastSyncStatus("historical-stats", "success", `${result.total} records`);
+    // Auto-chain NFL advanced metrics when NFL logs were synced
+    if (nfl && result.nfl > 0) {
+      logger.info("Auto-triggering NFL advanced metrics after backfill");
+      syncNflAdvancedMetrics()
+        .then(n => broadcastSyncStatus("nfl-advanced-metrics", "success", `${n} records (auto)`))
+        .catch(err => {
+          logger.warn({ err }, "NFL advanced auto-chain failed (non-critical)");
+          broadcastSyncStatus("nfl-advanced-metrics", "error",
+            err instanceof Error ? err.message : "Auto-chain failed");
+        });
+    }
   } catch (e) {
     logger.error({ err: e }, "Historical backfill failed");
     broadcastSyncStatus("historical-stats", "error", e instanceof Error ? e.message : "Unknown error");

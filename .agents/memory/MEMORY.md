@@ -11,7 +11,7 @@
 - [Single-sport lineups](single-sport-lineups.md) — lineup factory must lock each lineup to the first accepted pick's sport in BOTH main loop and relaxed fallback; pool is global cross-sport.
 - [PP PerimeterX block](pp-perimeter-x-block.md) — server-side PP syncs always 403 (PerimeterX CAPTCHA); proxies don't help & were removed. Browser-import is the only ingestion path; no PP cron.
 - [Calibration pseudo-line fix](calibration-pseudo-line-fix.md) — median=0 for sparse stats + push-exclusion = 100% hit rate artifact; fix is +0.5; TRUNCATE calibration table before re-running after any line change.
-- [Distribution engine roadmap](distribution-roadmap.md) — next major upgrade: Poisson/NegBin/ZIP per stat family; incremental 4-stage rollout; sparse-stat unders are expected strongest edge.
+- [Distribution engine](distribution-roadmap.md) — Poisson/NegBin/ZIP/Log-normal already fully implemented in distributions.ts; calibration +0.5 pseudo-line fix and cross-tier EV guard also done. Don't rebuild.
 - [Priors key mismatch → DEFAULT inflation](priors-key-mismatch.md) — 17+ stat types fell to DEFAULT_PRIOR(mean=20) via key mismatch; inflated pOver 96–99% via Bayesian shrinkage; fixed with canonical DB stat_type names.
 - [Entry projection snapshot](entry-projection-snapshot.md) — snapshot model projection onto entry_picks server-side at log time (key player+statType, unique); AI entry-analysis prompt must inject player names.
 - [Proxy injects wildcard CORS](proxy-cors-testing.md) — localhost:80 proxy adds `Access-Control-Allow-Origin: *`; test an app's real CORS on its own port, and restart for app.ts middleware changes.
@@ -22,6 +22,9 @@
 - [Probability calibration source](probability-calibration-source.md) — calibration is self-feeding from player_game_logs walk-forward replay (no manual input); historical PP lines aren't linkable to outcomes (only unplayed games carry gameId).
 - [Cross-tier EV best-value](cross-tier-ev-best-value.md) — EV=pHit×M per tier; two traps that spuriously crown demon: mixed raw/calibrated prob basis, and synthetic-default multipliers (gate on multiplierTrustworthy).
 - [Shark knowledge injection](shark-knowledge-injection.md) — Shark prompt also pulls EVERY *.md in its knowledge folders; editing prompt+UI alone leaves stale framing; grep all of knowledge/.
+- [AI context design](ai-context-design.md) — Analyst injects full live slate (PLAY/ACTION/WATCH/GATED) + schedule + cal stats + model explanation; Shark injects compact PLAY/ACTION + injuries. Both use calibrated P(Over) from DB, not guesses.
+- [DQ ACTION tag gap](dq-action-tag.md) — prop_scores.action_tag format check originally omitted ACTION; gate was flagging valid rows as violations. Always include all 5 tags: PLAY|ACTION|WATCH|PASS|NO-PLAY.
+- [NFL advanced auto-chain](nfl-advanced-chain.md) — syncNflAdvancedMetrics() takes 0 args; auto-fires as fire-and-forget after backfillHistoricalStats when nfl=true AND result.nfl>0; 2025 CSV is 404 (season unpublished) but backfillNFL already catches and continues.
 - [Settings data-health UI freshness](data-health-ui-freshness.md) — PP sync row greens off boardFreshnessAt (pp_lines age), generic rows off provider aggregation; don't use lastPullLogs (only 30).
 - [Sync completion signal](sync-completion-signal.md) — sync routes are fire-and-forget; completion = `sync_status` SSE event on /api/events, NOT a fixed-delay refetch; jobName ≠ route/action name.
 - [Data-readiness thresholds](data-readiness-thresholds.md) — isDataReady = playersWithLogs≥100; isCalibrationReady = calibrationBuckets≥50; exposed at GET /api/data-readiness; shown as amber banner on Dashboard + Slate.

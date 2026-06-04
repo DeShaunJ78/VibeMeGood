@@ -1,4 +1,11 @@
 import { Router } from "express";
+import { db } from "@workspace/db";
+import {
+  ppLinesTable, playersTable, teamsTable,
+  ourProjectionsTable, propScoresTable,
+  injuriesTable, probabilityCalibrationTable,
+} from "@workspace/db/schema";
+import { eq, desc, and, inArray, sql } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { getAppContext, loadKnowledge } from "../lib/shark/app-contexts";
 
@@ -55,10 +62,10 @@ Walk through these 5 gates in order:
    (std dev < 40% of projection)
 
 5. Sample size adequate?
-   <10 games = unreliable
-   10-20 = low confidence
-   20-30 = medium confidence
-   >30 = high confidence
+   <5 games = BLOCKED (minimum enforced)
+   5-10 = low confidence
+   10-20 = medium confidence
+   >20 = high confidence
 
 Only when ALL 5 passed = SHARP PLAY
 
@@ -69,9 +76,10 @@ When a user shares an override result explain what the recalculated edge means a
 
 GOBLIN AND DEMON LINES:
 PP offers multiple tiers per player.
-Goblin lines (👹) = line below 60% of projection — easy over, lower value
-Demon lines (😈) = line above 120% of projection — easy under, lower value
+Goblin lines (👹) = line below ~60% of projection — easy over, lower payout value
+Demon lines (😈) = line above ~120% of projection — easy under, lower payout value
 Standard lines = between 60-120% of projection — where real edge lives
+★ BEST VALUE = this tier has the highest calibrated EV for this player
 
 BANKROLL GUIDANCE:
 For PrizePicks:
@@ -126,6 +134,138 @@ interface ConversationTurn {
   content: string;
 }
 
+// ── Live slate context injected into every Shark response ─────────────────────
+// Pulls PLAY + ACTION props with calibrated probabilities, sharp signals, and
+// any injuries affecting today's slate. Kept compact for Shark's system prompt.
+async function buildSharkSlateContext(): Promise<string> {
+  const today = new Date();
+
+  try {
+    const [topLines, allTeams, injuries, calStats] = await Promise.all([
+      db.select({
+        lineValue:      ppLinesTable.lineValue,
+        statType:       ppLinesTable.statType,
+        lineType:       ppLinesTable.lineType,
+        playerName:     playersTable.fullName,
+        playerTeamId:   playersTable.teamId,
+        sport:          playersTable.sport,
+        pOver:          ourProjectionsTable.pOver,
+        projectedValue: ourProjectionsTable.projectedValue,
+        stdDev:         ourProjectionsTable.stdDev,
+        gamesUsed:      ourProjectionsTable.gamesUsed,
+        noPlayReason:   ourProjectionsTable.noPlayReason,
+        actionTag:      propScoresTable.actionTag,
+        edgeScore:      propScoresTable.edgeScore,
+        riskScore:      propScoresTable.riskScore,
+        finalScore:     propScoresTable.finalScore,
+        recommendedSide:propScoresTable.recommendedSide,
+        bestTier:       propScoresTable.bestTierInGroup,
+        reasoning:      propScoresTable.reasoning,
+      })
+        .from(ppLinesTable)
+        .innerJoin(playersTable,        eq(ppLinesTable.playerId, playersTable.id))
+        .innerJoin(propScoresTable,     eq(propScoresTable.ppLineId, ppLinesTable.id))
+        .leftJoin(ourProjectionsTable,  and(
+          eq(ourProjectionsTable.playerId, ppLinesTable.playerId),
+          eq(ourProjectionsTable.statType, ppLinesTable.statType),
+        ))
+        .where(and(
+          eq(ppLinesTable.isActive, true),
+          inArray(propScoresTable.actionTag, ["PLAY", "ACTION"]),
+        ))
+        .orderBy(desc(propScoresTable.finalScore))
+        .limit(30),
+
+      db.select().from(teamsTable),
+
+      db.select().from(injuriesTable)
+        .orderBy(desc(injuriesTable.reportedAt))
+        .limit(12),
+
+      db.select({ cnt: sql<number>`count(*)` }).from(probabilityCalibrationTable),
+    ]);
+
+    const teamMap    = Object.fromEntries(allTeams.map(t => [t.id, t]));
+    const calBuckets = Number(calStats[0]?.cnt ?? 0);
+
+    const plays   = topLines.filter(l => l.actionTag === "PLAY");
+    const actions = topLines.filter(l => l.actionTag === "ACTION");
+
+    // Resolve injury players
+    const injPlayerIds = [...new Set(injuries.map(i => i.playerId))];
+    const injPlayers   = injPlayerIds.length
+      ? await db.select().from(playersTable).where(inArray(playersTable.id, injPlayerIds))
+      : [];
+    const injPlayerMap = Object.fromEntries(injPlayers.map(p => [p.id, p]));
+
+    // Injuries that overlap the slate
+    const slateNames = new Set(topLines.map(l => l.playerName));
+    const slateInjuries = injuries.filter(inj => {
+      const p = injPlayerMap[inj.playerId];
+      return p && slateNames.has(p.fullName) && (inj.status === "out" || inj.status === "gtd");
+    });
+
+    function fmtProp(l: typeof topLines[0]): string {
+      const team  = l.playerTeamId ? teamMap[l.playerTeamId] : null;
+      const abbr  = team?.abbreviation ?? "?";
+      const pOv   = l.pOver != null ? Math.round(Number(l.pOver) * 10) / 10 : "?";
+      const proj  = l.projectedValue != null ? Number(l.projectedValue).toFixed(1) : "?";
+      const std   = l.stdDev   != null ? Number(l.stdDev).toFixed(1)   : "?";
+      const edge  = l.edgeScore != null ? Number(l.edgeScore).toFixed(0) : "?";
+      const n     = l.gamesUsed ?? "?";
+      const side  = l.recommendedSide?.toUpperCase() ?? "?";
+      const tier  = l.lineType === "goblin" ? "👹" : l.lineType === "demon" ? "😈" : "";
+      const bv    = l.bestTier ? " ★BV" : "";
+      const r     = l.reasoning as Record<string, unknown> | null;
+      const sharp = r?.sharpSignal && r.sharpSignal !== "neutral"
+        ? ` ⚡${String(r.sharpSignal).toUpperCase()}` : "";
+      const mkt   = r?.marketEdge != null ? ` MktEdge:${r.marketEdge}%` : "";
+      return `  ${l.playerName} (${abbr}) ${l.sport} | ${l.statType}${tier} ${l.lineValue} | P(${side}):${pOv}% | Model:${proj}±${std} | Edge:${edge} | N:${n}${sharp}${mkt}${bv}`;
+    }
+
+    const lines: string[] = [
+      `=== TODAY'S LIVE SLATE — ${today.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} ===`,
+      `Model: Poisson/NegBin/ZIP/Log-normal distributions, Bayesian shrinkage, ${calBuckets} calibration buckets.`,
+      `P(Over) values are CALIBRATED against historical hit rates. Power 2 break-even: 50%.`,
+      "",
+    ];
+
+    if (plays.length > 0) {
+      lines.push(`▶ PLAY PROPS — All 5 gates passed (${plays.length} props):`);
+      plays.forEach(l => lines.push(fmtProp(l)));
+      lines.push("");
+    }
+
+    if (actions.length > 0) {
+      lines.push(`▶ ACTION PROPS — Strong signal (${actions.length} props):`);
+      actions.slice(0, 12).forEach(l => lines.push(fmtProp(l)));
+      lines.push("");
+    }
+
+    if (plays.length === 0 && actions.length === 0) {
+      lines.push("No PLAY or ACTION props on current slate.");
+      lines.push("Tell user to run Settings → Sync Projections → Rescore Props.");
+      lines.push("");
+    }
+
+    if (slateInjuries.length > 0) {
+      lines.push("⚠ SLATE INJURIES (OUT/GTD):");
+      slateInjuries.forEach(inj => {
+        const p = injPlayerMap[inj.playerId];
+        if (p) lines.push(`  • ${p.fullName} — ${inj.status.toUpperCase()} — ${inj.note ?? ""}`);
+      });
+      lines.push("");
+    }
+
+    lines.push("=== END LIVE SLATE ===");
+    return lines.join("\n");
+
+  } catch {
+    // Fallback: don't break the chat if DB query fails
+    return `=== LIVE SLATE — ${today.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ===\nSlate data unavailable — sync required.\n=== END LIVE SLATE ===`;
+  }
+}
+
 router.post("/shark/chat", async (req, res): Promise<void> => {
   try {
     const { message, app = "vibemegood", conversationHistory = [] } = req.body as {
@@ -139,19 +279,25 @@ router.post("/shark/chat", async (req, res): Promise<void> => {
       return;
     }
 
-    const ctx = getAppContext(app);
-    const knowledge = loadKnowledge(ctx.knowledgeFolders);
+    const ctx           = getAppContext(app);
+    const knowledge     = loadKnowledge(ctx.knowledgeFolders);
+    const slateContext  = await buildSharkSlateContext();
 
     const systemPrompt = [
       ctx.systemPromptPrefix,
       "",
       VIBEMEGOOD_SYSTEM_PROMPT,
       "",
+      "=== LIVE DATA FROM YOUR ANALYTICS SYSTEM ===",
+      "The following is REAL DATA pulled from your personal PrizePicks Analytics Workstation.",
+      "These props have been scored by the model you've built. Use them. Do not guess or fabricate numbers.",
+      slateContext,
+      "=== END LIVE DATA ===",
+      "",
       "=== KNOWLEDGE BASE ===",
       knowledge || "No knowledge files found — answer from general expertise.",
     ].join("\n");
 
-    // Build message list: history + new user message
     const safeHistory: ConversationTurn[] = Array.isArray(conversationHistory)
       ? conversationHistory.filter(
           m => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string",
@@ -159,7 +305,7 @@ router.post("/shark/chat", async (req, res): Promise<void> => {
       : [];
 
     const messages: ConversationTurn[] = [
-      ...safeHistory.slice(-20), // keep last 20 turns to stay within context limits
+      ...safeHistory.slice(-20),
       { role: "user", content: message },
     ];
 
