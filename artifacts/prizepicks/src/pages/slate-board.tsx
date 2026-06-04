@@ -707,6 +707,15 @@ export default function SlateBoard() {
     query: { queryKey: getGetSlateQueryKey(slateParams), enabled: sportResolved },
   });
 
+  const allSportSlateParams = {};
+  const { data: allSportSlate } = useGetSlate(allSportSlateParams, {
+    query: {
+      queryKey: getGetSlateQueryKey(allSportSlateParams),
+      enabled: sportResolved && sport !== "all" && tab === "team",
+      staleTime: 5 * 60 * 1000,
+    },
+  });
+
   const { data: miPageData, isLoading: miLoading } = useMarketIntel(miParams, miPage, sportResolved);
 
   // Accumulate pages as they load; capture lastOddsSync from page 1
@@ -809,6 +818,9 @@ export default function SlateBoard() {
 
   const allRows = [...mergedRows, ...miOnlyRows];
   const teamRows = allRows.filter((r) => r.pickCategory === "team");
+  const totalTeamRowCount: number | null = sport !== "all" && allSportSlate
+    ? (allSportSlate as any[]).filter((r: any) => r.pickCategory === "team").length
+    : null;
   const cultureRows = allRows.filter((r) => r.pickCategory === "culture");
   const notSynced = allMiRows.length === 0 && !miLoading && sport === "all";
 
@@ -1191,7 +1203,9 @@ export default function SlateBoard() {
           {tab === "team" && teamRows.length > 0 && (
             <div className="md:hidden flex items-center gap-2 shrink-0">
               <span className="font-mono text-[10px] text-slate-500 shrink-0">
-                {teamRows.length} rows
+                {totalTeamRowCount !== null
+                  ? `${teamRows.length} / ${totalTeamRowCount} rows`
+                  : `${teamRows.length} rows`}
               </span>
             </div>
           )}
