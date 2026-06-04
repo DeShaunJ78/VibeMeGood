@@ -697,14 +697,18 @@ export default function SlateBoard() {
   // so the view is never empty (wrong window selected for new sport).
   // Also reset the chip filter whenever sport is cleared back to "all" so stale
   // chip filters never silently narrow an all-sports view.
+  // Exception: when a preset is active, it intentionally sets sport="all" AND an
+  // actionTag simultaneously (e.g. Safe → sport="all" + PLAY). React batches those
+  // state updates, so by the time this effect fires activePreset is already set —
+  // guard against clearing the chip in that case.
   const prevSport = useRef(sport);
   useEffect(() => {
     if (prevSport.current !== sport && sport !== "") {
-      if (sport === "all") setActionTagFilter("all");
+      if (sport === "all" && !activePreset) setActionTagFilter("all");
       prevSport.current = sport;
       setSelectedWindow("upcoming");
     }
-  }, [sport]);
+  }, [sport, activePreset]);
 
   const { data: slate, isLoading: slateLoading } = useGetSlate(slateParams, {
     query: { queryKey: getGetSlateQueryKey(slateParams), enabled: sportResolved },
@@ -714,7 +718,7 @@ export default function SlateBoard() {
   const { data: allSportSlate } = useGetSlate(allSportSlateParams, {
     query: {
       queryKey: getGetSlateQueryKey(allSportSlateParams),
-      enabled: sportResolved && sport !== "all" && tab === "team",
+      enabled: sportResolved && sport !== "all" && (tab === "team" || tab === "culture"),
       staleTime: 5 * 60 * 1000,
     },
   });
