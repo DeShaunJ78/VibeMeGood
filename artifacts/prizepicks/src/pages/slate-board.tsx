@@ -1438,6 +1438,8 @@ export default function SlateBoard() {
               {DEFAULT_PRESETS.map(p => {
                 const isActive = activePreset === p.label;
                 const getSaved = () => { try { return (JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>)[p.label] ?? null; } catch { return null; } };
+                const savedCfg = p.label === "My Style" ? getSaved() : null;
+                const savedSport = savedCfg?.sport && savedCfg.sport !== "all" ? savedCfg.sport.toUpperCase() : null;
                 return (
                   <button
                     key={p.label}
@@ -1454,18 +1456,25 @@ export default function SlateBoard() {
                     }}
                     className={`px-2 py-0.5 rounded font-mono text-[10px] border transition-colors ${isActive ? "bg-primary/20 text-primary border-primary/30" : "border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500"}`}
                   >
-                    {p.icon} {p.label}
+                    {p.icon} {p.label}{savedSport && <span className="ml-1 text-[9px] text-cyan-400/80 font-mono">· {savedSport}</span>}
                   </button>
                 );
               })}
-              {presetsUnlocked && activePreset === "My Style" && (
-                <button
-                  onClick={() => { try { const saved = JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>; saved["My Style"] = { sport, lineType: lineTypeFilter, minEdge, actionTag: actionTagFilter, sharpOnly }; localStorage.setItem(PRESET_LS_KEY, JSON.stringify(saved)); } catch {} }}
-                  className="text-[10px] font-mono text-amber-400 hover:text-amber-300 px-1"
-                >
-                  💾 save
-                </button>
-              )}
+              {presetsUnlocked && activePreset === "My Style" && (() => {
+                const parts: string[] = [];
+                if (sport && sport !== "all") parts.push(sport.toUpperCase());
+                if (actionTagFilter && actionTagFilter !== "all") parts.push(actionTagFilter);
+                const preview = parts.length ? ` ${parts.join("+")}` : "";
+                return (
+                  <button
+                    onClick={() => { try { const saved = JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>; saved["My Style"] = { sport, lineType: lineTypeFilter, minEdge, actionTag: actionTagFilter, sharpOnly }; localStorage.setItem(PRESET_LS_KEY, JSON.stringify(saved)); } catch {} }}
+                    className="text-[10px] font-mono text-amber-400 hover:text-amber-300 px-1"
+                    title={`Save current filters as My Style${preview ? `: ${parts.join(" + ")}` : ""}`}
+                  >
+                    💾 save{preview && <span className="text-amber-300/70">{preview}</span>}
+                  </button>
+                );
+              })()}
               {presetsUnlocked && activePreset && (
                 <button
                   onClick={() => { setSport("all"); setLineTypeFilter("all"); setMinEdge(""); setActionTagFilter("all"); setSharpOnly(false); setActivePreset(null); }}
