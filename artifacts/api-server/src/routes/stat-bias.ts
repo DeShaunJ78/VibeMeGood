@@ -28,7 +28,11 @@ router.get("/dashboard/stat-bias", async (req, res) => {
         tier: entryPicksTable.lineType,
         hitCount: sql<number>`count(*) filter (where ${entryPicksTable.result} = 'hit')`,
         sampleSize: sql<number>`count(*)`,
-        avgModelPOver: sql<number | null>`avg(${entryPicksTable.yourProjection}::float)`,
+        // Model pOver proxy: fraction of picks where the model projected above the line
+        // (projectionGap > 0 means model's stat value exceeds the PrizePicks line).
+        // Returned as 0–100 to stay consistent with pOver conventions.
+        modelOverCount: sql<number>`count(*) filter (where ${entryPicksTable.projectionGap} is not null and ${entryPicksTable.projectionGap}::float > 0)`,
+        modelNonNullCount: sql<number>`count(*) filter (where ${entryPicksTable.projectionGap} is not null)`,
       })
       .from(entryPicksTable)
       .innerJoin(entriesTable, eq(entryPicksTable.entryId, entriesTable.id))
@@ -40,12 +44,20 @@ router.get("/dashboard/stat-bias", async (req, res) => {
       const sampleSize = Number(r.sampleSize);
       const hitCount = Number(r.hitCount);
       const hasEnoughData = sampleSize >= MIN_SAMPLE;
-      const hitRate = hasEnoughData ? hitCount / sampleSize : null;
-      const avgModelPOver = r.avgModelPOver != null ? Number(r.avgModelPOver) : null;
-      const avgFraction = avgModelPOver != null ? avgModelPOver / 100 : null;
-      const delta = hitRate != null && avgFraction != null
-        ? Math.round((hitRate - avgFraction) * 1000) / 10
+      const hitRate = sampleSize > 0 ? hitCount / sampleSize : null;
+
+      // avgModelPOver = % of graded picks where model projected above the line.
+      // Null when no projection data exists for the bucket.
+      const modelNonNull = Number(r.modelNonNullCount);
+      const modelOver = Number(r.modelOverCount);
+      const avgModelPOver = modelNonNull > 0
+        ? Math.round((modelOver / modelNonNull) * 1000) / 10   // 0–100 scale
         : null;
+
+      const delta = hitRate != null && avgModelPOver != null
+        ? Math.round((hitRate * 100 - avgModelPOver) * 10) / 10
+        : null;
+
       return {
         sport: r.sport ?? null,
         statType: r.statType,
@@ -53,7 +65,7 @@ router.get("/dashboard/stat-bias", async (req, res) => {
         hitCount,
         sampleSize,
         hitRate: hitRate != null ? Math.round(hitRate * 1000) / 1000 : null,
-        avgModelPOver: avgModelPOver != null ? Math.round(avgModelPOver * 10) / 10 : null,
+        avgModelPOver,
         delta,
         hasEnoughData,
       };

@@ -378,18 +378,21 @@ export async function recalcPropScores(): Promise<void> {
     if (biasCorrectionEnabled) {
       const biasRows = await db
         .select({
+          sport: playersTable.sport,
           statType: entryPicksTable.statType,
           lineType: entryPicksTable.lineType,
           hitCount: sql<number>`count(*) filter (where ${entryPicksTable.result} = 'hit')`,
           sampleSize: sql<number>`count(*)`,
         })
         .from(entryPicksTable)
+        .leftJoin(playersTable, eq(entryPicksTable.playerId, playersTable.id))
         .where(inArray(entryPicksTable.result, ["hit", "miss"]))
-        .groupBy(entryPicksTable.statType, entryPicksTable.lineType);
+        .groupBy(playersTable.sport, entryPicksTable.statType, entryPicksTable.lineType);
       for (const r of biasRows) {
         const n = Number(r.sampleSize);
         if (n >= 10) {
-          biasMap.set(`${r.statType}:${r.lineType}`, {
+          const key = `${r.sport ?? ""}:${r.statType}:${r.lineType}`;
+          biasMap.set(key, {
             hitRate: Number(r.hitCount) / n,
             sampleSize: n,
           });
@@ -602,7 +605,7 @@ export async function recalcPropScores(): Promise<void> {
       let biasAdjustment = 0;
       let appliedBiasDelta: number | null = null;
       if (biasCorrectionEnabled) {
-        const biasKey = `${line.statType}:${line.lineType}`;
+        const biasKey = `${player.sport ?? ""}:${line.statType}:${line.lineType}`;
         const bucket = biasMap.get(biasKey);
         if (bucket) {
           const modelProb = pOver != null ? pOver / 100 : 0.5;

@@ -295,7 +295,12 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
   });
 
   const biasBucket = data?.ppLine?.statType && data?.ppLine?.lineType
-    ? (biasData?.buckets ?? []).find(b => b.statType === data.ppLine.statType && b.tier === data.ppLine.lineType && b.hasEnoughData) ?? null
+    ? (biasData?.buckets ?? []).find(b =>
+        (b.sport ?? null) === (data.player?.sport ?? null) &&
+        b.statType === data.ppLine.statType &&
+        b.tier === data.ppLine.lineType &&
+        b.hasEnoughData
+      ) ?? null
     : null;
 
   useEffect(() => {
