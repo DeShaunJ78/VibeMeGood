@@ -1350,6 +1350,14 @@ export const GetReviewStatsResponse = zod.object({
   "count": zod.number(),
   "adherent": zod.number()
 })).optional(),
+  "clvCoverageByMonth": zod.array(zod.object({
+  "month": zod.string(),
+  "label": zod.string(),
+  "total": zod.number(),
+  "covered": zod.number(),
+  "coverage": zod.number().nullish(),
+  "avgClv": zod.number().nullish()
+})).optional(),
   "hitRateByPickCount": zod.unknown().optional(),
   "hitRateByEntryType": zod.unknown().optional(),
   "statBreakdown": zod.array(zod.object({

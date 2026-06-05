@@ -665,6 +665,17 @@ export type ReviewStatsKellyAdherenceByMonthItem = {
   adherent: number;
 };
 
+export type ReviewStatsClvCoverageByMonthItem = {
+  month: string;
+  label: string;
+  total: number;
+  covered: number;
+  /** @nullable */
+  coverage?: number | null;
+  /** @nullable */
+  avgClv?: number | null;
+};
+
 export type ReviewStatsStatBreakdownItem = {
   statType: string;
   pickCount: number;
@@ -698,6 +709,7 @@ export interface ReviewStats {
   /** @nullable */
   kellyAdherenceRate?: number | null;
   kellyAdherenceByMonth?: ReviewStatsKellyAdherenceByMonthItem[];
+  clvCoverageByMonth?: ReviewStatsClvCoverageByMonthItem[];
   hitRateByPickCount?: unknown;
   hitRateByEntryType?: unknown;
   statBreakdown?: ReviewStatsStatBreakdownItem[];

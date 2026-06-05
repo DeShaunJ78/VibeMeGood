@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, ReferenceLine,
+  ComposedChart,
 } from "recharts";
 import { TrendingUp, TrendingDown, Percent, DollarSign, Target, Brain, ChevronDown, ChevronUp, Download } from "lucide-react";
 import { useState } from "react";
@@ -394,6 +395,69 @@ export default function Review() {
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block" />≥ 70% on-target</span>
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-500 inline-block" />50–69% borderline</span>
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-rose-500 inline-block" />&lt; 50% over-sizing</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* CLV Coverage Trend */}
+          {Array.isArray(s.clvCoverageByMonth) && (s.clvCoverageByMonth as any[]).length >= 2 && (
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-mono uppercase tracking-wider flex items-center gap-2">
+                  <Percent className="w-3.5 h-3.5 text-primary" />
+                  CLV Coverage Trend
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={s.clvCoverageByMonth as any[]} margin={{ top: 5, right: 40, bottom: 5, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                      <XAxis dataKey="label" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+                      <YAxis
+                        yAxisId="cov"
+                        stroke="#64748b"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        domain={[0, 1]}
+                        tickFormatter={(v: number) => `${Math.round(v * 100)}%`}
+                      />
+                      <YAxis
+                        yAxisId="clv"
+                        orientation="right"
+                        stroke="#64748b"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(v: number) => (v > 0 ? `+${v.toFixed(1)}` : v.toFixed(1))}
+                      />
+                      <ReferenceLine yAxisId="cov" y={0.8} stroke="#f59e0b" strokeDasharray="4 4" strokeOpacity={0.6} label={{ value: "80%", position: "insideTopRight", fill: "#f59e0b", fontSize: 10, fontFamily: "monospace" }} />
+                      <ReferenceLine yAxisId="clv" y={0} stroke="#475569" strokeDasharray="2 2" strokeOpacity={0.5} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "#020617", borderColor: "#1e293b", color: "#f8fafc", fontFamily: "monospace", fontSize: 11 }}
+                        formatter={(v: any, name: string, props: any) => {
+                          const d = props.payload;
+                          if (name === "coverage") return [`${Math.round(Number(v) * 100)}%  (${d?.covered}/${d?.total} picks)`, "Coverage"];
+                          if (name === "avgClv") return v != null ? [`${Number(v) > 0 ? "+" : ""}${Number(v).toFixed(2)}`, "Avg CLV"] : ["—", "Avg CLV"];
+                          return [v, name];
+                        }}
+                      />
+                      <Bar yAxisId="cov" dataKey="coverage" radius={[3, 3, 0, 0]}>
+                        {(s.clvCoverageByMonth as Array<{ coverage: number | null }>).map((_: any, i: number) => (
+                          <Cell key={i} fill={(_.coverage ?? 0) >= 0.8 ? "#10b981" : (_.coverage ?? 0) >= 0.5 ? "#f59e0b" : "#f43f5e"} fillOpacity={0.8} />
+                        ))}
+                      </Bar>
+                      <Line yAxisId="clv" type="monotone" dataKey="avgClv" stroke="#818cf8" strokeWidth={2} dot={{ r: 3, fill: "#818cf8" }} connectNulls />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex items-center gap-4 mt-2 text-[10px] font-mono text-muted-foreground">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block" />≥ 80% tracked</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-500 inline-block" />50–79% partial</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-rose-500 inline-block" />&lt; 50% sparse</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-400 inline-block" />avg CLV (right axis)</span>
                 </div>
               </CardContent>
             </Card>

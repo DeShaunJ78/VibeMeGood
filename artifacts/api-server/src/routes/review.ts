@@ -160,6 +160,31 @@ router.get("/dashboard/review", async (req, res) => {
       }))
       .sort((a, b) => (b.rate ?? 0) - (a.rate ?? 0));
 
+    // CLV coverage by month — group graded picks by entry month
+    const entryDateMap = new Map(entries.map(e => [e.id, e.entryDate]));
+    const clvMonthMap: Record<string, { total: number; covered: number; clvSum: number }> = {};
+    for (const p of completedPicks.filter(p => p.result === "hit" || p.result === "miss")) {
+      const entryDate = entryDateMap.get(p.entryId);
+      if (!entryDate) continue;
+      const month = entryDate.slice(0, 7);
+      if (!clvMonthMap[month]) clvMonthMap[month] = { total: 0, covered: 0, clvSum: 0 };
+      clvMonthMap[month].total++;
+      if (p.clv !== null) {
+        clvMonthMap[month].covered++;
+        clvMonthMap[month].clvSum += Number(p.clv);
+      }
+    }
+    const clvCoverageByMonth = Object.entries(clvMonthMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, d]) => ({
+        month,
+        label: new Date(month + "-01").toLocaleString("en-US", { month: "short", year: "2-digit" }),
+        total: d.total,
+        covered: d.covered,
+        coverage: d.total > 0 ? Math.round((d.covered / d.total) * 1000) / 1000 : null,
+        avgClv: d.covered > 0 ? Math.round((d.clvSum / d.covered) * 100) / 100 : null,
+      }));
+
     // Kelly adherence: entries where kellySuggested is recorded, fraction with stake ≤ kellySuggested × 1.10
     const kellyEntries = entries.filter(e => e.kellySuggested != null);
     const kellyAdherent = kellyEntries.filter(e =>
@@ -200,6 +225,7 @@ router.get("/dashboard/review", async (req, res) => {
       clvCoverage,
       kellyAdherenceRate,
       kellyAdherenceByMonth,
+      clvCoverageByMonth,
       modelAccuracy,
       emotionWinRates,
       statBreakdown,

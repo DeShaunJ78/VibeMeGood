@@ -2094,6 +2094,18 @@ components:
               count:  { type: integer }
               adherent: { type: integer }
             required: [month, label, count, adherent]
+        clvCoverageByMonth:
+          type: array
+          items:
+            type: object
+            properties:
+              month:    { type: string }
+              label:    { type: string }
+              total:    { type: integer }
+              covered:  { type: integer }
+              coverage: { type: ["number", "null"] }
+              avgClv:   { type: ["number", "null"] }
+            required: [month, label, total, covered]
         hitRateByPickCount: {}
         hitRateByEntryType: {}
         statBreakdown:
