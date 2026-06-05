@@ -2083,6 +2083,17 @@ components:
         avgClv: { type: ["number", "null"] }
         clvCoverage: { type: ["number", "null"] }
         kellyAdherenceRate: { type: ["number", "null"] }
+        kellyAdherenceByMonth:
+          type: array
+          items:
+            type: object
+            properties:
+              month:  { type: string }
+              label:  { type: string }
+              rate:   { type: ["number", "null"] }
+              count:  { type: integer }
+              adherent: { type: integer }
+            required: [month, label, count, adherent]
         hitRateByPickCount: {}
         hitRateByEntryType: {}
         statBreakdown:

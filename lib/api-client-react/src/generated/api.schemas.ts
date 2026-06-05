@@ -656,6 +656,15 @@ export interface DashboardSummary {
   dataFreshness?: unknown;
 }
 
+export type ReviewStatsKellyAdherenceByMonthItem = {
+  month: string;
+  label: string;
+  /** @nullable */
+  rate?: number | null;
+  count: number;
+  adherent: number;
+};
+
 export type ReviewStatsStatBreakdownItem = {
   statType: string;
   pickCount: number;
@@ -688,6 +697,7 @@ export interface ReviewStats {
   clvCoverage?: number | null;
   /** @nullable */
   kellyAdherenceRate?: number | null;
+  kellyAdherenceByMonth?: ReviewStatsKellyAdherenceByMonthItem[];
   hitRateByPickCount?: unknown;
   hitRateByEntryType?: unknown;
   statBreakdown?: ReviewStatsStatBreakdownItem[];

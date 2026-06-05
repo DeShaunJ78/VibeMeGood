@@ -167,6 +167,26 @@ router.get("/dashboard/review", async (req, res) => {
     );
     const kellyAdherenceRate = kellyEntries.length > 0 ? kellyAdherent.length / kellyEntries.length : null;
 
+    // Kelly adherence by month — group kellyEntries by YYYY-MM, compute rate per month
+    const kellyMonthMap: Record<string, { count: number; adherent: number }> = {};
+    for (const e of kellyEntries) {
+      const month = e.entryDate.slice(0, 7);
+      if (!kellyMonthMap[month]) kellyMonthMap[month] = { count: 0, adherent: 0 };
+      kellyMonthMap[month].count++;
+      if (Number(e.stake) <= Number(e.kellySuggested) * 1.10) {
+        kellyMonthMap[month].adherent++;
+      }
+    }
+    const kellyAdherenceByMonth = Object.entries(kellyMonthMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, d]) => ({
+        month,
+        label: new Date(month + "-01").toLocaleString("en-US", { month: "short", year: "2-digit" }),
+        count: d.count,
+        adherent: d.adherent,
+        rate: d.count > 0 ? Math.round((d.adherent / d.count) * 1000) / 1000 : null,
+      }));
+
     res.json({
       totalEntries,
       overallHitRate,
@@ -179,6 +199,7 @@ router.get("/dashboard/review", async (req, res) => {
       avgClv,
       clvCoverage,
       kellyAdherenceRate,
+      kellyAdherenceByMonth,
       modelAccuracy,
       emotionWinRates,
       statBreakdown,

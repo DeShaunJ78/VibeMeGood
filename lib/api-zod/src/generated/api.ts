@@ -1343,6 +1343,13 @@ export const GetReviewStatsResponse = zod.object({
   "avgClv": zod.number().nullish(),
   "clvCoverage": zod.number().nullish(),
   "kellyAdherenceRate": zod.number().nullish(),
+  "kellyAdherenceByMonth": zod.array(zod.object({
+  "month": zod.string(),
+  "label": zod.string(),
+  "rate": zod.number().nullish(),
+  "count": zod.number(),
+  "adherent": zod.number()
+})).optional(),
   "hitRateByPickCount": zod.unknown().optional(),
   "hitRateByEntryType": zod.unknown().optional(),
   "statBreakdown": zod.array(zod.object({

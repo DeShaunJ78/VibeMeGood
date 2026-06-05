@@ -334,6 +334,54 @@ export default function Review() {
             </Card>
           )}
 
+          {/* Kelly Adherence Over Time */}
+          {Array.isArray(s.kellyAdherenceByMonth) && s.kellyAdherenceByMonth.length >= 2 && (
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-mono uppercase tracking-wider flex items-center gap-2">
+                  <Target className="w-3.5 h-3.5 text-primary" />
+                  Kelly Adherence Over Time
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={s.kellyAdherenceByMonth} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                      <XAxis dataKey="label" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+                      <YAxis
+                        stroke="#64748b"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        domain={[0, 1]}
+                        tickFormatter={(v: number) => `${Math.round(v * 100)}%`}
+                      />
+                      <ReferenceLine y={0.7} stroke="#f59e0b" strokeDasharray="4 4" strokeOpacity={0.6} label={{ value: "70%", position: "right", fill: "#f59e0b", fontSize: 10, fontFamily: "monospace" }} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "#020617", borderColor: "#1e293b", color: "#f8fafc", fontFamily: "monospace", fontSize: 11 }}
+                        formatter={(v: any, _: any, props: any) => {
+                          const d = props.payload;
+                          return [`${Math.round(Number(v) * 100)}%  (${d?.adherent}/${d?.count} entries)`, "Adherence"];
+                        }}
+                      />
+                      <Bar dataKey="rate" radius={[3, 3, 0, 0]}>
+                        {(s.kellyAdherenceByMonth as Array<{ rate: number | null }>).map((_: any, i: number) => (
+                          <Cell key={i} fill={(_.rate ?? 0) >= 0.7 ? "#10b981" : (_.rate ?? 0) >= 0.5 ? "#f59e0b" : "#f43f5e"} fillOpacity={0.85} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex items-center gap-4 mt-2 text-[10px] font-mono text-muted-foreground">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block" />≥ 70% on-target</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-500 inline-block" />50–69% borderline</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-rose-500 inline-block" />&lt; 50% over-sizing</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Model Accuracy + Hit Rate Breakdown */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Model Accuracy */}
