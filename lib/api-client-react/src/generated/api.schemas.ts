@@ -645,6 +645,16 @@ export interface DashboardSummary {
   dataFreshness?: unknown;
 }
 
+export type ReviewStatsStatBreakdownItem = {
+  statType: string;
+  pickCount: number;
+  hitCount: number;
+  /** @nullable */
+  hitRate?: number | null;
+  /** @nullable */
+  avgEdge?: number | null;
+};
+
 export interface ReviewStats {
   hitRateBySport?: unknown;
   hitRateByStatType?: unknown;
@@ -665,6 +675,7 @@ export interface ReviewStats {
   avgClv?: number | null;
   hitRateByPickCount?: unknown;
   hitRateByEntryType?: unknown;
+  statBreakdown?: ReviewStatsStatBreakdownItem[];
 }
 
 export interface CalibrationBucket {

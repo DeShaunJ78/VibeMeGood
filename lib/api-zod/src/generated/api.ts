@@ -1321,7 +1321,14 @@ export const GetReviewStatsResponse = zod.object({
   "pickHitRate": zod.number().nullish(),
   "avgClv": zod.number().nullish(),
   "hitRateByPickCount": zod.unknown().optional(),
-  "hitRateByEntryType": zod.unknown().optional()
+  "hitRateByEntryType": zod.unknown().optional(),
+  "statBreakdown": zod.array(zod.object({
+  "statType": zod.string(),
+  "pickCount": zod.number(),
+  "hitCount": zod.number(),
+  "hitRate": zod.number().nullish(),
+  "avgEdge": zod.number().nullish()
+})).optional()
 })
 
 

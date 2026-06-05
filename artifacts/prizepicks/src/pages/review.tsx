@@ -216,6 +216,52 @@ export default function Review() {
             </Card>
           </div>
 
+          {/* By Stat Type */}
+          {Array.isArray(s.statBreakdown) && s.statBreakdown.length > 0 && (
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-mono uppercase tracking-wider">Hit Rate by Stat Type</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs font-mono">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-muted-foreground text-[10px] uppercase tracking-wider">
+                        <th className="text-left py-2 pr-4">Stat Type</th>
+                        <th className="text-right py-2 px-3">Picks</th>
+                        <th className="text-right py-2 px-3">Hits</th>
+                        <th className="text-right py-2 px-3">Hit Rate</th>
+                        <th className="text-right py-2 pl-3">Avg Edge</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(s.statBreakdown as Array<{ statType: string; pickCount: number; hitCount: number; hitRate: number | null; avgEdge: number | null }>).map((row) => (
+                        <tr key={row.statType} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
+                          <td className="py-2 pr-4 text-slate-200 font-semibold">{row.statType}</td>
+                          <td className="py-2 px-3 text-right text-muted-foreground">{row.pickCount}</td>
+                          <td className="py-2 px-3 text-right text-muted-foreground">{row.hitCount}</td>
+                          <td className="py-2 px-3 text-right">
+                            <span className={`font-bold ${
+                              row.hitRate == null ? "text-muted-foreground"
+                              : row.hitRate >= 0.6 ? "text-emerald-400"
+                              : row.hitRate >= 0.5 ? "text-amber-400"
+                              : "text-rose-400"
+                            }`}>
+                              {row.hitRate != null ? `${(row.hitRate * 100).toFixed(1)}%` : "—"}
+                            </span>
+                          </td>
+                          <td className="py-2 pl-3 text-right text-muted-foreground">
+                            {row.avgEdge != null ? `${row.avgEdge.toFixed(1)}` : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Emotional State Performance */}
           {s.emotionWinRates && s.emotionWinRates.length > 0 && (
             <Card className="bg-slate-900 border-slate-800">

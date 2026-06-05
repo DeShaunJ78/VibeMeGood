@@ -86,6 +86,30 @@ router.get("/dashboard/review", async (req, res) => {
       obj.rate = obj.total > 0 ? obj.wins / obj.total : null;
     }
 
+    // Stat-type breakdown — hit/miss only (excludes dnp/pending), min 3 picks
+    const gradedPicks = picks.filter(p => p.result === "hit" || p.result === "miss");
+    const statMap: Record<string, { hits: number; total: number; edgeSum: number; edgeCount: number }> = {};
+    for (const p of gradedPicks) {
+      const st = p.statType;
+      if (!statMap[st]) statMap[st] = { hits: 0, total: 0, edgeSum: 0, edgeCount: 0 };
+      statMap[st].total++;
+      if (p.result === "hit") statMap[st].hits++;
+      if (p.snapshotEdgeScore != null) {
+        statMap[st].edgeSum += Number(p.snapshotEdgeScore);
+        statMap[st].edgeCount++;
+      }
+    }
+    const statBreakdown = Object.entries(statMap)
+      .filter(([, d]) => d.total >= 3)
+      .map(([statType, d]) => ({
+        statType,
+        pickCount: d.total,
+        hitCount: d.hits,
+        hitRate: d.total > 0 ? Math.round((d.hits / d.total) * 1000) / 1000 : null,
+        avgEdge: d.edgeCount > 0 ? Math.round((d.edgeSum / d.edgeCount) * 10) / 10 : null,
+      }))
+      .sort((a, b) => b.pickCount - a.pickCount);
+
     // Pick-level stats
     const completedPicks = picks.filter(p => p.result !== "pending");
     const hitPicks = completedPicks.filter(p => p.result === "hit");
@@ -144,6 +168,7 @@ router.get("/dashboard/review", async (req, res) => {
       avgClv,
       modelAccuracy,
       emotionWinRates,
+      statBreakdown,
     });
   } catch (err) {
     req.log.error(err);

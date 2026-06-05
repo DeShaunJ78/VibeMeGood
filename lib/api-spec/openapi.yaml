@@ -2042,6 +2042,17 @@ components:
         avgClv: { type: ["number", "null"] }
         hitRateByPickCount: {}
         hitRateByEntryType: {}
+        statBreakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              statType:  { type: string }
+              pickCount: { type: integer }
+              hitCount:  { type: integer }
+              hitRate:   { type: ["number", "null"] }
+              avgEdge:   { type: ["number", "null"] }
+            required: [statType, pickCount, hitCount]
       required: [totalEntries, totalPnl]
 
     CalibrationBucket:
