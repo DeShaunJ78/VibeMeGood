@@ -235,6 +235,12 @@ async function buildAnalystContext(): Promise<string> {
   return blocks.join("\n");
 }
 
+// Lightweight ping — confirms the server is live and returns a fresh timestamp.
+// Used by the "Refresh context" button on the frontend without storing any DB rows.
+router.post("/anthropic/context-refresh", (_req, res) => {
+  res.json({ contextBuiltAt: new Date().toISOString() });
+});
+
 router.get("/anthropic/conversations", async (req, res) => {
   try {
     const convs = await db.select().from(conversations).orderBy(desc(conversations.createdAt));
@@ -365,6 +371,8 @@ router.post("/anthropic/conversations/:id/messages", async (req, res): Promise<v
       contextSnapshot,
     ].join("\n");
 
+    const contextBuiltAt = new Date().toISOString();
+
     const response = await anthropic.messages.create({
       model: "claude-opus-4-5",
       max_tokens: 2048,
@@ -381,7 +389,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res): Promise<v
       .values({ conversationId, role: "assistant", content: assistantContent })
       .returning();
 
-    res.json({ userMessage: userMsg, assistantMessage: assistantMsg });
+    res.json({ userMessage: userMsg, assistantMessage: assistantMsg, contextBuiltAt });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });

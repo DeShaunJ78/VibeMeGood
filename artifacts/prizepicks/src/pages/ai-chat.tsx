@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Send, Plus, Trash2, MessageSquare, Bot, Database } from "lucide-react";
+import { Send, Plus, Trash2, MessageSquare, Bot, Database, Clock, RefreshCw } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 function MdLine({ text }: { text: string }) {
@@ -94,10 +94,18 @@ export default function AiChat() {
   const [sending, setSending] = useState(false);
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const [contextBuiltAt, setContextBuiltAt] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   // Mobile: show either sidebar (conversation list) or the chat panel, not both.
   // On sm+ both are always visible side-by-side.
   const [showSidebar, setShowSidebar] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Derived: age of the last context snapshot in minutes
+  const contextAgeMinutes = contextBuiltAt
+    ? Math.floor((Date.now() - new Date(contextBuiltAt).getTime()) / 60_000)
+    : null;
+  const contextStale = contextAgeMinutes != null && contextAgeMinutes > 30;
 
   useEffect(() => {
     apiGet("/anthropic/conversations").then(data => {
@@ -113,6 +121,7 @@ export default function AiChat() {
   async function loadConversation(id: number) {
     setActiveId(id);
     setMessages([]);
+    setContextBuiltAt(null); // reset freshness stamp when switching conversations
     setLoadingMsgs(true);
     setShowSidebar(false); // on mobile: switch to chat view
     const data = await apiGet(`/anthropic/conversations/${id}/messages`);
@@ -149,11 +158,24 @@ export default function AiChat() {
         data.userMessage,
         data.assistantMessage,
       ]);
+      if (data.contextBuiltAt) setContextBuiltAt(data.contextBuiltAt);
       setConversations(prev => prev.map(c => c.id === activeId ? { ...c, title: text.slice(0, 40) } : c));
     } catch {
       setMessages(prev => [...prev, { id: Date.now(), conversationId: activeId, role: "assistant", content: "Error: could not get a response. Please try again.", createdAt: new Date().toISOString() }]);
     } finally {
       setSending(false);
+    }
+  }
+
+  async function refreshContext() {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const r = await fetch(`${BASE}/anthropic/context-refresh`, { method: "POST" });
+      const data = await r.json() as { contextBuiltAt: string };
+      if (data.contextBuiltAt) setContextBuiltAt(data.contextBuiltAt);
+    } catch { /* silent */ } finally {
+      setRefreshing(false);
     }
   }
 
@@ -209,13 +231,34 @@ export default function AiChat() {
 
         {/* Chat area — full-width on mobile when showSidebar=false, hidden otherwise */}
         <div className={`flex-col bg-slate-900 min-h-0 sm:flex ${!showSidebar ? "flex" : "hidden"}`}>
-          {/* Mobile back button */}
-          <button
-            onClick={() => setShowSidebar(true)}
-            className="sm:hidden flex items-center gap-1.5 px-3 py-2 border-b border-slate-800 text-xs font-mono text-muted-foreground hover:text-foreground shrink-0"
-          >
-            ← Conversations
-          </button>
+          {/* Mobile back button + context freshness row */}
+          <div className="flex items-center justify-between border-b border-slate-800 shrink-0">
+            <button
+              onClick={() => setShowSidebar(true)}
+              className="sm:hidden flex items-center gap-1.5 px-3 py-2 text-xs font-mono text-muted-foreground hover:text-foreground"
+            >
+              ← Conversations
+            </button>
+            {/* Context freshness indicator — only shows after first message */}
+            {contextBuiltAt && (
+              <div className={`flex items-center gap-1.5 px-3 py-2 ml-auto`}>
+                {/* Mobile: clock icon only; desktop: full label */}
+                <Clock className={`w-3 h-3 shrink-0 ${contextStale ? "text-amber-400" : "text-slate-500"}`} />
+                <span className={`hidden sm:inline text-[10px] font-mono ${contextStale ? "text-amber-400" : "text-slate-500"}`}>
+                  Context as of {new Date(contextBuiltAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                  {contextStale && " · stale"}
+                </span>
+                <button
+                  onClick={refreshContext}
+                  disabled={refreshing}
+                  title="Refresh context"
+                  className={`p-0.5 rounded transition-colors ${contextStale ? "text-amber-400 hover:text-amber-300" : "text-slate-500 hover:text-slate-300"}`}
+                >
+                  <RefreshCw className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`} />
+                </button>
+              </div>
+            )}
+          </div>
           {!activeId ? (
             <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6">
               <div className="text-center">
