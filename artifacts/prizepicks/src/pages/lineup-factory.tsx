@@ -33,7 +33,7 @@ import {
 import {
   Factory, Zap, TrendingUp, DollarSign, AlertTriangle,
   ChevronRight, BarChart2, RefreshCw, CheckCircle2, Info, Pin, X, Lock, LockOpen,
-  History, Pencil, Check, Trash2, Clock,
+  History, Pencil, Check, Trash2, Clock, ArrowLeftRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -931,19 +931,221 @@ function PinnedPanel({
   );
 }
 
-// ─── History panel ────────────────────────────────────────────────────────────
+// ─── CompareView ─────────────────────────────────────────────────────────────
+function CompareView({
+  runA,
+  runB,
+  onClose,
+}: {
+  runA: SavedLineup;
+  runB: SavedLineup;
+  onClose: () => void;
+}) {
+  const sA = runA.result.portfolioStats;
+  const sB = runB.result.portfolioStats;
+
+  // Collect unique picks from each run's lineups
+  const pickInfoA = new Map<number, { playerName: string; statType: string; ppLine: number }>();
+  const pickInfoB = new Map<number, { playerName: string; statType: string; ppLine: number }>();
+  for (const lu of runA.result.lineups) {
+    for (const p of lu.picks) {
+      if (!pickInfoA.has(p.ppLineId)) pickInfoA.set(p.ppLineId, { playerName: p.playerName, statType: p.statType, ppLine: p.ppLine });
+    }
+  }
+  for (const lu of runB.result.lineups) {
+    for (const p of lu.picks) {
+      if (!pickInfoB.has(p.ppLineId)) pickInfoB.set(p.ppLineId, { playerName: p.playerName, statType: p.statType, ppLine: p.ppLine });
+    }
+  }
+  const picksA = new Set(pickInfoA.keys());
+  const picksB = new Set(pickInfoB.keys());
+  const sharedIds = [...picksA].filter(id => picksB.has(id));
+  const onlyAIds  = [...picksA].filter(id => !picksB.has(id));
+  const onlyBIds  = [...picksB].filter(id => !picksA.has(id));
+
+  function win(a: number, b: number, higherIsBetter = true): "A" | "B" | "tie" {
+    if (Math.abs(a - b) < 1e-9) return "tie";
+    return (higherIsBetter ? a > b : a < b) ? "A" : "B";
+  }
+
+  const metrics: { label: string; a: string; b: string; w: "A" | "B" | "tie" }[] = [
+    {
+      label: "Portfolio EV",
+      a: sign(sA.portfolioEV), b: sign(sB.portfolioEV),
+      w: win(sA.portfolioEV, sB.portfolioEV),
+    },
+    {
+      label: "P(Profit)",
+      a: pct(sA.probProfitable), b: pct(sB.probProfitable),
+      w: win(sA.probProfitable, sB.probProfitable),
+    },
+    {
+      label: "P(≥1 cashes)",
+      a: pct(sA.probAtLeastOneCashes), b: pct(sB.probAtLeastOneCashes),
+      w: win(sA.probAtLeastOneCashes, sB.probAtLeastOneCashes),
+    },
+    {
+      label: "Avg Overlap",
+      a: pct(sA.avgPairwiseOverlap), b: pct(sB.avgPairwiseOverlap),
+      w: win(sA.avgPairwiseOverlap, sB.avgPairwiseOverlap, false),
+    },
+    {
+      label: "Total Stake",
+      a: dollars(sA.totalStake), b: dollars(sB.totalStake),
+      w: win(sA.totalStake, sB.totalStake, false),
+    },
+    {
+      label: "Lineups",
+      a: String(runA.result.lineups.length), b: String(runB.result.lineups.length),
+      w: "tie",
+    },
+  ];
+
+  const nameA = runA.label || runA.autoName;
+  const nameB = runB.label || runB.autoName;
+
+  function WinBadge({ side, w }: { side: "A" | "B"; w: "A" | "B" | "tie" }) {
+    if (w === "tie" || w !== side) return null;
+    return <span className="ml-1 text-[8px] text-emerald-400 font-bold">✓</span>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2 rounded border border-slate-700/50 bg-slate-800/40 px-3 py-2">
+        <div className="flex items-center gap-2 text-xs font-mono min-w-0">
+          <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <span className="text-primary font-semibold truncate" title={nameA}>{nameA}</span>
+          <span className="text-muted-foreground shrink-0">vs</span>
+          <span className="text-amber-400 font-semibold truncate" title={nameB}>{nameB}</span>
+        </div>
+        <button
+          onClick={onClose}
+          className="shrink-0 p-1 rounded hover:bg-slate-700 text-muted-foreground hover:text-foreground transition-colors"
+          title="Exit comparison"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* Stat table */}
+      <Card className="bg-slate-900/60 border-slate-800">
+        <CardContent className="px-0 pb-0">
+          <table className="w-full text-xs font-mono">
+            <thead>
+              <tr className="border-b border-slate-800">
+                <th className="text-left px-4 py-2 text-muted-foreground font-normal text-[10px] uppercase tracking-wider w-1/3">Metric</th>
+                <th className="text-right px-4 py-2 text-primary font-semibold text-[10px] w-1/3 truncate" title={nameA}>A · {nameA}</th>
+                <th className="text-right px-4 py-2 text-amber-400 font-semibold text-[10px] w-1/3 truncate" title={nameB}>B · {nameB}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.map(m => (
+                <tr key={m.label} className="border-b border-slate-800/50 last:border-0 hover:bg-slate-800/30 transition-colors">
+                  <td className="px-4 py-2 text-muted-foreground">{m.label}</td>
+                  <td className={cn(
+                    "px-4 py-2 text-right",
+                    m.w === "A" ? "text-emerald-400 font-semibold" : "text-foreground",
+                  )}>
+                    {m.a}
+                    <WinBadge side="A" w={m.w} />
+                  </td>
+                  <td className={cn(
+                    "px-4 py-2 text-right",
+                    m.w === "B" ? "text-emerald-400 font-semibold" : "text-foreground",
+                  )}>
+                    {m.b}
+                    <WinBadge side="B" w={m.w} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      {/* Pick overlap */}
+      <Card className="bg-slate-900/60 border-slate-800">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-xs uppercase font-mono text-muted-foreground tracking-wider">
+            Pick Overlap
+            <span className="ml-2 normal-case text-[10px] font-normal">
+              {sharedIds.length} shared · {onlyAIds.length} A-only · {onlyBIds.length} B-only
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-3">
+          {sharedIds.length === 0 && onlyAIds.length === 0 && onlyBIds.length === 0 && (
+            <p className="text-xs text-muted-foreground font-mono">No picks to compare.</p>
+          )}
+          {sharedIds.length > 0 && (
+            <div>
+              <div className="text-[9px] uppercase tracking-wider text-emerald-500/70 font-mono mb-1.5">Shared</div>
+              <div className="flex flex-wrap gap-1.5">
+                {sharedIds.map(id => {
+                  const info = pickInfoA.get(id)!;
+                  return (
+                    <span key={id} className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-950/50 border border-emerald-700/40 text-emerald-300">
+                      {info.playerName} · {info.statType} {info.ppLine}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {onlyAIds.length > 0 && (
+            <div>
+              <div className="text-[9px] uppercase tracking-wider text-primary/70 font-mono mb-1.5">A only</div>
+              <div className="flex flex-wrap gap-1.5">
+                {onlyAIds.map(id => {
+                  const info = pickInfoA.get(id)!;
+                  return (
+                    <span key={id} className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-primary/5 border border-primary/20 text-primary/80">
+                      {info.playerName} · {info.statType} {info.ppLine}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {onlyBIds.length > 0 && (
+            <div>
+              <div className="text-[9px] uppercase tracking-wider text-amber-500/70 font-mono mb-1.5">B only</div>
+              <div className="flex flex-wrap gap-1.5">
+                {onlyBIds.map(id => {
+                  const info = pickInfoB.get(id)!;
+                  return (
+                    <span key={id} className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-950/30 border border-amber-700/30 text-amber-400/80">
+                      {info.playerName} · {info.statType} {info.ppLine}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── HistoryPanel ─────────────────────────────────────────────────────────────
 function HistoryPanel({
   entries,
   activeId,
+  compareId,
   onSelect,
   onDelete,
   onRename,
+  onCompare,
 }: {
   entries: SavedLineup[];
   activeId: string | null;
+  compareId: string | null;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onRename: (id: string, label: string) => void;
+  onCompare: (id: string | null) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -963,6 +1165,8 @@ function HistoryPanel({
 
   if (entries.length === 0) return null;
 
+  const canCompare = entries.length >= 2;
+
   return (
     <Card className="bg-slate-900/60 border-slate-800">
       <CardHeader className="pb-2 pt-3 px-4">
@@ -974,6 +1178,7 @@ function HistoryPanel({
       <CardContent className="px-2 pb-2 space-y-0.5">
         {entries.map(entry => {
           const isActive = entry.id === activeId;
+          const isCompare = entry.id === compareId;
           const displayName = entry.label || entry.autoName;
           const ev = entry.result.portfolioStats.portfolioEV;
           const numLineups = entry.result.lineups.length;
@@ -984,9 +1189,11 @@ function HistoryPanel({
               onClick={() => onSelect(entry.id)}
               className={cn(
                 "group flex items-center gap-1.5 rounded px-2 py-1.5 cursor-pointer transition-colors",
-                isActive
-                  ? "bg-primary/15 border border-primary/30"
-                  : "hover:bg-slate-800/60 border border-transparent",
+                isCompare
+                  ? "bg-amber-950/30 border border-amber-700/40"
+                  : isActive
+                    ? "bg-primary/15 border border-primary/30"
+                    : "hover:bg-slate-800/60 border border-transparent",
               )}
             >
               <div className="flex-1 min-w-0">
@@ -1005,7 +1212,10 @@ function HistoryPanel({
                     className="w-full bg-slate-700 border border-slate-600 rounded px-1.5 py-0.5 text-[10px] font-mono focus:outline-none focus:border-primary text-foreground"
                   />
                 ) : (
-                  <div className="text-[10px] font-mono font-medium text-foreground truncate" title={displayName}>
+                  <div className={cn(
+                    "text-[10px] font-mono font-medium truncate",
+                    isCompare ? "text-amber-300" : "text-foreground",
+                  )} title={displayName}>
                     {displayName}
                   </div>
                 )}
@@ -1023,6 +1233,20 @@ function HistoryPanel({
                 </div>
               </div>
               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                {canCompare && !isActive && (
+                  <button
+                    onClick={e => { e.stopPropagation(); onCompare(isCompare ? null : entry.id); }}
+                    title={isCompare ? "Exit comparison" : "Compare with active run"}
+                    className={cn(
+                      "p-1 rounded transition-colors",
+                      isCompare
+                        ? "bg-amber-900/50 text-amber-400 hover:bg-amber-900/80"
+                        : "hover:bg-slate-700 text-muted-foreground hover:text-amber-400",
+                    )}
+                  >
+                    <ArrowLeftRight className="w-2.5 h-2.5" />
+                  </button>
+                )}
                 <button
                   onClick={e => startEdit(entry, e)}
                   title="Rename"
@@ -1060,6 +1284,7 @@ export default function LineupFactory() {
     const entries = readSavedLineups();
     return entries.length > 0 ? entries[0].id : null;
   });
+  const [compareId, setCompareId] = useState<string | null>(null);
   const generate = useGenerateLineupFactory();
   const { addPick } = useEntry();
 
@@ -1097,6 +1322,7 @@ export default function LineupFactory() {
 
   // Resolve the result to display
   const activeEntry = activeId ? savedLineups.find(e => e.id === activeId) : null;
+  const compareEntry = compareId ? savedLineups.find(e => e.id === compareId) : null;
   const result = activeEntry?.result ?? (generate.isPending ? null : (generate.data ?? cachedResult));
 
   // For each locked pick, count how many generated lineups actually contain it
@@ -1242,9 +1468,11 @@ export default function LineupFactory() {
           <HistoryPanel
             entries={savedLineups}
             activeId={activeId}
-            onSelect={setActiveId}
-            onDelete={handleDeleteSaved}
+            compareId={compareId}
+            onSelect={id => { setActiveId(id); setCompareId(null); }}
+            onDelete={id => { if (compareId === id) setCompareId(null); handleDeleteSaved(id); }}
             onRename={handleRenameSaved}
+            onCompare={id => setCompareId(id)}
           />
           <ConfigPanel cfg={cfg} onChange={setCfg} onGenerate={handleGenerate} loading={generate.isPending} />
         </div>
@@ -1270,7 +1498,15 @@ export default function LineupFactory() {
 
           {!result && !generate.isPending && !generate.isError && <EmptyState />}
 
-          {result && !generate.isPending && (
+          {result && !generate.isPending && activeEntry && compareEntry && (
+            <CompareView
+              runA={activeEntry}
+              runB={compareEntry}
+              onClose={() => setCompareId(null)}
+            />
+          )}
+
+          {result && !generate.isPending && !(activeEntry && compareEntry) && (
             <div className="space-y-5">
               {/* Stale result banner when viewing a history entry that isn't the newest */}
               {activeEntry && savedLineups.length > 0 && activeEntry.id !== savedLineups[0].id && (
