@@ -1438,7 +1438,7 @@ export default function SlateBoard() {
               {DEFAULT_PRESETS.map(p => {
                 const isActive = activePreset === p.label;
                 const getSaved = () => { try { return (JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>)[p.label] ?? null; } catch { return null; } };
-                const savedCfg = p.label === "My Style" ? getSaved() : null;
+                const savedCfg = getSaved();
                 const savedSport = savedCfg?.sport && savedCfg.sport !== "all" ? savedCfg.sport.toUpperCase() : null;
                 return (
                   <button
@@ -1460,16 +1460,16 @@ export default function SlateBoard() {
                   </button>
                 );
               })}
-              {presetsUnlocked && activePreset === "My Style" && (() => {
+              {presetsUnlocked && activePreset && (() => {
                 const parts: string[] = [];
                 if (sport && sport !== "all") parts.push(sport.toUpperCase());
                 if (actionTagFilter && actionTagFilter !== "all") parts.push(actionTagFilter);
                 const preview = parts.length ? ` ${parts.join("+")}` : "";
                 return (
                   <button
-                    onClick={() => { try { const saved = JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>; saved["My Style"] = { sport, lineType: lineTypeFilter, minEdge, actionTag: actionTagFilter, sharpOnly }; localStorage.setItem(PRESET_LS_KEY, JSON.stringify(saved)); } catch {} }}
+                    onClick={() => { try { const saved = JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>; saved[activePreset] = { sport, lineType: lineTypeFilter, minEdge, actionTag: actionTagFilter, sharpOnly }; localStorage.setItem(PRESET_LS_KEY, JSON.stringify(saved)); } catch {} }}
                     className="text-[10px] font-mono text-amber-400 hover:text-amber-300 px-1"
-                    title={`Save current filters as My Style${preview ? `: ${parts.join(" + ")}` : ""}`}
+                    title={`Save current filters as ${activePreset}${preview ? `: ${parts.join(" + ")}` : ""}`}
                   >
                     💾 save{preview && <span className="text-amber-300/70">{preview}</span>}
                   </button>
