@@ -555,6 +555,7 @@ export default function SlateBoard() {
   });
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [presetRevision, setPresetRevision] = useState(0);
 
   const activeFilterCount = [sport !== "all" && sport, lineTypeFilter !== "all" && lineTypeFilter, minEdge, actionTagFilter !== "all" && actionTagFilter].filter(Boolean).length;
   const [optPickCount, setOptPickCount] = useState(4);
@@ -1466,7 +1467,29 @@ export default function SlateBoard() {
                     }}
                     className={`px-2 py-0.5 rounded font-mono text-[10px] border transition-colors ${isActive ? "bg-primary/20 text-primary border-primary/30" : "border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500"}`}
                   >
-                    {p.icon} {p.label}{savedSport && <span className="ml-1 text-[9px] text-cyan-400/80 font-mono">· {savedSport}</span>}
+                    {p.icon} {p.label}{savedSport && (
+                      <span className="ml-1 text-[9px] text-cyan-400/80 font-mono inline-flex items-center gap-0.5">
+                        · {savedSport}
+                        <button
+                          type="button"
+                          aria-label={`Clear ${savedSport} pin from ${p.label}`}
+                          onClick={e => {
+                            e.stopPropagation();
+                            try {
+                              const saved = JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>;
+                              if (saved[p.label]) {
+                                const { sport: _s, ...rest } = saved[p.label];
+                                if (Object.keys(rest).length) saved[p.label] = rest;
+                                else delete saved[p.label];
+                                localStorage.setItem(PRESET_LS_KEY, JSON.stringify(saved));
+                              }
+                            } catch {}
+                            setPresetRevision(r => r + 1);
+                          }}
+                          className="ml-0.5 text-[8px] text-slate-500 hover:text-rose-400 leading-none bg-transparent border-0 p-0 cursor-pointer"
+                        >✕</button>
+                      </span>
+                    )}
                   </button>
                 );
               })}
