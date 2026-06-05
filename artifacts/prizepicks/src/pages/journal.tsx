@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2, Pencil, RotateCcw } from "lucide-react";
+import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2, Pencil, RotateCcw, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { flexExactPayout } from "@workspace/analytics";
 
@@ -404,6 +404,17 @@ function EntryRow({ entry }: { entry: any }) {
     entry.result === "partial" ? payout - stake :
     entry.result === "loss"    ? -stake : null;
 
+  const resultMismatch = (() => {
+    if (entry.result === "pending") return false;
+    if (!Array.isArray(entry.picks) || entry.picks.length === 0) return false;
+    if (!entry.picks.every((p: any) => p.result !== "pending")) return false;
+    const hits = entry.picks.filter((p: any) => p.result === "hit").length;
+    const dnps  = entry.picks.filter((p: any) => p.result === "dnp").length;
+    const effective = entry.picks.length - dnps;
+    const suggested = hits === effective ? "win" : hits === 0 ? "loss" : "partial";
+    return suggested !== entry.result;
+  })();
+
   async function handleExplain(e: React.MouseEvent) {
     e.stopPropagation();
     setExplainText("");
@@ -489,6 +500,16 @@ function EntryRow({ entry }: { entry: any }) {
             <span className={`font-mono text-sm font-bold ${pnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
               {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}
             </span>
+          )}
+          {resultMismatch && (
+            <button
+              onClick={e => { e.stopPropagation(); setExpanded(true); }}
+              title="Entry result may not match pick grades — click to review"
+              className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono border border-amber-700/40 bg-amber-900/20 text-amber-400 hover:bg-amber-900/40 transition-colors"
+            >
+              <AlertTriangle className="w-2.5 h-2.5" />
+              check result
+            </button>
           )}
           <ResultBadge result={entry.result} />
           <div onClick={e => e.stopPropagation()}>
