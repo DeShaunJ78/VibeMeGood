@@ -318,7 +318,8 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
     ? (playerBiasRaw?.buckets ?? []).find(b =>
         b.playerId === data.player.id &&
         b.statType === data.ppLine.statType &&
-        b.tier === data.ppLine.lineType
+        b.tier === data.ppLine.lineType &&
+        b.hasEnoughData
       ) ?? null
     : null;
 
@@ -1002,60 +1003,17 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                 </div>
               )}
 
-              {/* ── Your Bias (Player-Level) ── */}
+              {/* ── Your Edge (stat-type aggregate + optional player-level row) ── */}
               {(playerBiasBucket || biasBucket) && (
                 <div className="px-5 py-4 border-b border-slate-800/50">
                   <div className="flex items-center gap-2 mb-3">
                     <Star className="w-3 h-3 text-amber-400" />
                     <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-                      Your Bias
+                      Your Edge
                     </div>
                   </div>
                   <div className="space-y-2">
-                    {playerBiasBucket && (() => {
-                      const d = playerBiasBucket.delta;
-                      const dColor = !playerBiasBucket.hasEnoughData ? "text-muted-foreground"
-                        : d == null ? "text-muted-foreground"
-                        : d > 10 ? "text-emerald-400" : d < -10 ? "text-rose-400" : "text-amber-400";
-                      const hr = playerBiasBucket.hitRate;
-                      const hrColor = !playerBiasBucket.hasEnoughData || hr == null ? "text-muted-foreground"
-                        : hr >= 0.6 ? "text-emerald-400" : hr >= 0.5 ? "text-amber-400" : "text-rose-400";
-                      return (
-                        <div className="bg-slate-800/40 border border-slate-700/50 rounded px-3 py-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-mono text-slate-400">
-                              {playerBiasBucket.statType} · <span className="capitalize">{playerBiasBucket.tier}</span> — this player
-                            </span>
-                            {!playerBiasBucket.hasEnoughData && (
-                              <span className="text-[9px] font-mono text-amber-600/70">{playerBiasBucket.gradedCount}/5 graded</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <div>
-                              <div className="text-[9px] font-mono text-slate-500 mb-0.5">Hit Rate</div>
-                              <div className={`text-sm font-mono font-bold ${hrColor}`}>
-                                {!playerBiasBucket.hasEnoughData || hr == null ? "—" : `${(hr * 100).toFixed(1)}%`}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="text-[9px] font-mono text-slate-500 mb-0.5">Model P̄(O)</div>
-                              <div className="text-sm font-mono text-muted-foreground">
-                                {playerBiasBucket.avgModelPOver != null ? `${playerBiasBucket.avgModelPOver.toFixed(1)}%` : "—"}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="text-[9px] font-mono text-slate-500 mb-0.5">Delta</div>
-                              <div className={`text-sm font-mono font-bold ${dColor}`}>
-                                {d != null ? `${d > 0 ? "+" : ""}${d.toFixed(1)}pp` : "—"}
-                              </div>
-                            </div>
-                            <div className="ml-auto text-[9px] font-mono text-slate-600">
-                              {playerBiasBucket.gradedCount} graded
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
+                    {/* ── Stat-type aggregate row (all players) — always first ── */}
                     {biasBucket && (() => {
                       const d = biasBucket.delta;
                       const dColor = d == null ? "text-muted-foreground"
@@ -1079,6 +1037,49 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                               <div className={`text-sm font-mono font-bold ${dColor}`}>
                                 {d != null ? `${d > 0 ? "+" : ""}${d.toFixed(1)}pp` : "—"}
                               </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {/* ── Player-level row — only when ≥5 graded (hasEnoughData) ── */}
+                    {playerBiasBucket && (() => {
+                      const d = playerBiasBucket.delta;
+                      const dColor = d == null ? "text-muted-foreground"
+                        : d > 10 ? "text-emerald-400" : d < -10 ? "text-rose-400" : "text-amber-400";
+                      const hr = playerBiasBucket.hitRate;
+                      const hrColor = hr == null ? "text-muted-foreground"
+                        : hr >= 0.6 ? "text-emerald-400" : hr >= 0.5 ? "text-amber-400" : "text-rose-400";
+                      const playerName = data?.player?.name ?? playerBiasBucket.playerName ?? "This player";
+                      return (
+                        <div className="bg-slate-800/50 border border-slate-600/50 rounded px-3 py-2 ring-1 ring-amber-500/10">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-mono text-amber-400/80 font-semibold">
+                              Your Player Edge · {playerBiasBucket.statType} · <span className="capitalize">{playerBiasBucket.tier}</span>
+                            </span>
+                            <span className="text-[9px] font-mono text-slate-500">{playerName}</span>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div>
+                              <div className="text-[9px] font-mono text-slate-500 mb-0.5">Hit Rate</div>
+                              <div className={`text-sm font-mono font-bold ${hrColor}`}>
+                                {hr != null ? `${(hr * 100).toFixed(1)}%` : "—"}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-[9px] font-mono text-slate-500 mb-0.5">Model P̄(O)</div>
+                              <div className="text-sm font-mono text-muted-foreground">
+                                {playerBiasBucket.avgModelPOver != null ? `${playerBiasBucket.avgModelPOver.toFixed(1)}%` : "—"}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-[9px] font-mono text-slate-500 mb-0.5">Delta</div>
+                              <div className={`text-sm font-mono font-bold ${dColor}`}>
+                                {d != null ? `${d > 0 ? "+" : ""}${d.toFixed(1)}pp` : "—"}
+                              </div>
+                            </div>
+                            <div className="ml-auto text-[9px] font-mono text-slate-500">
+                              {playerBiasBucket.gradedCount} graded
                             </div>
                           </div>
                         </div>
