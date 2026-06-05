@@ -810,7 +810,8 @@ export const ListEntriesResponseItem = zod.object({
   "notes": zod.string().nullish(),
   "emotionalState": zod.string().nullish(),
   "submittedAt": zod.string().nullish(),
-  "closedAt": zod.string().nullish()
+  "closedAt": zod.string().nullish(),
+  "kellySuggested": zod.number().nullish()
 })
 export const ListEntriesResponse = zod.array(ListEntriesResponseItem)
 
@@ -828,6 +829,7 @@ export const CreateEntryBody = zod.object({
   "notes": zod.string().nullish(),
   "emotionalState": zod.string().nullish(),
   "submittedAt": zod.string().nullish(),
+  "kellySuggested": zod.number().nullish(),
   "picks": zod.array(zod.object({
   "ppLineId": zod.number().nullish(),
   "playerId": zod.number().nullish(),
@@ -865,7 +867,8 @@ export const GetEntryResponse = zod.object({
   "notes": zod.string().nullish(),
   "emotionalState": zod.string().nullish(),
   "submittedAt": zod.string().nullish(),
-  "closedAt": zod.string().nullish()
+  "closedAt": zod.string().nullish(),
+  "kellySuggested": zod.number().nullish()
 }),
   "picks": zod.array(zod.object({
   "id": zod.number(),
@@ -917,7 +920,8 @@ export const UpdateEntryResponse = zod.object({
   "notes": zod.string().nullish(),
   "emotionalState": zod.string().nullish(),
   "submittedAt": zod.string().nullish(),
-  "closedAt": zod.string().nullish()
+  "closedAt": zod.string().nullish(),
+  "kellySuggested": zod.number().nullish()
 })
 
 
@@ -1337,6 +1341,7 @@ export const GetReviewStatsResponse = zod.object({
   "overallHitRate": zod.number().nullish(),
   "pickHitRate": zod.number().nullish(),
   "avgClv": zod.number().nullish(),
+  "kellyAdherenceRate": zod.number().nullish(),
   "hitRateByPickCount": zod.unknown().optional(),
   "hitRateByEntryType": zod.unknown().optional(),
   "statBreakdown": zod.array(zod.object({

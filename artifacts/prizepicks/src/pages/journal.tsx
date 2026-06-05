@@ -617,6 +617,24 @@ function EntryRow({ entry }: { entry: any }) {
           </Badge>
         )}
 
+        {entry.kellySuggested != null && (() => {
+          const ks = Number(entry.kellySuggested);
+          const st = Number(entry.stake ?? 0);
+          const adherent = st <= ks * 1.10;
+          return (
+            <Badge
+              title={`Half-Kelly at log time: $${ks.toFixed(2)}`}
+              className={`font-mono text-[10px] px-1.5 py-0 rounded-sm border shrink-0 ${
+                adherent
+                  ? "bg-emerald-900/40 text-emerald-400 border-emerald-700/40"
+                  : "bg-amber-900/40 text-amber-400 border-amber-700/40"
+              }`}
+            >
+              {adherent ? "✓ Kelly" : "⚠ Over"}
+            </Badge>
+          );
+        })()}
+
         <div className="flex-1 min-w-0 text-xs text-slate-400 truncate">
           {entry.notes}
         </div>

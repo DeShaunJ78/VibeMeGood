@@ -558,6 +558,9 @@ export default function EntryBuilder() {
           displayedPayoutMultiplier: multiplier || null,
           potentialPayout: powerPayout || null,
           notes: notes || null,
+          kellySuggested: (kellyResult && kellyResult.halfKelly > 0 && bankrollNum > 0)
+            ? Math.round(kellyResult.halfKelly * bankrollNum * 100) / 100
+            : null,
           picks: picks.map<EntryPickInput>(p => ({
             ppLineId:       p.ppLineId,
             playerId:       p.playerId,

@@ -24,6 +24,9 @@ export const entriesTable = pgTable("entries", {
   snapshotBankroll: numeric("snapshot_bankroll"),
   snapshotUnitSize: numeric("snapshot_unit_size"),
   snapshotSuggestedStake: numeric("snapshot_suggested_stake"),
+  // Half-Kelly dollar amount at log time — passed from client (which has
+  // pick-level pOver + multiplier) and frozen here for adherence tracking.
+  kellySuggested: numeric("kelly_suggested"),
 });
 
 export const insertEntrySchema = createInsertSchema(entriesTable).omit({ id: true });

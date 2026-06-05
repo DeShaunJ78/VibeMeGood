@@ -171,6 +171,8 @@ const CreateEntrySchema = z.object({
   notes: z.string().max(500).optional().nullable(),
   displayedPayoutMultiplier: z.number().nullable().optional(),
   potentialPayout: z.number().nullable().optional(),
+  // Half-Kelly dollar amount at log time, computed client-side where pick pOver + multiplier live.
+  kellySuggested: z.number().positive().nullable().optional(),
 });
 
 const InlinePickSchema = z.object({
@@ -351,11 +353,13 @@ router.post("/entries", async (req, res): Promise<void> => {
     // Entry + legs are created in a single transaction so a leg failure rolls back
     // the whole entry — never leaves an ungradeable entry with zero picks.
     const entry = await db.transaction(async (tx) => {
+      const { kellySuggested: ksSrc, ...restBody } = entryBody as InsertEntry & { kellySuggested?: number | null };
       const [created] = await tx.insert(entriesTable).values({
-        ...(entryBody as InsertEntry),
+        ...(restBody as InsertEntry),
         snapshotBankroll:       String(snapshotBankroll),
         snapshotUnitSize:       String(snapshotUnitSize),
         snapshotSuggestedStake: String(snapshotSuggestedStake),
+        kellySuggested:         ksSrc != null ? String(ksSrc) : null,
       }).returning();
       if (picksToInsert.length > 0) {
         await tx.insert(entryPicksTable).values(

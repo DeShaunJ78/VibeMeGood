@@ -1853,6 +1853,7 @@ components:
         emotionalState: { type: ["string", "null"] }
         submittedAt: { type: ["string", "null"] }
         closedAt: { type: ["string", "null"] }
+        kellySuggested: { type: ["number", "null"] }
       required: [id, entryDate, entryType, pickCount, stake, result]
 
     EntryInput:
@@ -1867,6 +1868,7 @@ components:
         notes: { type: ["string", "null"] }
         emotionalState: { type: ["string", "null"] }
         submittedAt: { type: ["string", "null"] }
+        kellySuggested: { type: ["number", "null"] }
         picks:
           type: array
           description: Optional legs persisted atomically with the entry in a single transaction.
@@ -2079,6 +2081,7 @@ components:
         overallHitRate: { type: ["number", "null"] }
         pickHitRate: { type: ["number", "null"] }
         avgClv: { type: ["number", "null"] }
+        kellyAdherenceRate: { type: ["number", "null"] }
         hitRateByPickCount: {}
         hitRateByEntryType: {}
         statBreakdown:

@@ -431,6 +431,8 @@ export interface Entry {
   submittedAt?: string | null;
   /** @nullable */
   closedAt?: string | null;
+  /** @nullable */
+  kellySuggested?: number | null;
 }
 
 export interface EntryPickInput {
@@ -468,6 +470,8 @@ export interface EntryInput {
   emotionalState?: string | null;
   /** @nullable */
   submittedAt?: string | null;
+  /** @nullable */
+  kellySuggested?: number | null;
   /** Optional legs persisted atomically with the entry in a single transaction. */
   picks?: EntryPickInput[];
 }
@@ -680,6 +684,8 @@ export interface ReviewStats {
   pickHitRate?: number | null;
   /** @nullable */
   avgClv?: number | null;
+  /** @nullable */
+  kellyAdherenceRate?: number | null;
   hitRateByPickCount?: unknown;
   hitRateByEntryType?: unknown;
   statBreakdown?: ReviewStatsStatBreakdownItem[];

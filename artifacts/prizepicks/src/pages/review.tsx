@@ -88,7 +88,7 @@ export default function Review() {
       ) : s ? (
         <>
           {/* KPI Row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <StatCard
               label="Total P&L"
               value={`${s.totalPnl >= 0 ? "+" : ""}$${Number(s.totalPnl).toFixed(2)}`}
@@ -116,6 +116,13 @@ export default function Review() {
               sub="closing line value"
               icon={s.avgClv != null && Number(s.avgClv) >= 0 ? TrendingUp : TrendingDown}
               color={s.avgClv != null && Number(s.avgClv) >= 0 ? "text-emerald-400" : "text-rose-400"}
+            />
+            <StatCard
+              label="Kelly Adherence"
+              value={(s as any).kellyAdherenceRate != null ? `${((s as any).kellyAdherenceRate * 100).toFixed(0)}%` : "—"}
+              sub="stake ≤ half-Kelly"
+              icon={Target}
+              color={(s as any).kellyAdherenceRate != null && (s as any).kellyAdherenceRate >= 0.7 ? "text-emerald-400" : "text-amber-400"}
             />
           </div>
 

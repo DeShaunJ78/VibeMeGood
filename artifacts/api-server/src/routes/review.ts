@@ -159,6 +159,13 @@ router.get("/dashboard/review", async (req, res) => {
       }))
       .sort((a, b) => (b.rate ?? 0) - (a.rate ?? 0));
 
+    // Kelly adherence: entries where kellySuggested is recorded, fraction with stake ≤ kellySuggested × 1.10
+    const kellyEntries = entries.filter(e => e.kellySuggested != null);
+    const kellyAdherent = kellyEntries.filter(e =>
+      Number(e.stake) <= Number(e.kellySuggested) * 1.10
+    );
+    const kellyAdherenceRate = kellyEntries.length > 0 ? kellyAdherent.length / kellyEntries.length : null;
+
     res.json({
       totalEntries,
       overallHitRate,
@@ -169,6 +176,7 @@ router.get("/dashboard/review", async (req, res) => {
       hitRateByEntryType,
       pickHitRate,
       avgClv,
+      kellyAdherenceRate,
       modelAccuracy,
       emotionWinRates,
       statBreakdown,
