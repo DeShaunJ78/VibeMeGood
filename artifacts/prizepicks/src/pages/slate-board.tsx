@@ -979,6 +979,41 @@ export default function SlateBoard() {
   const playCount   = useMemo(() => playerRows.filter(r => r.actionTag === "PLAY").length,    [playerRows]);
   const visibleRows = useMemo(() => playerRows.slice(0, visibleCount), [playerRows, visibleCount]);
 
+  // Sport-filtered but action-tag-unfiltered player row count. Derived from
+  // `mergedRows` (which is always sport-filtered and never action-tag-filtered,
+  // since `slate` has no action-tag param) so it stays accurate whenever sport
+  // or other non-action filters change — even while an action-tag filter is on.
+  // Used on mobile as the Y denominator in "X / Y rows" when filtering by tag.
+  const actionTagUnfilteredPlayerCount = useMemo(() => {
+    let rows = mergedRows.filter((r: any) => r.pickCategory !== "team" && r.pickCategory !== "culture");
+    if (selectedWindow === "upcoming") {
+      rows = rows.filter((r: any) => r.gameStatus !== "final");
+    } else if (selectedWindow !== "all") {
+      rows = rows.filter((r: any) => (r.startTime ?? "__none__") === selectedWindow);
+    }
+    if (lineTypeFilter !== "all") {
+      rows = rows.filter((r: any) => r.lineType === lineTypeFilter);
+    } else {
+      const seen = new Set<string>();
+      rows = rows.filter((r: any) => {
+        const key = `${r.playerId}:${r.statType}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+    if (minEdge) rows = rows.filter((r: any) => r.edgeScore != null && r.edgeScore >= parseFloat(minEdge));
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      rows = rows.filter((r: any) =>
+        r.playerName.toLowerCase().includes(q) ||
+        (r.teamAbbr ?? "").toLowerCase().includes(q)
+      );
+    }
+    if (sharpOnly) rows = rows.filter((r: any) => r.sharpSignal === "sharp");
+    return rows.length;
+  }, [mergedRows, lineTypeFilter, minEdge, searchQuery, sharpOnly, selectedWindow]);
+
   const { data: betterLinesData = [] } = useQuery<Array<{
     ppLineId: number;
     bestPlatform: string;
@@ -1345,9 +1380,11 @@ export default function SlateBoard() {
                 </span>
                 {playerRows.length > 0 && (
                   <span className="font-mono text-[10px] text-slate-500 shrink-0">
-                    {totalPlayerRowCount !== null
-                      ? `${playerRows.length} / ${totalPlayerRowCount} rows`
-                      : `${playerRows.length} rows`}
+                    {actionTagFilter !== "all"
+                      ? `${actionTagFilter === "PLAY" ? playCount : actionTagFilter === "WATCH" ? watchCount : noPlayCount} / ${actionTagUnfilteredPlayerCount} rows`
+                      : totalPlayerRowCount !== null
+                        ? `${playerRows.length} / ${totalPlayerRowCount} rows`
+                        : `${playerRows.length} rows`}
                   </span>
                 )}
                 {playCount > 0 && (
