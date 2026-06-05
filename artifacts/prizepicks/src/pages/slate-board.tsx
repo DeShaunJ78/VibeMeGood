@@ -561,6 +561,8 @@ export default function SlateBoard() {
 
   const activeFilterCount = [sport !== "all" && sport, lineTypeFilter !== "all" && lineTypeFilter, minEdge, actionTagFilter !== "all" && actionTagFilter].filter(Boolean).length;
   const [optPickCount, setOptPickCount] = useState(4);
+  const [maxPerTeam, setMaxPerTeam] = useState(2);
+  const [diversityNote, setDiversityNote] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [sharpOnly, setSharpOnly] = useState(false);
@@ -1165,11 +1167,35 @@ export default function SlateBoard() {
       });
     }
 
-    const goblinProps = (ceilingHunter
-      // Ceiling Hunter: prioritise usage spikes first
-      ? candidates.sort((a, b) => ((b.variance?.usageScore ?? 0) - (a.variance?.usageScore ?? 0)))
-      : candidates.sort((a, b) => (b.ourProjection?.pOver ?? 0) - (a.ourProjection?.pOver ?? 0))
-    ).slice(0, optPickCount);
+    // Sort by strategy, then greedily select up to optPickCount picks while
+    // respecting the maxPerTeam diversity cap. Picks with unknown teamAbbr
+    // (null) are never capped — we can't enforce what we can't identify.
+    // This same loop serves as both the main pass and the "relaxed fallback"
+    // (there is no separate pass: if diversity constraints exhaust candidates
+    // before the lineup is full, we just return what we have and show a note).
+    const sorted = ceilingHunter
+      ? [...candidates].sort((a, b) => (b.variance?.usageScore ?? 0) - (a.variance?.usageScore ?? 0))
+      : [...candidates].sort((a, b) => (b.ourProjection?.pOver ?? 0) - (a.ourProjection?.pOver ?? 0));
+
+    const goblinProps: typeof sorted = [];
+    const teamCount = new Map<string, number>();
+    for (const c of sorted) {
+      if (goblinProps.length >= optPickCount) break;
+      const team = c.teamAbbr ?? null;
+      if (team != null) {
+        const count = teamCount.get(team) ?? 0;
+        if (count >= maxPerTeam) continue; // over cap for this team — skip
+        teamCount.set(team, count + 1);
+      }
+      goblinProps.push(c);
+    }
+
+    const shortfall = optPickCount - goblinProps.length;
+    setDiversityNote(
+      shortfall > 0
+        ? `Only ${goblinProps.length} pick${goblinProps.length === 1 ? "" : "s"} available with current diversity setting`
+        : null,
+    );
 
     const results: OptResult[] = goblinProps.map(r => {
       const pOver = (r.ourProjection?.pOver ?? 50) / 100;
@@ -1199,7 +1225,7 @@ export default function SlateBoard() {
       localStorage.setItem(OPT_KEY, JSON.stringify(results));
       localStorage.setItem(OPT_TS_KEY, String(Date.now()));
     } catch {}
-  }, [playerRows, optPickCount, userSettings, varianceEnabled]);
+  }, [playerRows, optPickCount, maxPerTeam, userSettings, varianceEnabled]);
 
   function loadOptimizerToEntry() {
     for (const r of optResults) {
@@ -2570,6 +2596,25 @@ export default function SlateBoard() {
               <Zap className="w-3 h-3" /> {optLoaded ? "Re-run" : "Run"}
             </Button>
           </div>
+
+          {/* Team-diversity guard stepper */}
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-xs font-mono text-muted-foreground">Max per team:</span>
+            {[1, 2, 3].map(n => (
+              <button
+                key={n}
+                onClick={() => { setMaxPerTeam(n); setOptLoaded(false); }}
+                className={`px-2.5 py-1 rounded text-xs font-mono transition-colors ${
+                  maxPerTeam === n
+                    ? "bg-violet-700 text-white"
+                    : "bg-slate-800 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+            <span className="text-[10px] font-mono text-slate-600 ml-1">per-team cap</span>
+          </div>
           {optLoaded && (() => {
             try {
               const ts = Number(localStorage.getItem("pp_opt_ts") ?? 0);
@@ -2582,6 +2627,13 @@ export default function SlateBoard() {
             } catch {}
             return null;
           })()}
+
+          {/* Diversity shortfall note */}
+          {optLoaded && diversityNote && (
+            <div className="text-[10px] font-mono text-amber-400 bg-amber-950/20 border border-amber-700/30 rounded px-2 py-1 mb-2">
+              ⚠ {diversityNote} — raise the "Max per team" cap or reduce pick count
+            </div>
+          )}
 
           {optLoaded && (
             optResults.length === 0 ? (
