@@ -195,15 +195,12 @@ interface PipelineStep {
 }
 
 const PIPELINE_STEPS: PipelineStep[] = [
-  { step: 1, label: "Import PP Lines",    action: "",                  description: "Browser only — use the bookmarklet in your PP tab or paste JSON in the Settings page.", isBrowserOnly: true },
-  { step: 2, label: "Sync Schedule",      action: "game-schedule",     description: "Seeds the games table with today's matchups and team context." },
-  { step: 3, label: "Backfill History",   action: "historical-stats",  description: "Downloads all NBA/MLB/NHL/NFL game logs. First run takes 15–30 min.", isLong: true },
-  { step: 4, label: "Compute Matchups",   action: "matchup-history",   description: "Builds head-to-head history so the model adjusts for tough/soft matchups." },
-  { step: 5, label: "Sync Projections",   action: "projections",       description: "Runs Bayesian + distribution math (Poisson/NegBin/ZIP) on all active lines." },
-  { step: 6, label: "Run Calibration",    action: "calibration",       description: "Rebuilds probability buckets from historical logs. Requires Backfill first." },
-  { step: 7, label: "Sync Odds",          action: "external-odds",     description: "Fetches sportsbook lines from The Odds API. Costs API credits." },
-  { step: 8, label: "Rescore Props",      action: "rescore-props",     description: "Recalculates edge/action/PLAY scores. Free — no API call, no credits used." },
-  { step: 9, label: "Compute Variance",   action: "variance",          description: "Simulates floor/ceiling distributions for each line." },
+  { step: 1, label: "Sync Schedule",     action: "game-schedule",    description: "Seeds the games table with today's matchups and team context." },
+  { step: 2, label: "Backfill History",  action: "historical-stats", description: "Downloads all NBA/MLB/NHL/NFL game logs. First run takes 15–30 min.", isLong: true },
+  { step: 3, label: "Compute Matchups",  action: "matchup-history",  description: "Builds head-to-head history so the model adjusts for tough/soft matchups." },
+  { step: 4, label: "Sync Projections",  action: "projections",      description: "Runs Bayesian + distribution math (Poisson/NegBin/ZIP) on all active lines." },
+  { step: 5, label: "Run Calibration",   action: "calibration",      description: "Rebuilds probability buckets from historical logs. Requires Backfill first." },
+  { step: 6, label: "Rescore Props",     action: "rescore-props",    description: "Recalculates edge/action/PLAY scores. Free — no API call, no credits used." },
 ];
 
 const UTILITY_STEPS = [
@@ -455,44 +452,37 @@ export default function SystemHealth() {
               <div key={step.step} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-800/20 transition-colors">
                 <span className={cn(
                   "flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold font-mono",
-                  step.isBrowserOnly
-                    ? "bg-slate-700/60 text-slate-400 border border-slate-600/50"
-                    : st === "done"
-                      ? "bg-emerald-900/60 text-emerald-400 border border-emerald-700/50"
-                      : "bg-slate-800 text-muted-foreground border border-border/50",
+                  st === "done"
+                    ? "bg-emerald-900/60 text-emerald-400 border border-emerald-700/50"
+                    : "bg-slate-800 text-muted-foreground border border-border/50",
                 )}>{step.step}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-sm text-foreground">{step.label}</span>
-                    {step.isBrowserOnly && (
-                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 border border-slate-600/40">BROWSER ONLY</span>
-                    )}
-                    {step.isLong && !step.isBrowserOnly && (
+                    {step.isLong && (
                       <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400 border border-amber-700/30">15–30 MIN</span>
                     )}
                   </div>
                   <p className="text-[11px] text-muted-foreground/70 font-mono mt-0.5 truncate">{step.description}</p>
                 </div>
-                {!step.isBrowserOnly && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className={cn(
-                      "shrink-0 h-7 text-[11px] font-mono px-3 gap-1.5 border-border/50",
-                      isRunning   && "opacity-60",
-                      st === "done"  && "border-emerald-700/50 text-emerald-400",
-                      st === "error" && "border-red-700/50 text-red-400",
-                    )}
-                    onClick={() => handleFix(step.action)}
-                    disabled={!!fixing}
-                  >
-                    {isRunning ? <RefreshCw size={10} className="animate-spin" />
-                      : st === "done"  ? <CheckCircle2 size={10} />
-                      : st === "error" ? <XCircle size={10} />
-                      : <Zap size={10} />}
-                    {isRunning ? "Running…" : st === "done" ? "Done" : st === "error" ? "Error" : "Run"}
-                  </Button>
-                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className={cn(
+                    "shrink-0 h-7 text-[11px] font-mono px-3 gap-1.5 border-border/50",
+                    isRunning   && "opacity-60",
+                    st === "done"  && "border-emerald-700/50 text-emerald-400",
+                    st === "error" && "border-red-700/50 text-red-400",
+                  )}
+                  onClick={() => handleFix(step.action)}
+                  disabled={!!fixing}
+                >
+                  {isRunning ? <RefreshCw size={10} className="animate-spin" />
+                    : st === "done"  ? <CheckCircle2 size={10} />
+                    : st === "error" ? <XCircle size={10} />
+                    : <Zap size={10} />}
+                  {isRunning ? "Running…" : st === "done" ? "Done" : st === "error" ? "Error" : "Run"}
+                </Button>
               </div>
             );
           })}
