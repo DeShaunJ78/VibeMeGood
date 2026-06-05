@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   useGenerateLineupFactory,
   type LineupFactoryConfig,
@@ -26,16 +26,21 @@ import {
   readPinnedPicks, removePinnedPick, clearPinnedPicks, type PinnedPick,
 } from "@/lib/pinned-picks";
 import {
+  readSavedLineups, appendSavedLineup, updateSavedLineupLabel, deleteSavedLineup,
+  type SavedLineup,
+} from "@/lib/saved-lineups";
+import {
   Factory, Zap, TrendingUp, DollarSign, AlertTriangle,
   ChevronRight, BarChart2, RefreshCw, CheckCircle2, Info, Pin, X, Lock, LockOpen,
+  History, Pencil, Check, Trash2, Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Persistence helpers ───────────────────────────────────────────────────────
 const CFG_KEY      = "lf_cfg";
-const CFG_VER      = 2; // bump when DEFAULTS shape changes to force a reset
+const CFG_VER      = 2;
 const RESULT_KEY   = "lf_last_result";
-const RESULT_TTL   = 24 * 60 * 60 * 1000; // 24 hours
+const RESULT_TTL   = 24 * 60 * 60 * 1000;
 const REQUIRED_KEY = "lf_required_pinned_ids";
 
 function loadCfg(): LineupFactoryConfig {
@@ -151,6 +156,16 @@ const OVERLAP_OPTIONS = [
 function pct(v: number) { return `${Math.round(v * 100)}%`; }
 function dollars(v: number) { return `$${v.toFixed(2)}`; }
 function sign(v: number) { return v >= 0 ? `+$${v.toFixed(2)}` : `-$${Math.abs(v).toFixed(2)}`; }
+
+function relativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 // ─── Reusable pick-group toggle ───────────────────────────────────────────────
 function ToggleGroup<T extends string | number>({
@@ -541,7 +556,6 @@ function ScoredPropsTable({ props, pinnedIds }: { props: FactoryScoredProp[]; pi
     if (filter === "excluded") return !!p.noPlayReason;
     return true;
   });
-  // Pinned picks float to the top
   const sorted = [
     ...filtered.filter(p => pinnedIds.has(p.ppLineId)),
     ...filtered.filter(p => !pinnedIds.has(p.ppLineId)),
@@ -785,27 +799,174 @@ function PinnedPanel({
   );
 }
 
+// ─── History panel ────────────────────────────────────────────────────────────
+function HistoryPanel({
+  entries,
+  activeId,
+  onSelect,
+  onDelete,
+  onRename,
+}: {
+  entries: SavedLineup[];
+  activeId: string | null;
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
+  onRename: (id: string, label: string) => void;
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function startEdit(entry: SavedLineup, e: React.MouseEvent) {
+    e.stopPropagation();
+    setEditingId(entry.id);
+    setEditValue(entry.label ?? "");
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  function commitEdit(id: string) {
+    onRename(id, editValue);
+    setEditingId(null);
+  }
+
+  if (entries.length === 0) return null;
+
+  return (
+    <Card className="bg-slate-900/60 border-slate-800">
+      <CardHeader className="pb-2 pt-3 px-4">
+        <CardTitle className="text-xs uppercase font-mono text-muted-foreground tracking-wider flex items-center gap-1.5">
+          <History className="w-3 h-3" />
+          Saved Runs ({entries.length}/10)
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-2 pb-2 space-y-0.5">
+        {entries.map(entry => {
+          const isActive = entry.id === activeId;
+          const displayName = entry.label || entry.autoName;
+          const ev = entry.result.portfolioStats.portfolioEV;
+          const numLineups = entry.result.lineups.length;
+
+          return (
+            <div
+              key={entry.id}
+              onClick={() => onSelect(entry.id)}
+              className={cn(
+                "group flex items-center gap-1.5 rounded px-2 py-1.5 cursor-pointer transition-colors",
+                isActive
+                  ? "bg-primary/15 border border-primary/30"
+                  : "hover:bg-slate-800/60 border border-transparent",
+              )}
+            >
+              <div className="flex-1 min-w-0">
+                {editingId === entry.id ? (
+                  <input
+                    ref={inputRef}
+                    value={editValue}
+                    onChange={e => setEditValue(e.target.value)}
+                    onBlur={() => commitEdit(entry.id)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") commitEdit(entry.id);
+                      if (e.key === "Escape") setEditingId(null);
+                    }}
+                    onClick={e => e.stopPropagation()}
+                    placeholder={entry.autoName}
+                    className="w-full bg-slate-700 border border-slate-600 rounded px-1.5 py-0.5 text-[10px] font-mono focus:outline-none focus:border-primary text-foreground"
+                  />
+                ) : (
+                  <div className="text-[10px] font-mono font-medium text-foreground truncate" title={displayName}>
+                    {displayName}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[9px] text-muted-foreground flex items-center gap-0.5">
+                    <Clock className="w-2 h-2" />
+                    {relativeTime(entry.savedAt)}
+                  </span>
+                  <span className="text-[9px] font-mono text-muted-foreground">
+                    {numLineups} lineup{numLineups !== 1 ? "s" : ""}
+                  </span>
+                  <span className={cn("text-[9px] font-mono", ev >= 0 ? "text-emerald-400" : "text-red-400")}>
+                    {sign(ev)}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                <button
+                  onClick={e => startEdit(entry, e)}
+                  title="Rename"
+                  className="p-1 rounded hover:bg-slate-700 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Pencil className="w-2.5 h-2.5" />
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); onDelete(entry.id); }}
+                  title="Delete"
+                  className="p-1 rounded hover:bg-red-950/60 text-muted-foreground hover:text-rose-400 transition-colors"
+                >
+                  <Trash2 className="w-2.5 h-2.5" />
+                </button>
+              </div>
+              {isActive && editingId !== entry.id && (
+                <Check className="w-3 h-3 text-primary shrink-0 ml-0.5" />
+              )}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function LineupFactory() {
   const [cfg, setCfg] = useState<LineupFactoryConfig>(() => loadCfg());
   const [cachedResult, setCachedResult] = useState<LineupFactoryResult | null>(() => loadResult());
   const [pinnedPicks, setPinnedPicks] = useState<PinnedPick[]>(() => readPinnedPicks());
   const [requiredPinnedIds, setRequiredPinnedIds] = useState<Set<number>>(() => loadRequiredIds());
+  const [savedLineups, setSavedLineups] = useState<SavedLineup[]>(() => readSavedLineups());
+  const [activeId, setActiveId] = useState<string | null>(() => {
+    const entries = readSavedLineups();
+    return entries.length > 0 ? entries[0].id : null;
+  });
   const generate = useGenerateLineupFactory();
   const { addPick } = useEntry();
 
   // Persist cfg on every change
   useEffect(() => { saveCfg(cfg); }, [cfg]);
 
-  // Cache result after each successful generation
+  // After each successful generation: append to history, activate it
   useEffect(() => {
     if (generate.data) {
+      const entry = appendSavedLineup(cfg, generate.data);
+      const next = readSavedLineups();
+      setSavedLineups(next);
+      setActiveId(entry.id);
       saveResult(generate.data);
       setCachedResult(generate.data);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generate.data]);
 
-  const result = generate.data ?? cachedResult;
+  // Keep history in sync if another tab modifies it
+  useEffect(() => {
+    function sync() {
+      setSavedLineups(readSavedLineups());
+    }
+    window.addEventListener("saved-lineups-changed", sync);
+    return () => window.removeEventListener("saved-lineups-changed", sync);
+  }, []);
+
+  // Keep pinned picks synced
+  useEffect(() => {
+    function syncPinned() { setPinnedPicks(readPinnedPicks()); }
+    window.addEventListener("pinned-picks-changed", syncPinned);
+    return () => window.removeEventListener("pinned-picks-changed", syncPinned);
+  }, []);
+
+  // Resolve the result to display
+  const activeEntry = activeId ? savedLineups.find(e => e.id === activeId) : null;
+  const result = activeEntry?.result ?? (generate.isPending ? null : (generate.data ?? cachedResult));
+
   const pinnedIds = new Set(pinnedPicks.map(p => p.ppLineId));
 
   function handleGenerate() {
@@ -816,7 +977,6 @@ export default function LineupFactory() {
   function handleRemovePinned(ppLineId: number) {
     removePinnedPick(ppLineId);
     setPinnedPicks(readPinnedPicks());
-    // Also remove from required set if it was locked
     if (requiredPinnedIds.has(ppLineId)) {
       const next = new Set(requiredPinnedIds);
       next.delete(ppLineId);
@@ -864,6 +1024,20 @@ export default function LineupFactory() {
     }
   }
 
+  function handleDeleteSaved(id: string) {
+    deleteSavedLineup(id);
+    const next = readSavedLineups();
+    setSavedLineups(next);
+    if (activeId === id) {
+      setActiveId(next.length > 0 ? next[0].id : null);
+    }
+  }
+
+  function handleRenameSaved(id: string, label: string) {
+    updateSavedLineupLabel(id, label);
+    setSavedLineups(readSavedLineups());
+  }
+
   const profileInfo = PROFILE_LABELS[cfg.varianceProfile];
 
   return (
@@ -877,6 +1051,12 @@ export default function LineupFactory() {
         </div>
         {result && (
           <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground font-mono">
+            {activeEntry && (
+              <span className="text-primary font-medium truncate max-w-[160px]" title={activeEntry.label || activeEntry.autoName}>
+                {activeEntry.label || activeEntry.autoName}
+              </span>
+            )}
+            {activeEntry && <ChevronRight className="h-3 w-3" />}
             <span>{result.filteredPropCount} eligible</span>
             <ChevronRight className="h-3 w-3" />
             <span>{result.lineups.length} lineups</span>
@@ -898,6 +1078,13 @@ export default function LineupFactory() {
             onClear={handleClearPinned}
             onToggleRequired={handleToggleRequired}
           />
+          <HistoryPanel
+            entries={savedLineups}
+            activeId={activeId}
+            onSelect={setActiveId}
+            onDelete={handleDeleteSaved}
+            onRename={handleRenameSaved}
+          />
           <ConfigPanel cfg={cfg} onChange={setCfg} onGenerate={handleGenerate} loading={generate.isPending} />
         </div>
 
@@ -910,7 +1097,7 @@ export default function LineupFactory() {
             </div>
           )}
 
-          {generate.isError && !generate.isPending && (
+          {generate.isError && !generate.isPending && !result && (
             <div className="flex flex-col items-center justify-center h-full min-h-[200px] gap-2">
               <AlertTriangle className="h-8 w-8 text-red-400" />
               <div className="text-sm text-red-400 font-mono">Generation failed. Check filters — pool may be too small.</div>
@@ -924,6 +1111,14 @@ export default function LineupFactory() {
 
           {result && !generate.isPending && (
             <div className="space-y-5">
+              {/* Stale result banner when viewing a history entry that isn't the newest */}
+              {activeEntry && savedLineups.length > 0 && activeEntry.id !== savedLineups[0].id && (
+                <div className="flex items-center gap-2 rounded border border-slate-700/50 bg-slate-800/40 px-3 py-2 text-xs text-muted-foreground font-mono">
+                  <History className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span>Viewing historical run from {new Date(activeEntry.savedAt).toLocaleString()}. Click the latest entry in the history panel to return to the most recent result.</span>
+                </div>
+              )}
+
               {/* Required lines warning */}
               {result.requiredLinesWarning && (
                 <div className="flex items-start gap-2 rounded border border-amber-700/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-400 font-mono">
@@ -1016,12 +1211,14 @@ export default function LineupFactory() {
                               : "—"}
                           </span>
                         </div>
-                        <Separator className="border-slate-800 my-2" />
-                        <div className="text-[10px] text-muted-foreground leading-relaxed">
-                          <strong className="text-foreground">Note:</strong> EV estimates use available market + projection data.
-                          Probabilities labeled by source and confidence.
-                          Correlation adjustments applied where same-player or same-game picks are detected.
-                          Monte Carlo ({(4000).toLocaleString()} runs) used for P(profit).
+                        <Separator className="border-slate-800 my-1" />
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Eligible props</span>
+                          <span className="font-mono text-foreground">{result.filteredPropCount}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Lineups built</span>
+                          <span className="font-mono text-foreground">{result.lineups.length}</span>
                         </div>
                       </CardContent>
                     </Card>
