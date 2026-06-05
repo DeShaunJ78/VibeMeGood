@@ -2972,7 +2972,7 @@ export default function SlateBoard() {
           {/* Game-correlation cap stepper */}
           <div className="flex items-center gap-3 mb-2">
             <span className="text-xs font-mono text-muted-foreground">Max per game:</span>
-            {[1, 2, 3].map(n => (
+            {[1, 2, 3, 4].map(n => (
               <button
                 key={n}
                 onClick={() => { setMaxPerGame(n); setOptLoaded(false); try { localStorage.setItem("opt-max-per-game", String(n)); } catch {} }}
