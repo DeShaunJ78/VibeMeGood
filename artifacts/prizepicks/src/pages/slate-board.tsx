@@ -1434,7 +1434,7 @@ export default function SlateBoard() {
 
             {/* Quick-filter preset toolbar — only once unlocked (no locked-state noise) */}
             {presetsUnlocked && (
-            <div className="hidden md:flex items-center gap-1.5 flex-wrap py-0.5">
+            <div className="flex overflow-x-auto items-center gap-1.5 py-0.5 md:flex-wrap scrollbar-none">
               <span className="text-[10px] font-mono text-slate-600 uppercase tracking-wider">Quick:</span>
               {DEFAULT_PRESETS.map(p => {
                 const isActive = activePreset === p.label;
@@ -1465,7 +1465,7 @@ export default function SlateBoard() {
                       if (cfg.sharpOnly !== undefined) setSharpOnly(cfg.sharpOnly); else setSharpOnly(false);
                       setActivePreset(p.label);
                     }}
-                    className={`px-2 py-0.5 rounded font-mono text-[10px] border transition-colors ${isActive ? "bg-primary/20 text-primary border-primary/30" : "border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500"}`}
+                    className={`shrink-0 px-2 py-0.5 rounded font-mono text-[10px] border transition-colors ${isActive ? "bg-primary/20 text-primary border-primary/30" : "border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500"}`}
                   >
                     {p.icon} {p.label}{savedSport && (
                       <span className="ml-1 text-[9px] text-cyan-400/80 font-mono inline-flex items-center gap-0.5">
@@ -1504,7 +1504,7 @@ export default function SlateBoard() {
                   return (
                     <button
                       onClick={() => { try { const saved = JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>; saved[activePreset] = { sport, lineType: lineTypeFilter, minEdge, actionTag: actionTagFilter, sharpOnly }; localStorage.setItem(PRESET_LS_KEY, JSON.stringify(saved)); } catch {} }}
-                      className="text-[10px] font-mono text-amber-400 hover:text-amber-300 px-1"
+                      className="shrink-0 text-[10px] font-mono text-amber-400 hover:text-amber-300 px-1"
                       title={`Save current filters as ${activePreset}${preview ? `: ${parts.join(" + ")}` : ""}`}
                     >
                       💾 save{preview && <span className="text-amber-300/70">{preview}</span>}
@@ -1523,7 +1523,7 @@ export default function SlateBoard() {
                         localStorage.setItem(PRESET_LS_KEY, JSON.stringify(saved));
                       } catch {}
                     }}
-                    className="text-[10px] font-mono text-amber-400 hover:text-amber-300 px-1"
+                    className="shrink-0 text-[10px] font-mono text-amber-400 hover:text-amber-300 px-1"
                     title={sportLabel ? `Pin ${sportLabel} to ${activePreset} preset` : `Remove sport pin from ${activePreset}`}
                   >
                     📌 {sportLabel ? <>pin <span className="text-amber-300/70">· {sportLabel}</span></> : "unpin"}
@@ -1533,7 +1533,7 @@ export default function SlateBoard() {
               {presetsUnlocked && activePreset && (
                 <button
                   onClick={() => { setSport("all"); setLineTypeFilter("all"); setMinEdge(""); setActionTagFilter("all"); setSharpOnly(false); setActivePreset(null); }}
-                  className="text-[10px] font-mono text-slate-500 hover:text-rose-400 px-1"
+                  className="shrink-0 text-[10px] font-mono text-slate-500 hover:text-rose-400 px-1"
                 >
                   ✕ clear
                 </button>
