@@ -69,6 +69,7 @@ export default function Review() {
   const [biasSortDir, setBiasSortDir] = useState<"desc" | "asc">("desc");
   const [playerSortKey, setPlayerSortKey] = useState<"hitRate" | "delta" | "gradedCount">("hitRate");
   const [playerSortDir, setPlayerSortDir] = useState<"desc" | "asc">("desc");
+  const [slateOnly, setSlateOnly] = useState(false);
 
   const { data: biasData } = useQuery<{ buckets: StatBiasBucket[] }>({
     queryKey: ["stat-bias"],
@@ -89,6 +90,18 @@ export default function Review() {
     },
     staleTime: 60_000,
     enabled: biasGroupBy === "player",
+  });
+
+  const { data: slatePlayerIds } = useQuery<Set<number>>({
+    queryKey: ["slate-active-player-ids"],
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/slate`);
+      if (!r.ok) throw new Error("Failed to load slate");
+      const d = await r.json() as { rows?: Array<{ playerId: number | null }> };
+      return new Set((d.rows ?? []).map((row) => row.playerId).filter((id): id is number => id != null));
+    },
+    staleTime: 120_000,
+    enabled: biasGroupBy === "player" && slateOnly,
   });
 
   const allBuckets = (biasData?.buckets ?? []) as StatBiasBucket[];
@@ -131,6 +144,10 @@ export default function Review() {
     return playerSortDir === "desc" ? (bv as number) - (av as number) : (av as number) - (bv as number);
   });
   const sortedPlayerBuckets = [...sortedQualifiedPlayers, ...insufficientPlayerBuckets];
+
+  const filteredPlayerBuckets = slateOnly && slatePlayerIds
+    ? sortedPlayerBuckets.filter(b => b.playerId != null && slatePlayerIds.has(b.playerId))
+    : sortedPlayerBuckets;
 
   function handleExportCsv(cols: Set<CsvColGroup>) {
     const qs = new URLSearchParams();
@@ -546,7 +563,20 @@ export default function Review() {
                     <span className="text-[10px] font-mono text-muted-foreground">{qualifiedBuckets.length} buckets ≥ 10</span>
                   )}
                   {biasGroupBy === "player" && qualifiedPlayerBuckets.length > 0 && (
-                    <span className="text-[10px] font-mono text-muted-foreground">{qualifiedPlayerBuckets.length} buckets ≥ 5</span>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {slateOnly && slatePlayerIds
+                        ? `${filteredPlayerBuckets.filter(b => b.hasEnoughData).length} of ${qualifiedPlayerBuckets.length} on today's slate`
+                        : `${qualifiedPlayerBuckets.length} buckets ≥ 5`}
+                    </span>
+                  )}
+                  {biasGroupBy === "player" && (
+                    <button
+                      onClick={e => { e.stopPropagation(); setSlateOnly(v => !v); }}
+                      className={`px-2 py-0.5 rounded border text-[10px] font-mono transition-colors ${slateOnly ? "bg-emerald-900/40 border-emerald-700/50 text-emerald-400" : "border-slate-700 text-muted-foreground hover:text-slate-300"}`}
+                      title="Show only players with active lines on today's slate"
+                    >
+                      Today's slate
+                    </button>
                   )}
                   <div className="cursor-pointer select-none" onClick={() => setBiasOpen(v => !v)}>
                     {biasOpen ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
@@ -648,6 +678,10 @@ export default function Review() {
                     <div className="text-center py-6 text-xs font-mono text-muted-foreground">
                       No player picks logged yet. Log entries to see player buckets grow here.
                     </div>
+                  ) : filteredPlayerBuckets.length === 0 ? (
+                    <div className="text-center py-6 text-xs font-mono text-muted-foreground">
+                      No bias data for players on today's slate yet.
+                    </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs font-mono">
@@ -669,7 +703,7 @@ export default function Review() {
                           </tr>
                         </thead>
                         <tbody>
-                          {sortedPlayerBuckets.map((b, i) => {
+                          {filteredPlayerBuckets.map((b, i) => {
                             const insufficient = !b.hasEnoughData;
                             const pct = Math.min(100, Math.round((b.gradedCount / 5) * 100));
                             const deltaVal = b.delta ?? 0;
