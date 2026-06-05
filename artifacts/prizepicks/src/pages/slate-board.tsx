@@ -646,6 +646,12 @@ export default function SlateBoard() {
   const [maxPerGame, setMaxPerGame] = useState<number>(() => {
     try { return Number(localStorage.getItem("opt-max-per-game")) || 2; } catch { return 2; }
   });
+  const [optSport, setOptSport] = useState<string>(() => {
+    try { return localStorage.getItem("opt-sport") ?? "all"; } catch { return "all"; }
+  });
+  const [optMinEdge, setOptMinEdge] = useState<string>(() => {
+    try { return localStorage.getItem("opt-min-edge") ?? ""; } catch { return ""; }
+  });
   const [diversityNote, setDiversityNote] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -1281,6 +1287,9 @@ export default function SlateBoard() {
         r.ourProjection.gamesUsed >= 5,
     );
 
+    if (optSport !== "all") candidates = candidates.filter(r => r.sport === optSport);
+    if (optMinEdge) candidates = candidates.filter(r => r.edgeScore != null && r.edgeScore >= parseFloat(optMinEdge));
+
     if (stableGrind) {
       // Stable Grind: remove high/boom_bust volatility, back-to-back players, blowoutRisk > 35
       candidates = candidates.filter(r => {
@@ -1369,7 +1378,7 @@ export default function SlateBoard() {
       localStorage.setItem(OPT_KEY, JSON.stringify(results));
       localStorage.setItem(OPT_TS_KEY, String(Date.now()));
     } catch {}
-  }, [playerRows, optPickCount, maxPerTeam, maxPerGame, userSettings, varianceEnabled]);
+  }, [playerRows, optPickCount, maxPerTeam, maxPerGame, optSport, optMinEdge, userSettings, varianceEnabled]);
 
   function loadOptimizerToEntry() {
     for (const r of optResults) {
@@ -2862,7 +2871,7 @@ export default function SlateBoard() {
           </div>
 
           {/* Game-correlation cap stepper */}
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3 mb-2">
             <span className="text-xs font-mono text-muted-foreground">Max per game:</span>
             {[1, 2, 3].map(n => (
               <button
@@ -2879,6 +2888,35 @@ export default function SlateBoard() {
             ))}
             <span className="text-[10px] font-mono text-slate-600 ml-1">per-game cap</span>
           </div>
+
+          {/* Sport filter + Min-edge filter */}
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-xs font-mono text-muted-foreground">Sport:</span>
+            <Select
+              value={optSport}
+              onValueChange={v => { setOptSport(v); setOptLoaded(false); try { localStorage.setItem("opt-sport", v); } catch {} }}
+            >
+              <SelectTrigger className="w-32 bg-slate-800 border-slate-700 font-mono text-xs h-7">
+                <SelectValue placeholder="Sport" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sports</SelectItem>
+                <SelectItem value="NBA">NBA</SelectItem>
+                <SelectItem value="NFL">NFL</SelectItem>
+                <SelectItem value="MLB">MLB</SelectItem>
+                <SelectItem value="NHL">NHL</SelectItem>
+                <SelectItem value="WNBA">WNBA</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-xs font-mono text-muted-foreground ml-2">Min Edge:</span>
+            <Input
+              placeholder="e.g. 5"
+              value={optMinEdge}
+              onChange={e => { setOptMinEdge(e.target.value); setOptLoaded(false); try { localStorage.setItem("opt-min-edge", e.target.value); } catch {}; }}
+              className="w-20 bg-slate-800 border-slate-700 font-mono text-xs h-7 px-2"
+            />
+          </div>
+
           {optLoaded && (() => {
             try {
               const ts = Number(localStorage.getItem("pp_opt_ts") ?? 0);
