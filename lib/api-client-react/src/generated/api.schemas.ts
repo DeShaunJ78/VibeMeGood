@@ -373,6 +373,8 @@ export interface SlateRow {
   teamPickType?: string | null;
   /** @nullable */
   teamId?: number | null;
+  /** @nullable */
+  gameId?: number | null;
 }
 
 export interface SlateSportCount {
@@ -1307,6 +1309,10 @@ dateFrom?: string;
 dateTo?: string;
 sport?: string;
 search?: string;
+/**
+ * Comma-separated column groups to include: meta,picks,financials,projections. Omit for all.
+ */
+cols?: string;
 };
 
 export type ListEntriesParams = {

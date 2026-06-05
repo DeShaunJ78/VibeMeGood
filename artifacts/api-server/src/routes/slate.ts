@@ -144,6 +144,7 @@ router.get("/slate", async (req, res) => {
         pickCategory: line.pickCategory,
         teamPickType: line.teamPickType ?? null,
         teamId: line.teamId ?? null,
+        gameId: line.gameId ?? null,
         yourProjection: proj ? Number(proj.projectedValue) : null,
         projectionGap: proj ? Number(proj.projectedValue) - effectiveLine : null,
         // Tier-specific: compute P(over) against THIS line's EFFECTIVE value (manual

@@ -664,7 +664,8 @@ export const GetSlateResponseItem = zod.object({
   "updatedAt": zod.coerce.date(),
   "pickCategory": zod.string().optional(),
   "teamPickType": zod.string().nullish(),
-  "teamId": zod.number().nullish()
+  "teamId": zod.number().nullish(),
+  "gameId": zod.number().nullish()
 })
 export const GetSlateResponse = zod.array(GetSlateResponseItem)
 
@@ -778,7 +779,8 @@ export const ExportEntriesCsvQueryParams = zod.object({
   "dateFrom": zod.date().optional(),
   "dateTo": zod.date().optional(),
   "sport": zod.coerce.string().optional(),
-  "search": zod.coerce.string().optional()
+  "search": zod.coerce.string().optional(),
+  "cols": zod.coerce.string().optional().describe('Comma-separated column groups to include: meta,picks,financials,projections. Omit for all.')
 })
 
 

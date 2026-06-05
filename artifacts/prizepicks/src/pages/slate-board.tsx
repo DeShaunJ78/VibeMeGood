@@ -382,6 +382,7 @@ interface OptResult {
   imageUrl: string | null;
   teamAbbr: string | null;
   opponentAbbr: string | null;
+  gameId: number | null;
   statType: string;
   lineValue: number;
   lineType: string;
@@ -392,25 +393,24 @@ interface OptResult {
   ourProjection: OurProjection | null;
 }
 
-/** Returns a canonical game key for two teams (order-insensitive). Null when either team is unknown. */
-function gameKey(teamAbbr: string | null, opponentAbbr: string | null): string | null {
-  if (!teamAbbr || !opponentAbbr) return null;
-  return [teamAbbr, opponentAbbr].sort().join("|");
-}
-
-/** Returns game-correlated warnings for a set of optimizer results.
- *  Each entry in the returned array describes one game that has 2+ picks. */
-function getGameCorrelations(results: OptResult[]): { key: string; players: string[]; count: number }[] {
-  const byGame = new Map<string, string[]>();
+/** Returns game-correlated warnings for a set of optimizer results, grouped by gameId.
+ *  Each entry describes one game that has 2+ picks in the lineup. */
+function getGameCorrelations(
+  results: OptResult[],
+): { gameId: number; teamAbbr: string | null; opponentAbbr: string | null; players: string[]; count: number }[] {
+  const byGame = new Map<number, { teamAbbr: string | null; opponentAbbr: string | null; players: string[] }>();
   for (const r of results) {
-    const k = gameKey(r.teamAbbr, r.opponentAbbr);
-    if (!k) continue;
-    if (!byGame.has(k)) byGame.set(k, []);
-    byGame.get(k)!.push(r.playerName);
+    if (r.gameId == null) continue;
+    if (!byGame.has(r.gameId)) {
+      byGame.set(r.gameId, { teamAbbr: r.teamAbbr, opponentAbbr: r.opponentAbbr, players: [] });
+    }
+    byGame.get(r.gameId)!.players.push(r.playerName);
   }
   return [...byGame.entries()]
-    .filter(([, players]) => players.length >= 2)
-    .map(([key, players]) => ({ key, players, count: players.length }));
+    .filter(([, { players }]) => players.length >= 2)
+    .map(([gameId, { teamAbbr, opponentAbbr, players }]) => ({
+      gameId, teamAbbr, opponentAbbr, players, count: players.length,
+    }));
 }
 
 const POSITION_ORDER: Record<string, string[]> = {
@@ -1275,6 +1275,7 @@ export default function SlateBoard() {
         imageUrl: r.imageUrl ?? null,
         teamAbbr: r.teamAbbr ?? null,
         opponentAbbr: r.opponentAbbr ?? null,
+        gameId: r.gameId ?? null,
         statType: r.statType,
         lineValue: r.lineValue,
         lineType: r.lineType,
@@ -2765,10 +2766,12 @@ export default function SlateBoard() {
               <div className="text-[10px] font-mono text-amber-400 bg-amber-950/20 border border-amber-700/30 rounded px-2 py-1.5 mb-2 space-y-0.5">
                 <div>⚠ {totalCorrelated} picks from the same {gameWord} (correlated risk)</div>
                 {correlations.map(c => {
-                  const [t1, t2] = c.key.split("|");
+                  const matchup = c.teamAbbr && c.opponentAbbr
+                    ? `${c.teamAbbr} vs ${c.opponentAbbr}`
+                    : `Game #${c.gameId}`;
                   return (
-                    <div key={c.key} className="text-slate-500 pl-2">
-                      {t1} vs {t2}: {c.players.join(", ")}
+                    <div key={c.gameId} className="text-slate-500 pl-2">
+                      {matchup}: {c.players.join(", ")}
                     </div>
                   );
                 })}
