@@ -630,6 +630,20 @@ export default function Settings() {
               </Button>
             </div>
 
+            {/* Chrome extension download — always visible below PP sync row */}
+            <div className="flex items-center justify-between px-3 py-2 rounded bg-emerald-500/5 border border-emerald-500/20">
+              <span className="text-[11px] font-mono text-emerald-300/80">
+                ⚡ Auto-sync Chrome extension
+              </span>
+              <a
+                href="/api/sync/extension-download"
+                download="vmg-extension.zip"
+                className="inline-flex items-center gap-1 rounded bg-emerald-700/80 px-2.5 py-1 font-mono text-[10px] font-bold text-white no-underline hover:bg-emerald-600"
+              >
+                <Download className="w-3 h-3" /> Download .zip
+              </a>
+            </div>
+
             {SYNC_JOBS.map(job => {
               const prov = JOB_PROVIDER[job.endpoint] ? providerByName[JOB_PROVIDER[job.endpoint]] : undefined;
               const isRunning = syncingJob === job.endpoint;
