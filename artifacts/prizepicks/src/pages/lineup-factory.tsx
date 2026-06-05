@@ -552,42 +552,77 @@ function LineupCard({ lineup, index, onLoad }: { lineup: GeneratedLineup; index:
 // ─── Scored props table ───────────────────────────────────────────────────────
 function ScoredPropsTable({ props, pinnedIds }: { props: FactoryScoredProp[]; pinnedIds: Set<number> }) {
   const [filter, setFilter] = useState<"all" | "eligible" | "excluded">("all");
+  const [biasWeight, setBiasWeight] = useState<number>(0);
 
+  // Share bias cache with Slate Board via same queryKey → zero extra network requests
   const { data: biasRaw } = useQuery({
-    queryKey: ["lf-stat-bias"],
+    queryKey: ["stat-bias"],
     queryFn: async () => {
       const b = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
       const r = await fetch(`${b}/api/dashboard/stat-bias`);
       if (!r.ok) return { buckets: [] };
-      return r.json() as Promise<{ buckets: Array<{ statType: string; delta: number | null; hasEnoughData: boolean }> }>;
+      return r.json() as Promise<{
+        buckets: Array<{ sport: string | null; statType: string; tier: string; delta: number | null; hasEnoughData: boolean }>;
+      }>;
     },
     staleTime: 60_000,
   });
 
-  const statBiasMap = useMemo(() => {
+  // Mirrors Slate Board: key = "sport|statType|tier" for O(1) per-row lookup
+  const biasDeltaMap = useMemo(() => {
     const m = new Map<string, number>();
     for (const bkt of biasRaw?.buckets ?? []) {
-      if (bkt.hasEnoughData && bkt.delta != null && !m.has(bkt.statType)) {
-        m.set(bkt.statType, bkt.delta);
+      if (bkt.hasEnoughData && bkt.delta != null) {
+        m.set(`${bkt.sport ?? ""}|${bkt.statType}|${bkt.tier}`, bkt.delta);
       }
     }
     return m;
   }, [biasRaw]);
+
+  // Resolve bias delta with fallback chain:
+  //   exact (sport|statType|tier) → standard tier → sport-agnostic tier → sport-agnostic standard
+  function getBias(p: FactoryScoredProp): number | null {
+    return (
+      biasDeltaMap.get(`${p.sport}|${p.statType}|${p.lineType}`) ??
+      biasDeltaMap.get(`${p.sport}|${p.statType}|standard`) ??
+      biasDeltaMap.get(`|${p.statType}|${p.lineType}`) ??
+      biasDeltaMap.get(`|${p.statType}|standard`) ??
+      null
+    );
+  }
 
   const filtered = props.filter(p => {
     if (filter === "eligible") return !p.noPlayReason;
     if (filter === "excluded") return !!p.noPlayReason;
     return true;
   });
-  const sorted = [
-    ...filtered.filter(p => pinnedIds.has(p.ppLineId)),
-    ...filtered.filter(p => !pinnedIds.has(p.ppLineId)),
-  ];
+
+  // When biasWeight > 0 re-sort by bias-adjusted composite score
+  const sorted = useMemo(() => {
+    const pinned = filtered.filter(p => pinnedIds.has(p.ppLineId));
+    const rest   = filtered.filter(p => !pinnedIds.has(p.ppLineId));
+    if (biasWeight === 0) return [...pinned, ...rest];
+    const adj = (p: FactoryScoredProp) => {
+      const bd = biasDeltaMap.get(`${p.sport}|${p.statType}|${p.lineType}`)
+        ?? biasDeltaMap.get(`${p.sport}|${p.statType}|standard`)
+        ?? biasDeltaMap.get(`|${p.statType}|${p.lineType}`)
+        ?? biasDeltaMap.get(`|${p.statType}|standard`)
+        ?? 0;
+      return p.compositeScore + biasWeight * bd;
+    };
+    return [
+      ...pinned.slice().sort((a, b) => adj(b) - adj(a)),
+      ...rest.slice().sort((a, b) => adj(b) - adj(a)),
+    ];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, pinnedIds, biasWeight, biasDeltaMap]);
+
   const displayed = sorted.slice(0, 100);
+  const biasActive = biasWeight > 0;
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         <ToggleGroup
           value={filter}
           onChange={v => setFilter(v as "all" | "eligible" | "excluded")}
@@ -598,6 +633,22 @@ function ScoredPropsTable({ props, pinnedIds }: { props: FactoryScoredProp[]; pi
           ]}
         />
         <span className="text-xs text-muted-foreground ml-2">Showing {displayed.length} of {props.length}</span>
+        <div className="ml-auto flex items-center gap-2 shrink-0">
+          <span className="text-[10px] text-muted-foreground font-mono shrink-0">Bias weight</span>
+          <ToggleGroup
+            value={biasWeight}
+            onChange={v => setBiasWeight(Number(v))}
+            options={[
+              { label: "Off",  value: 0    },
+              { label: "Low",  value: 0.25 },
+              { label: "Med",  value: 0.5  },
+              { label: "High", value: 1.0  },
+            ]}
+          />
+          {biasActive && (
+            <span className="text-[9px] font-mono text-amber-400 uppercase tracking-wider shrink-0">bias-adj</span>
+          )}
+        </div>
       </div>
       <div className="overflow-auto max-h-[520px] rounded border border-slate-800">
         <Table>
@@ -610,7 +661,9 @@ function ScoredPropsTable({ props, pinnedIds }: { props: FactoryScoredProp[]; pi
               <TableHead className="text-xs text-muted-foreground">Source</TableHead>
               <TableHead className="text-xs text-muted-foreground">EV</TableHead>
               <TableHead className="text-xs text-muted-foreground">Edge</TableHead>
-              <TableHead className="text-xs text-muted-foreground">Bias</TableHead>
+              <TableHead className="text-xs text-muted-foreground">
+                {biasActive ? <span className="text-amber-400">Bias ↕</span> : "Bias"}
+              </TableHead>
               <TableHead className="text-xs text-muted-foreground">Vol</TableHead>
               <TableHead className="text-xs text-muted-foreground">Flags</TableHead>
             </TableRow>
@@ -664,10 +717,13 @@ function ScoredPropsTable({ props, pinnedIds }: { props: FactoryScoredProp[]; pi
                 </TableCell>
                 <TableCell className="py-1.5 text-xs font-mono">
                   {(() => {
-                    const bd = statBiasMap.get(p.statType);
+                    const bd = getBias(p);
                     if (bd == null) return <span className="text-muted-foreground/40">—</span>;
                     return (
-                      <span className={bd >= 0 ? "text-emerald-400" : "text-rose-400"} title={`Personal bias: ${bd >= 0 ? "+" : ""}${bd.toFixed(1)}pp on ${p.statType}`}>
+                      <span
+                        className={bd >= 0 ? "text-emerald-400" : "text-rose-400"}
+                        title={`Personal bias: ${bd >= 0 ? "+" : ""}${bd.toFixed(1)}pp on ${p.sport} ${p.statType} (${p.lineType})`}
+                      >
                         {bd >= 0 ? "+" : ""}{bd.toFixed(1)}
                       </span>
                     );
