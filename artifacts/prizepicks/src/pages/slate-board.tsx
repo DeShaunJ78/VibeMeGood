@@ -381,6 +381,7 @@ interface OptResult {
   playerName: string;
   imageUrl: string | null;
   teamAbbr: string | null;
+  opponentAbbr: string | null;
   statType: string;
   lineValue: number;
   lineType: string;
@@ -389,6 +390,27 @@ interface OptResult {
   edgeScore: number | null;
   actionTag: string | null;
   ourProjection: OurProjection | null;
+}
+
+/** Returns a canonical game key for two teams (order-insensitive). Null when either team is unknown. */
+function gameKey(teamAbbr: string | null, opponentAbbr: string | null): string | null {
+  if (!teamAbbr || !opponentAbbr) return null;
+  return [teamAbbr, opponentAbbr].sort().join("|");
+}
+
+/** Returns game-correlated warnings for a set of optimizer results.
+ *  Each entry in the returned array describes one game that has 2+ picks. */
+function getGameCorrelations(results: OptResult[]): { key: string; players: string[]; count: number }[] {
+  const byGame = new Map<string, string[]>();
+  for (const r of results) {
+    const k = gameKey(r.teamAbbr, r.opponentAbbr);
+    if (!k) continue;
+    if (!byGame.has(k)) byGame.set(k, []);
+    byGame.get(k)!.push(r.playerName);
+  }
+  return [...byGame.entries()]
+    .filter(([, players]) => players.length >= 2)
+    .map(([key, players]) => ({ key, players, count: players.length }));
 }
 
 const POSITION_ORDER: Record<string, string[]> = {
@@ -1252,6 +1274,7 @@ export default function SlateBoard() {
         playerName: r.playerName,
         imageUrl: r.imageUrl ?? null,
         teamAbbr: r.teamAbbr ?? null,
+        opponentAbbr: r.opponentAbbr ?? null,
         statType: r.statType,
         lineValue: r.lineValue,
         lineType: r.lineType,
@@ -2731,6 +2754,27 @@ export default function SlateBoard() {
               ⚠ {diversityNote} — raise the "Max per team" cap or reduce pick count
             </div>
           )}
+
+          {/* Game-correlation guard */}
+          {optLoaded && (() => {
+            const correlations = getGameCorrelations(optResults);
+            if (correlations.length === 0) return null;
+            const totalCorrelated = correlations.reduce((n, c) => n + c.count, 0);
+            const gameWord = correlations.length === 1 ? "game" : "games";
+            return (
+              <div className="text-[10px] font-mono text-amber-400 bg-amber-950/20 border border-amber-700/30 rounded px-2 py-1.5 mb-2 space-y-0.5">
+                <div>⚠ {totalCorrelated} picks from the same {gameWord} (correlated risk)</div>
+                {correlations.map(c => {
+                  const [t1, t2] = c.key.split("|");
+                  return (
+                    <div key={c.key} className="text-slate-500 pl-2">
+                      {t1} vs {t2}: {c.players.join(", ")}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {optLoaded && (
             optResults.length === 0 ? (
