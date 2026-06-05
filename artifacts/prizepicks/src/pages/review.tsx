@@ -7,15 +7,18 @@ import {
   Tooltip, ResponsiveContainer, Cell, ReferenceLine,
   ComposedChart,
 } from "recharts";
-import { TrendingUp, TrendingDown, Percent, DollarSign, Target, Brain, ChevronDown, ChevronUp, Download } from "lucide-react";
+import { TrendingUp, TrendingDown, Percent, DollarSign, Target, Brain, ChevronDown, ChevronUp, Download, AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
 import { CsvColumnPickerDialog, type CsvColGroup } from "@/lib/csv-export";
+import { Tooltip as UiTooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
 const SPORTS = ["NFL", "NBA", "MLB", "NHL", "WNBA", "MMA", "PGA", "NASCAR", "SOCCER"];
+
+const CLV_COVERAGE_WARNING_THRESHOLD = 0.30;
 
 interface StatBiasBucket {
   sport: string | null;
@@ -275,13 +278,29 @@ export default function Review() {
               icon={TrendingUp}
               color="text-emerald-400"
             />
-            <StatCard
-              label="Avg CLV"
-              value={s.avgClv != null ? `${Number(s.avgClv) > 0 ? "+" : ""}${Number(s.avgClv).toFixed(2)}` : "—"}
-              sub={s.clvCoverage != null ? `${Math.round(Number(s.clvCoverage) * 100)}% CLV coverage` : "closing line value"}
-              icon={s.avgClv != null && Number(s.avgClv) >= 0 ? TrendingUp : TrendingDown}
-              color={s.avgClv != null && Number(s.avgClv) >= 0 ? "text-emerald-400" : "text-rose-400"}
-            />
+            {(() => {
+              const clvLowCoverage = s.clvCoverage != null && Number(s.clvCoverage) < CLV_COVERAGE_WARNING_THRESHOLD;
+              const card = (
+                <StatCard
+                  label="Avg CLV"
+                  value={s.avgClv != null ? `${Number(s.avgClv) > 0 ? "+" : ""}${Number(s.avgClv).toFixed(2)}` : "—"}
+                  sub={s.clvCoverage != null ? `${Math.round(Number(s.clvCoverage) * 100)}% CLV coverage` : "closing line value"}
+                  icon={clvLowCoverage ? AlertTriangle : (s.avgClv != null && Number(s.avgClv) >= 0 ? TrendingUp : TrendingDown)}
+                  color={clvLowCoverage ? "text-amber-400" : (s.avgClv != null && Number(s.avgClv) >= 0 ? "text-emerald-400" : "text-rose-400")}
+                />
+              );
+              if (!clvLowCoverage) return card;
+              return (
+                <TooltipProvider delayDuration={200}>
+                  <UiTooltip>
+                    <TooltipTrigger asChild><div>{card}</div></TooltipTrigger>
+                    <TooltipContent className="max-w-[220px] text-center font-mono text-[11px] bg-slate-900 border-slate-700 text-amber-300">
+                      Only {Math.round(Number(s.clvCoverage) * 100)}% of legs have closing line data — below the {Math.round(CLV_COVERAGE_WARNING_THRESHOLD * 100)}% threshold. This average may not be reliable.
+                    </TooltipContent>
+                  </UiTooltip>
+                </TooltipProvider>
+              );
+            })()}
             <StatCard
               label="Kelly Adherence"
               value={(s as any).kellyAdherenceRate != null ? `${((s as any).kellyAdherenceRate * 100).toFixed(0)}%` : "—"}
