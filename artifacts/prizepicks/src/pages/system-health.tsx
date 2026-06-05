@@ -186,24 +186,31 @@ function Section({
 }
 
 interface PipelineStep {
-  step: number;
   label: string;
   action: string;
   description: string;
   isBrowserOnly?: boolean;
   isLong?: boolean;
+  isPaid?: boolean;
+  isAuto?: boolean;
 }
 
-const PIPELINE_STEPS: PipelineStep[] = [
-  { step: 1, label: "Import PP Lines",    action: "",                  description: "Browser only — use the bookmarklet in your PP tab or paste JSON in the Settings page.", isBrowserOnly: true },
-  { step: 2, label: "Sync Schedule",      action: "game-schedule",     description: "Seeds the games table with today's matchups and team context." },
-  { step: 3, label: "Backfill History",   action: "historical-stats",  description: "Downloads all NBA/MLB/NHL/NFL game logs. First run takes 15–30 min.", isLong: true },
-  { step: 4, label: "Compute Matchups",   action: "matchup-history",   description: "Builds head-to-head history so the model adjusts for tough/soft matchups." },
-  { step: 5, label: "Sync Projections",   action: "projections",       description: "Runs Bayesian + distribution math (Poisson/NegBin/ZIP) on all active lines." },
-  { step: 6, label: "Run Calibration",    action: "calibration",       description: "Rebuilds probability buckets from historical logs. Requires Backfill first." },
-  { step: 7, label: "Sync Odds",          action: "external-odds",     description: "Fetches sportsbook lines from The Odds API. Costs API credits." },
-  { step: 8, label: "Rescore Props",      action: "rescore-props",     description: "Recalculates edge/action/PLAY scores. Free — no API call, no credits used." },
-  { step: 9, label: "Compute Variance",   action: "variance",          description: "Simulates floor/ceiling distributions for each line." },
+const DAILY_STEPS: PipelineStep[] = [
+  { label: "Import PP Lines",  action: "",               description: "Use the bookmarklet in your PP tab — no button needed here.", isBrowserOnly: true },
+  { label: "Sync Schedule",    action: "game-schedule",  description: "Pulls today's matchups and team context." },
+  { label: "Sync Projections", action: "projections",    description: "Runs the Bayesian model on every active line." },
+  { label: "Rescore Props",    action: "rescore-props",  description: "Recalculates PLAY/ACTION/WATCH scores. Free, no API credits." },
+];
+
+const SETUP_STEPS: PipelineStep[] = [
+  { label: "Backfill History",  action: "historical-stats", description: "Downloads all game logs (NBA/MLB/NHL/NFL). Run once — takes 15–30 min.", isLong: true },
+  { label: "Run Calibration",   action: "calibration",      description: "Builds probability buckets from historical logs. Run after Backfill." },
+  { label: "Compute Matchups",  action: "matchup-history",  description: "Builds head-to-head history for matchup adjustments. Run after Backfill." },
+];
+
+const OPTIONAL_STEPS: PipelineStep[] = [
+  { label: "Sync Odds",       action: "external-odds", description: "Fetches closing lines from The Odds API.", isPaid: true },
+  { label: "Compute Variance", action: "variance",     description: "Floor/ceiling distributions. Runs automatically on server start.", isAuto: true },
 ];
 
 const UTILITY_STEPS = [
