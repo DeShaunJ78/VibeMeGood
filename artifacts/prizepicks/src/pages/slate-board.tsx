@@ -1331,6 +1331,7 @@ export default function SlateBoard() {
     const goblinProps: typeof sorted = [];
     const teamCount = new Map<string, number>();
     const gameCount = new Map<number, number>();
+    const gameCappedGames = new Map<number, { teamAbbr: string | null; opponentAbbr: string | null; excluded: number }>();
     for (const c of sorted) {
       if (goblinProps.length >= optPickCount) break;
       const team = c.teamAbbr ?? null;
@@ -1341,7 +1342,11 @@ export default function SlateBoard() {
       const gameId = c.gameId ?? null;
       if (gameId != null) {
         const gcount = gameCount.get(gameId) ?? 0;
-        if (gcount >= maxPerGame) continue; // over cap for this game — skip
+        if (gcount >= maxPerGame) {
+          const prev = gameCappedGames.get(gameId) ?? { teamAbbr: c.teamAbbr ?? null, opponentAbbr: c.opponentAbbr ?? null, excluded: 0 };
+          gameCappedGames.set(gameId, { ...prev, excluded: prev.excluded + 1 });
+          continue; // over cap for this game — skip
+        }
         gameCount.set(gameId, gcount + 1);
       }
       if (team != null) {
@@ -1351,11 +1356,23 @@ export default function SlateBoard() {
     }
 
     const shortfall = optPickCount - goblinProps.length;
-    setDiversityNote(
-      shortfall > 0
-        ? `Only ${goblinProps.length} pick${goblinProps.length === 1 ? "" : "s"} available with current diversity setting`
-        : null,
-    );
+    if (shortfall > 0) {
+      const base = `Only ${goblinProps.length} pick${goblinProps.length === 1 ? "" : "s"} available with current diversity setting`;
+      const gameCappedTotal = [...gameCappedGames.values()].reduce((n, g) => n + g.excluded, 0);
+      if (gameCappedTotal > 0) {
+        const gameLabels = [...gameCappedGames.values()]
+          .map(g => g.teamAbbr && g.opponentAbbr ? `${g.teamAbbr} vs ${g.opponentAbbr}` : null)
+          .filter((l): l is string => l !== null);
+        const capDetail = gameLabels.length > 0
+          ? `${gameCappedTotal} excluded by per-game cap (${gameLabels.join(", ")})`
+          : `${gameCappedTotal} excluded by per-game cap`;
+        setDiversityNote(`${base} · ${capDetail} — raise the per-game cap or reduce pick count`);
+      } else {
+        setDiversityNote(`${base} — raise the "Max per team" cap or reduce pick count`);
+      }
+    } else {
+      setDiversityNote(null);
+    }
 
     const results: OptResult[] = goblinProps.map(r => {
       const pOver = (r.ourProjection?.pOver ?? 50) / 100;
@@ -3015,7 +3032,7 @@ export default function SlateBoard() {
           {/* Diversity shortfall note */}
           {optLoaded && diversityNote && (
             <div className="text-[10px] font-mono text-amber-400 bg-amber-950/20 border border-amber-700/30 rounded px-2 py-1 mb-2">
-              ⚠ {diversityNote} — raise the "Max per team" cap or reduce pick count
+              ⚠ {diversityNote}
             </div>
           )}
 
