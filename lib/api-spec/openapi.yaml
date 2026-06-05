@@ -2605,13 +2605,15 @@ components:
         sport:         { type: ["string", "null"] }
         statType:      { type: string }
         tier:          { type: string }
+        totalCount:    { type: integer }
+        gradedCount:   { type: integer }
+        pendingCount:  { type: integer }
         hitCount:      { type: integer }
-        sampleSize:    { type: integer }
         hitRate:       { type: ["number", "null"] }
         avgModelPOver: { type: ["number", "null"] }
         delta:         { type: ["number", "null"] }
         hasEnoughData: { type: boolean }
-      required: [sport, statType, tier, hitCount, sampleSize, hitRate, avgModelPOver, delta, hasEnoughData]
+      required: [sport, statType, tier, totalCount, gradedCount, pendingCount, hitCount, hitRate, avgModelPOver, delta, hasEnoughData]
 
     StatBiasResponse:
       type: object

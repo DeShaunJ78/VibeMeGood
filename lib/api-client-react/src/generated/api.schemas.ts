@@ -1205,8 +1205,10 @@ export interface StatBiasBucket {
   sport: string | null;
   statType: string;
   tier: string;
+  totalCount: number;
+  gradedCount: number;
+  pendingCount: number;
   hitCount: number;
-  sampleSize: number;
   /** @nullable */
   hitRate: number | null;
   /** @nullable */

@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
-import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical, Lock, Zap, DollarSign, Download } from "lucide-react";
+import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical, Lock, Zap, DollarSign, Download, Target } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useUserSettings, useUpdateUserSettings, type UserSettings } from "@/hooks/use-user-settings";
 
@@ -213,20 +213,6 @@ function VarianceIntelSection({ settings, onUpdate }: { settings: UserSettings; 
                   </div>
                 ))}
               </div>
-            </div>
-
-            {/* Personal Bias Correction */}
-            <div className="flex items-center justify-between p-4 bg-slate-950 border border-slate-700 rounded-lg">
-              <div>
-                <div className="font-semibold text-sm">Use personal bias correction</div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  Adjusts edge scores up or down (±5 pts) based on your historical hit rate per stat type. Requires ≥ 10 graded picks per bucket.
-                </div>
-              </div>
-              <Switch
-                checked={settings.biasCorrectionEnabled ?? false}
-                onCheckedChange={v => onUpdate({ biasCorrectionEnabled: v })}
-              />
             </div>
 
             {/* Experimental Lab */}
@@ -575,6 +561,37 @@ export default function Settings() {
 
       {userSettings && (
         <BankrollSection settings={userSettings} onUpdate={patch => updateSettings.mutate(patch)} />
+      )}
+
+      {/* Personal Bias Correction — standalone, no feature gate */}
+      {userSettings && (
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Target className="w-4 h-4 text-primary" /> Personal Bias Correction
+            </CardTitle>
+            <CardDescription>
+              Learns from your graded picks. Once a stat-type bucket reaches 10 graded results, the tracker unlocks and edge scores can be nudged up or down (±5 pts) based on your real hit rate vs. the model.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between p-4 bg-slate-950 border border-slate-700 rounded-lg">
+              <div>
+                <div className="font-semibold text-sm">Apply bias correction to edge scores</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  Adjusts props up or down (±5 pts) where your personal hit rate diverges from model predictions by more than 10 pp.
+                </div>
+              </div>
+              <Switch
+                checked={userSettings.biasCorrectionEnabled ?? false}
+                onCheckedChange={v => updateSettings.mutate({ biasCorrectionEnabled: v })}
+              />
+            </div>
+            <p className="mt-3 text-[11px] text-muted-foreground font-mono">
+              Monitor bucket growth and hit rates in Review → Stat Type Edge.
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       {userSettings && (

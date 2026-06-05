@@ -13,8 +13,10 @@ interface StatBiasBucket {
   sport: string | null;
   statType: string;
   tier: string;
+  totalCount: number;
+  gradedCount: number;
+  pendingCount: number;
   hitCount: number;
-  sampleSize: number;
   hitRate: number | null;
   avgModelPOver: number | null;
   delta: number | null;
@@ -33,7 +35,7 @@ export default function Review() {
     query: { queryKey: ["review-stats"] }
   });
   const [biasOpen, setBiasOpen] = useState(true);
-  const [biasSortKey, setBiasSortKey] = useState<"hitRate" | "delta" | "sampleSize">("hitRate");
+  const [biasSortKey, setBiasSortKey] = useState<"hitRate" | "delta" | "gradedCount">("hitRate");
   const [biasSortDir, setBiasSortDir] = useState<"desc" | "asc">("desc");
 
   const { data: biasData } = useQuery<{ buckets: StatBiasBucket[] }>({
@@ -46,10 +48,10 @@ export default function Review() {
     staleTime: 60_000,
   });
 
-  const allBuckets = biasData?.buckets ?? [];
+  const allBuckets = (biasData?.buckets ?? []) as StatBiasBucket[];
   const qualifiedBuckets = allBuckets.filter(b => b.hasEnoughData);
 
-  function toggleBiasSort(key: typeof biasSortKey) {
+  function toggleBiasSort(key: "hitRate" | "delta" | "gradedCount") {
     if (biasSortKey === key) {
       setBiasSortDir(d => d === "desc" ? "asc" : "desc");
     } else {
@@ -330,54 +332,70 @@ export default function Review() {
               <CardContent>
                 {allBuckets.length === 0 ? (
                   <div className="text-center py-6 text-xs font-mono text-muted-foreground">
-                    No graded picks yet. Log entries and grade results to build your personal bias profile.
+                    No picks logged yet. Log entries to see buckets grow here.
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs font-mono">
                       <thead>
                         <tr className="border-b border-slate-800 text-muted-foreground text-[10px] uppercase tracking-wider">
-                          <th className="text-left py-2 pr-4">Stat Type</th>
-                          <th className="text-left py-2 pr-4">Tier</th>
-                          <th className="text-left py-2 pr-4">Sport</th>
-                          <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleBiasSort("sampleSize")}>
-                            Picks {biasSortKey === "sampleSize" ? (biasSortDir === "desc" ? "↓" : "↑") : ""}
+                          <th className="text-left py-2 pr-4">Stat Type · Tier</th>
+                          <th className="text-left py-2 pr-3">Sport</th>
+                          <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleBiasSort("gradedCount")}>
+                            Graded{biasSortKey === "gradedCount" ? (biasSortDir === "desc" ? " ↓" : " ↑") : ""}
                           </th>
+                          <th className="text-right py-2 px-2 text-amber-600/70">Pending</th>
                           <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleBiasSort("hitRate")}>
-                            Hit Rate {biasSortKey === "hitRate" ? (biasSortDir === "desc" ? "↓" : "↑") : ""}
+                            Hit Rate{biasSortKey === "hitRate" ? (biasSortDir === "desc" ? " ↓" : " ↑") : ""}
                           </th>
-                          <th className="text-right py-2 px-2 text-slate-400">Model P(Over)</th>
+                          <th className="text-right py-2 px-2 text-slate-500">Model P̄(O)</th>
                           <th className="text-right py-2 pl-2 cursor-pointer hover:text-foreground" onClick={() => toggleBiasSort("delta")}>
-                            Delta {biasSortKey === "delta" ? (biasSortDir === "desc" ? "↓" : "↑") : ""}
+                            Delta{biasSortKey === "delta" ? (biasSortDir === "desc" ? " ↓" : " ↑") : ""}
                           </th>
                         </tr>
                       </thead>
                       <tbody>
                         {sortedBuckets.map((b, i) => {
                           const insufficient = !b.hasEnoughData;
+                          const pct = Math.min(100, Math.round((b.gradedCount / 10) * 100));
                           const deltaVal = b.delta ?? 0;
+                          // Divergence highlight at >10pp (per spec)
                           const deltaColor = insufficient ? "text-muted-foreground"
-                            : deltaVal > 5 ? "text-emerald-400" : deltaVal < -5 ? "text-rose-400" : "text-amber-400";
+                            : deltaVal > 10 ? "text-emerald-400" : deltaVal < -10 ? "text-rose-400" : "text-amber-400";
                           const hitColor = insufficient || b.hitRate == null ? "text-muted-foreground"
                             : b.hitRate >= 0.6 ? "text-emerald-400"
                             : b.hitRate >= 0.5 ? "text-amber-400"
                             : "text-rose-400";
                           return (
-                            <tr key={i} className={`border-b border-slate-800/50 transition-colors ${insufficient ? "opacity-50" : "hover:bg-slate-800/30"}`}>
-                              <td className={`py-2 pr-4 font-semibold ${insufficient ? "text-muted-foreground" : "text-slate-200"}`}>{b.statType}</td>
-                              <td className="py-2 pr-4 text-muted-foreground capitalize">{b.tier}</td>
-                              <td className="py-2 pr-4 text-muted-foreground">{b.sport ?? "—"}</td>
-                              <td className="py-2 px-2 text-right text-muted-foreground">
-                                {b.sampleSize}
-                                {insufficient && <span className="ml-1 text-[9px] text-amber-600 font-mono">/{10}</span>}
+                            <tr key={i} className={`border-b border-slate-800/50 transition-colors ${insufficient ? "opacity-60" : "hover:bg-slate-800/30"}`}>
+                              <td className={`py-2 pr-4 ${insufficient ? "text-muted-foreground" : "text-slate-200 font-semibold"}`}>
+                                {b.statType}
+                                <span className="ml-1 text-[10px] text-muted-foreground capitalize font-normal">{b.tier}</span>
+                              </td>
+                              <td className="py-2 pr-3 text-muted-foreground">{b.sport ?? "—"}</td>
+                              <td className="py-2 px-2 text-right">
+                                {insufficient ? (
+                                  <span className="text-amber-600 font-bold">{b.gradedCount}
+                                    <span className="text-muted-foreground font-normal">/10</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-300">{b.gradedCount}</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-2 text-right text-amber-600/70">
+                                {b.pendingCount > 0 ? `+${b.pendingCount}` : <span className="text-muted-foreground">—</span>}
                               </td>
                               <td className={`py-2 px-2 text-right font-bold ${hitColor}`}>
-                                {b.hitRate != null ? `${(b.hitRate * 100).toFixed(1)}%` : insufficient ? <span className="text-[10px] italic">need {10 - b.sampleSize} more</span> : "—"}
+                                {b.hitRate != null
+                                  ? `${(b.hitRate * 100).toFixed(1)}%`
+                                  : insufficient
+                                    ? <span className="text-[10px] text-muted-foreground italic">{pct}% there</span>
+                                    : "—"}
                               </td>
                               <td className="py-2 px-2 text-right text-muted-foreground">
                                 {b.avgModelPOver != null ? `${b.avgModelPOver.toFixed(1)}%` : "—"}
                               </td>
-                              <td className={`py-2 pl-2 text-right font-bold font-mono ${deltaColor}`}>
+                              <td className={`py-2 pl-2 text-right font-bold ${deltaColor}`}>
                                 {b.delta != null ? `${b.delta > 0 ? "+" : ""}${b.delta.toFixed(1)}pp` : "—"}
                               </td>
                             </tr>
@@ -386,8 +404,8 @@ export default function Review() {
                       </tbody>
                     </table>
                     {insufficientBuckets.length > 0 && (
-                      <p className="mt-2 text-[10px] font-mono text-muted-foreground">
-                        {insufficientBuckets.length} bucket{insufficientBuckets.length !== 1 ? "s" : ""} shown at reduced opacity — need ≥ 10 graded picks to unlock bias analysis.
+                      <p className="mt-2 text-[10px] font-mono text-slate-600">
+                        {insufficientBuckets.length} bucket{insufficientBuckets.length !== 1 ? "s" : ""} building toward 10 graded picks (dimmed). Delta highlights at ±10 pp.
                       </p>
                     )}
                   </div>
