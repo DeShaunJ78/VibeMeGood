@@ -129,6 +129,12 @@ function MarkResultPanel({ entry, onDone }: { entry: any; onDone: () => void }) 
     return (
       <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-3 space-y-2">
         <div className="text-[10px] font-mono text-muted-foreground uppercase">Confirm result</div>
+        {allPicksGraded && (
+          <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-400/80 border border-amber-800/30 bg-amber-950/20 rounded px-2 py-1">
+            <RotateCcw className="w-3 h-3 shrink-0" />
+            Previous payout cleared — confirm the updated result to lock in the correct P&amp;L.
+          </div>
+        )}
         {confirmResult === "partial" ? (
           <div className="flex flex-col gap-2">
             {flexPartialHint != null && (
