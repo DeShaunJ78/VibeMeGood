@@ -681,6 +681,35 @@ export default function SlateBoard() {
     staleTime: 5 * 60_000,
   });
 
+  // Bias data — shares the same query key as PropDetailSheet so the cache is
+  // reused with no extra network request when both are mounted.
+  const { data: biasData } = useQuery<{
+    buckets: Array<{
+      sport: string | null; statType: string; tier: string;
+      delta: number | null; hasEnoughData: boolean;
+    }>;
+  }>({
+    queryKey: ["stat-bias"],
+    queryFn: async () => {
+      const b = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+      const r = await fetch(`${b}/api/dashboard/stat-bias`);
+      if (!r.ok) throw new Error("stat-bias fetch failed");
+      return r.json();
+    },
+    staleTime: 60_000,
+  });
+
+  // Map "sport|statType|tier" → delta for O(1) per-row lookup
+  const biasDeltaMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const b of biasData?.buckets ?? []) {
+      if (b.hasEnoughData && b.delta != null) {
+        m.set(`${b.sport ?? ""}|${b.statType}|${b.tier}`, b.delta);
+      }
+    }
+    return m;
+  }, [biasData]);
+
   function toggleSort(col: string) {
     if (sortCol === col) {
       setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -2483,6 +2512,30 @@ export default function SlateBoard() {
                                   </TooltipContent>
                                 </Tooltip>
                               )}
+                              {(() => {
+                                const bKey = `${row.sport ?? ""}|${row.statType}|${row.lineType}`;
+                                const bd = biasDeltaMap.get(bKey);
+                                if (bd == null) return null;
+                                const pos = bd >= 0;
+                                return (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className={`font-mono text-[9px] font-bold px-1 py-px rounded border leading-none cursor-help ${
+                                        pos
+                                          ? "text-emerald-400 bg-emerald-950/40 border-emerald-700/40"
+                                          : "text-rose-400 bg-rose-950/40 border-rose-700/40"
+                                      }`}>
+                                        {pos ? "+" : ""}{bd.toFixed(1)}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="font-mono text-xs max-w-xs">
+                                      <p className="font-bold mb-0.5">Personal Bias</p>
+                                      <p className="text-slate-400">Your {row.statType} hit rate is {Math.abs(bd).toFixed(1)} pp {pos ? "above" : "below"} model expectations on {row.lineType} lines.</p>
+                                      <p className="text-slate-500 mt-0.5">From Review → Stat Type Edge.</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                );
+                              })()}
                             </div>
                           )}
                         </TableCell>
