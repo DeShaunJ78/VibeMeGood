@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2, Pencil, RotateCcw, AlertTriangle } from "lucide-react";
+import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2, Pencil, RotateCcw, AlertTriangle, Download } from "lucide-react";
 import { format } from "date-fns";
 import { flexExactPayout } from "@workspace/analytics";
 
@@ -977,6 +977,23 @@ export default function Journal() {
     setSearch("");
   }
 
+  function handleExportCsv() {
+    const qs = new URLSearchParams();
+    if (search)   qs.set("search", search);
+    if (dateFrom) qs.set("dateFrom", dateFrom);
+    if (dateTo)   qs.set("dateTo", dateTo);
+    if (result)   qs.set("result", result);
+    if (sport)    qs.set("sport", sport);
+    const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+    const url = `${base}/api/entries/export.csv?${qs.toString()}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `journal-export-${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
   return (
     <div className="space-y-3 h-full flex flex-col">
       {/* ── Header row ── */}
@@ -1004,6 +1021,14 @@ export default function Journal() {
               className="pl-8 bg-slate-900 border-slate-800 font-mono text-sm h-8"
             />
           </div>
+          <Button
+            variant="outline"
+            onClick={handleExportCsv}
+            title="Export visible entries to CSV"
+            className="font-mono text-xs h-8 px-3 border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300"
+          >
+            <Download className="w-3.5 h-3.5 mr-1" /> CSV
+          </Button>
           <Button
             onClick={() => setNewOpen(true)}
             className="font-mono text-xs h-8 px-3"

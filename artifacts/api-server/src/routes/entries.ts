@@ -433,6 +433,141 @@ router.post("/entries", async (req, res): Promise<void> => {
   }
 });
 
+// ── CSV Export ──────────────────────────────────────────────────────────────
+// One row per pick leg, same filter params as GET /entries.
+// MUST be declared before /:id so Express doesn't swallow "export.csv" as id.
+function csvEsc(v: unknown): string {
+  if (v == null) return "";
+  const s = String(v);
+  return (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r"))
+    ? `"${s.replace(/"/g, '""')}"` : s;
+}
+function csvRow(cells: unknown[]): string {
+  return cells.map(csvEsc).join(",") + "\r\n";
+}
+
+router.get("/entries/export.csv", async (req, res): Promise<void> => {
+  try {
+    const { result: resultFilter, entryType, since, dateFrom, dateTo, sport, search } = req.query as Record<string, string>;
+
+    // ── 1. Filter entries (same logic as GET /entries) ──────────────────────
+    const conditions: SQL[] = [];
+    if (resultFilter) conditions.push(eq(entriesTable.result, resultFilter));
+    if (entryType)    conditions.push(eq(entriesTable.entryType, entryType));
+    const from = dateFrom ?? since;
+    if (from)   conditions.push(gte(entriesTable.entryDate, from));
+    if (dateTo) conditions.push(lte(entriesTable.entryDate, dateTo));
+
+    if (sport) {
+      const sportPicks = await db
+        .select({ entryId: entryPicksTable.entryId })
+        .from(entryPicksTable)
+        .innerJoin(playersTable, eq(entryPicksTable.playerId, playersTable.id))
+        .where(eq(playersTable.sport, sport));
+      const sportEntryIds = [...new Set(sportPicks.map(r => r.entryId))];
+      if (sportEntryIds.length === 0) {
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="journal-export.csv"`);
+        res.end(csvRow(["date","sport","player","stat_type","line_value","direction","projection","pover_pct","pick_result","entry_result","stake","actual_payout","pnl","entry_type","playstyle","notes"]));
+        return;
+      }
+      conditions.push(inArray(entriesTable.id, sportEntryIds));
+    }
+
+    const allEntries = conditions.length
+      ? await db.select().from(entriesTable).where(and(...conditions)).orderBy(desc(entriesTable.id))
+      : await db.select().from(entriesTable).orderBy(desc(entriesTable.id));
+
+    const filtered = search
+      ? allEntries.filter(e => e.notes?.toLowerCase().includes(search.toLowerCase()))
+      : allEntries;
+
+    if (filtered.length === 0) {
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="journal-export.csv"`);
+      res.end(csvRow(["date","sport","player","stat_type","line_value","direction","projection","pover_pct","pick_result","entry_result","stake","actual_payout","pnl","entry_type","playstyle","notes"]));
+      return;
+    }
+
+    // ── 2. Batch-fetch picks, players, and prop scores ───────────────────────
+    const entryIds = filtered.map(e => e.id);
+    const allPicks = await db.select().from(entryPicksTable).where(inArray(entryPicksTable.entryId, entryIds));
+
+    const playerIds = [...new Set(allPicks.map(p => p.playerId).filter((x): x is number => x != null))];
+    const allPlayers = playerIds.length
+      ? await db.select({ id: playersTable.id, fullName: playersTable.fullName, sport: playersTable.sport })
+          .from(playersTable).where(inArray(playersTable.id, playerIds))
+      : [];
+    const playerMap = new Map(allPlayers.map(p => [p.id, p]));
+
+    // pOver is stored on our_projections (per player+statType), not prop_scores
+    const projRows = playerIds.length
+      ? await db
+          .select({ playerId: ourProjectionsTable.playerId, statType: ourProjectionsTable.statType, pOver: ourProjectionsTable.pOver })
+          .from(ourProjectionsTable)
+          .where(inArray(ourProjectionsTable.playerId, playerIds))
+      : [];
+    const pOverMap = new Map(projRows.map(r => [`${r.playerId}|${r.statType}`, r.pOver]));
+
+    const picksByEntry = new Map<number, typeof allPicks>();
+    for (const p of allPicks) {
+      if (!picksByEntry.has(p.entryId)) picksByEntry.set(p.entryId, []);
+      picksByEntry.get(p.entryId)!.push(p);
+    }
+
+    // ── 3. Build the entry map for fast lookup ───────────────────────────────
+    const entryMap = new Map(filtered.map(e => [e.id, e]));
+
+    // ── 4. Stream CSV ────────────────────────────────────────────────────────
+    const date = new Date().toISOString().split("T")[0];
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="journal-export-${date}.csv"`);
+    res.write(csvRow(["date","sport","player","stat_type","line_value","direction","projection","pover_pct","pick_result","entry_result","stake","actual_payout","pnl","entry_type","playstyle","notes"]));
+
+    for (const entry of filtered) {
+      const picks = picksByEntry.get(entry.id) ?? [];
+      const stake       = Number(entry.stake ?? 0);
+      const actualPayout = Number(entry.actualPayout ?? 0);
+      const pnl =
+        entry.result === "win"     ? actualPayout - stake :
+        entry.result === "partial" ? actualPayout - stake :
+        entry.result === "loss"    ? -stake : null;
+
+      for (const pick of picks) {
+        const player = pick.playerId != null ? playerMap.get(pick.playerId) : null;
+        const playerName = player?.fullName ?? pick.playerName ?? "";
+        const pickSport  = player?.sport ?? "";
+        const pOver = pick.playerId != null
+          ? pOverMap.get(`${pick.playerId}|${pick.statType}`)
+          : null;
+
+        res.write(csvRow([
+          entry.entryDate,
+          pickSport,
+          playerName,
+          pick.statType,
+          pick.lineValue,
+          pick.direction,
+          pick.yourProjection ?? "",
+          pOver != null ? Number(pOver).toFixed(1) : "",
+          pick.result ?? "pending",
+          entry.result ?? "pending",
+          stake.toFixed(2),
+          entry.result !== "pending" ? actualPayout.toFixed(2) : "",
+          pnl != null ? pnl.toFixed(2) : "",
+          entry.entryType,
+          entry.entryType, // playstyle alias
+          entry.notes ?? "",
+        ]));
+      }
+    }
+    res.end();
+  } catch (err) {
+    req.log.error(err);
+    if (!res.headersSent) res.status(500).json({ error: "Export failed" });
+  }
+});
+
 router.get("/entries/:id", async (req, res): Promise<void> => {
   try {
     const id = Number(req.params.id);
