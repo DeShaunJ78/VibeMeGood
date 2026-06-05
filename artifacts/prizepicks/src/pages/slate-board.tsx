@@ -1377,7 +1377,7 @@ export default function SlateBoard() {
                   title={boardFreshnessAt ? `PP lines last imported ${relativeTime(boardFreshnessAt)}` : "PP lines not yet imported"}
                 >
                   <Clock className="w-2.5 h-2.5 shrink-0" />
-                  {ppNeverSynced ? "not synced" : relativeTime(boardFreshnessAt!)}
+                  {ppNeverSynced ? "PP · not synced" : `PP · ${relativeTime(boardFreshnessAt!)}`}
                 </span>
                 {playerRows.length > 0 && (
                   <span className="font-mono text-[10px] text-slate-500 shrink-0">
