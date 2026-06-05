@@ -839,6 +839,15 @@ export default function SlateBoard() {
     } catch {}
   }, [activePreset]);
 
+  // Keep pinnedIds in sync with any external changes (e.g. cleared from Lineup Factory)
+  useEffect(() => {
+    function syncPinned() {
+      setPinnedIds(new Set(readPinnedPicks().map(p => p.ppLineId)));
+    }
+    window.addEventListener("pinned-picks-changed", syncPinned);
+    return () => window.removeEventListener("pinned-picks-changed", syncPinned);
+  }, []);
+
   // When the sport changes the available windows change too — reset to "upcoming"
   // so the view is never empty (wrong window selected for new sport).
   // Also reset the chip filter whenever sport is cleared back to "all" so stale
@@ -1541,6 +1550,15 @@ export default function SlateBoard() {
                       : `${noPlayCount} gated`}
                   </button>
                 )}
+                {pinnedIds.size > 0 && (
+                  <span
+                    className="font-mono text-xs px-2 py-0.5 rounded border bg-primary/10 border-primary/40 text-primary flex items-center gap-1"
+                    title="Picks queued for Lineup Factory"
+                  >
+                    <Pin className="w-2.5 h-2.5 fill-primary" />
+                    {pinnedIds.size} pinned
+                  </span>
+                )}
               </div>
               {totalPlayerRowCount !== null && (
                 <span className="hidden md:inline font-mono text-[10px] text-slate-500 shrink-0">
@@ -1610,6 +1628,15 @@ export default function SlateBoard() {
                   >
                     {actionTagFilter === "NO-PLAY" ? `${noPlayCount} / ${playerRows.length} gated` : `${noPlayCount} gated`}
                   </button>
+                )}
+                {pinnedIds.size > 0 && (
+                  <span
+                    className="font-mono text-[10px] px-1.5 py-0.5 rounded border bg-primary/10 border-primary/40 text-primary flex items-center gap-1 shrink-0"
+                    title="Picks queued for Lineup Factory"
+                  >
+                    <Pin className="w-2 h-2 fill-primary" />
+                    {pinnedIds.size} pinned
+                  </span>
                 )}
               </div>
             </div>
