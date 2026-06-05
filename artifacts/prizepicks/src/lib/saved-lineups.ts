@@ -22,8 +22,9 @@ const FORMAT_LABELS: Record<string, string> = {
 export function buildAutoName(cfg: LineupFactoryConfig, savedAt: number): string {
   const fmt = FORMAT_LABELS[cfg.format] ?? cfg.format;
   const picks = `${cfg.picksPerEntry}-pick`;
+  const sport = cfg.sport && cfg.sport !== "all" ? ` ${cfg.sport}` : "";
   const date = new Date(savedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  return `${fmt} ${picks} · ${date}`;
+  return `${fmt} ${picks}${sport} · ${date}`;
 }
 
 export function readSavedLineups(): SavedLineup[] {

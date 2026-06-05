@@ -1182,6 +1182,9 @@ function HistoryPanel({
           const displayName = entry.label || entry.autoName;
           const ev = entry.result.portfolioStats.portfolioEV;
           const numLineups = entry.result.lineups.length;
+          const pCash = Math.round(entry.result.portfolioStats.probAtLeastOneCashes * 100);
+          const stake = entry.result.portfolioStats.totalStake;
+          const fmtLabel = FORMAT_LABELS[entry.cfg.format] ?? entry.cfg.format;
 
           return (
             <div
@@ -1229,6 +1232,20 @@ function HistoryPanel({
                   </span>
                   <span className={cn("text-[9px] font-mono", ev >= 0 ? "text-emerald-400" : "text-red-400")}>
                     {sign(ev)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                  <span className="px-1 py-px rounded text-[8px] font-mono bg-slate-800 border border-slate-700 text-slate-400">
+                    {fmtLabel}
+                  </span>
+                  <span className="px-1 py-px rounded text-[8px] font-mono bg-slate-800 border border-slate-700 text-slate-400">
+                    {entry.cfg.picksPerEntry}-pick
+                  </span>
+                  <span className="px-1 py-px rounded text-[8px] font-mono bg-emerald-950/60 border border-emerald-800/40 text-emerald-400">
+                    {pCash}% cash
+                  </span>
+                  <span className="px-1 py-px rounded text-[8px] font-mono bg-slate-800 border border-slate-700 text-slate-400">
+                    {dollars(stake)}
                   </span>
                 </div>
               </div>
