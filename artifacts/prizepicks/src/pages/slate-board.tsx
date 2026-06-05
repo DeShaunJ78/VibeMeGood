@@ -393,6 +393,19 @@ interface OptResult {
   ourProjection: OurProjection | null;
 }
 
+/** Normalized game-match key: prefers gameId (stable integer); falls back to
+ *  a sorted teamAbbr|opponentAbbr pair so rows without a gameId can still
+ *  be correlated by matchup. Returns null when neither is available. */
+function makeGameMatchKey(r: { gameId?: number | null; teamAbbr?: string | null; opponentAbbr?: string | null }): string | null {
+  if (r.gameId != null) return `gid:${r.gameId}`;
+  if (r.teamAbbr && r.opponentAbbr) {
+    const a = r.teamAbbr.toUpperCase();
+    const b = r.opponentAbbr.toUpperCase();
+    return a < b ? `tm:${a}|${b}` : `tm:${b}|${a}`;
+  }
+  return null;
+}
+
 /** Returns game-correlated warnings for a set of optimizer results, grouped by gameId.
  *  Each entry describes one game that has 2+ picks in the lineup. */
 function getGameCorrelations(
@@ -1147,6 +1160,23 @@ export default function SlateBoard() {
     for (const b of betterLinesData) m.set(b.ppLineId, { platform: b.bestPlatform, lineValue: b.bestLineValue });
     return m;
   }, [betterLinesData]);
+
+  // Build a correlation map from the UNFILTERED player rows (allRows minus team/culture)
+  // so that watched/pinned picks hidden by view filters (search, edge, window, dedup)
+  // still contribute to same-game badge detection. Key = makeGameMatchKey (gameId primary,
+  // teamAbbr|opponentAbbr fallback).
+  const sameGamePicksMap = useMemo(() => {
+    const m = new Map<string, Array<{ playerName: string; statType: string; ppLineId: number }>>();
+    const sourceRows = allRows.filter((r: any) => r.pickCategory !== "team" && r.pickCategory !== "culture");
+    for (const r of sourceRows) {
+      if (!r.isWatched && !pinnedIds.has(r.ppLineId)) continue;
+      const key = makeGameMatchKey(r);
+      if (!key) continue;
+      if (!m.has(key)) m.set(key, []);
+      m.get(key)!.push({ playerName: r.playerName, statType: r.statType, ppLineId: r.ppLineId });
+    }
+    return m;
+  }, [allRows, pinnedIds]);
 
   function getEffectiveLine(row: typeof playerRows[0]): number {
     return row.lineValueOverride ?? row.effectiveLine ?? row.lineValue ?? 0;
@@ -2076,7 +2106,32 @@ export default function SlateBoard() {
                           <div className="flex items-center gap-2">
                             <PlayerAvatar name={row.playerName} imageUrl={row.imageUrl} size="sm" />
                             <div>
-                              <div className="font-bold text-sm leading-tight">{row.playerName}</div>
+                              <div className="font-bold text-sm leading-tight flex items-center gap-1.5">
+                                {row.playerName}
+                                {(() => {
+                                  const gKey = makeGameMatchKey(row);
+                                  if (!gKey) return null;
+                                  const gamePicks = sameGamePicksMap.get(gKey);
+                                  if (!gamePicks) return null;
+                                  const others = gamePicks.filter(p => p.ppLineId !== row.ppLineId);
+                                  if (others.length === 0) return null;
+                                  return (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="inline-flex items-center gap-0.5 px-1 py-px bg-amber-900/50 border border-amber-600/50 rounded text-[9px] font-mono text-amber-400 cursor-help leading-none shrink-0">
+                                          SGP
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="font-mono text-xs max-w-xs">
+                                        <p className="text-amber-300 font-semibold mb-1">Same-game picks</p>
+                                        {others.map(p => (
+                                          <p key={p.ppLineId} className="text-slate-300">{p.playerName} · {p.statType}</p>
+                                        ))}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  );
+                                })()}
+                              </div>
                               {proj?.dataQualityScore != null && !isNoPlay && (
                                 <DQBadge score={proj.dataQualityScore} />
                               )}
