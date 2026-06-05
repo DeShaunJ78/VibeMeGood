@@ -1408,7 +1408,7 @@ export default function SlateBoard() {
                       if (isActive) { setSport("all"); setLineTypeFilter("all"); setMinEdge(""); setActionTagFilter("all"); setSharpOnly(false); setActivePreset(null); return; }
                       const cfg = getSaved() ?? p;
                       isPresetChangeRef.current = true;
-                      if (cfg.sport !== undefined) setSport(cfg.sport); else setSport("all");
+                      if (cfg.sport !== undefined) setSport(cfg.sport);
                       if (cfg.lineType !== undefined) setLineTypeFilter(cfg.lineType); else setLineTypeFilter("all");
                       if (cfg.minEdge !== undefined) setMinEdge(cfg.minEdge); else setMinEdge("");
                       if (cfg.actionTag !== undefined) setActionTagFilter(cfg.actionTag); else setActionTagFilter("all");
