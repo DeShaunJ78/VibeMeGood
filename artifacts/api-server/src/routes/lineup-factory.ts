@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import {
   ppLinesTable, playersTable, propScoresTable, ourProjectionsTable,
   varianceScoresTable, externalLinesTable, syncRunsTable,
+  entryPicksTable, entriesTable,
 } from "@workspace/db/schema";
 import { eq, and, inArray, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -45,6 +46,7 @@ const configSchema = z.object({
   sport: z.string().optional(),
   monteCarloIterations: z.number().int().min(1000).max(50000).optional(),
   requiredLineIds: z.array(z.number().int()).optional(),
+  biasWeight: z.number().min(0).max(1).optional(),
 });
 
 type FactoryConfig = z.infer<typeof configSchema>;
@@ -432,6 +434,59 @@ router.post("/lineup-factory/generate", async (req, res) => {
     // Assign composite scores
     for (const sp of allScoredProps) {
       sp.compositeScore = Math.round(calcCompositeScore(sp, cfg.optimizationObjective) * 100) / 100;
+    }
+
+    // ── Bias adjustment ────────────────────────────────────────────────────
+    // When biasWeight > 0, fetch personal hit-rate vs model-pOver delta
+    // (same data as /api/dashboard/stat-bias) and add biasWeight × delta to
+    // every eligible prop's compositeScore so picks where the user historically
+    // outperforms the model rank higher in lineup selection.
+    if (cfg.biasWeight && cfg.biasWeight > 0) {
+      try {
+        const { sql: sqlFn, isNotNull: isNotNullFn } = await import("drizzle-orm");
+        const biasRows = await db
+          .select({
+            sport:    playersTable.sport,
+            statType: entryPicksTable.statType,
+            tier:     entryPicksTable.lineType,
+            gradedCount: sqlFn<number>`count(*) filter (where ${entryPicksTable.result} in ('hit','miss'))`,
+            hitCount:    sqlFn<number>`count(*) filter (where ${entryPicksTable.result} = 'hit')`,
+            modelOverCount: sqlFn<number>`count(*) filter (where ${entryPicksTable.result} in ('hit','miss') and ${entryPicksTable.projectionGap} is not null and ${entryPicksTable.projectionGap}::float > 0)`,
+            modelNonNullCount: sqlFn<number>`count(*) filter (where ${entryPicksTable.result} in ('hit','miss') and ${entryPicksTable.projectionGap} is not null)`,
+          })
+          .from(entryPicksTable)
+          .innerJoin(entriesTable, eq(entryPicksTable.entryId, entriesTable.id))
+          .leftJoin(playersTable, eq(entryPicksTable.playerId, playersTable.id))
+          .where(isNotNullFn(entryPicksTable.playerId))
+          .groupBy(playersTable.sport, entryPicksTable.statType, entryPicksTable.lineType);
+
+        const biasMap = new Map<string, number>();
+        for (const r of biasRows) {
+          const graded = Number(r.gradedCount);
+          if (graded < 10) continue;
+          const hitRate = Number(r.hitCount) / graded;
+          const nonNull = Number(r.modelNonNullCount);
+          if (nonNull === 0) continue;
+          const avgModelPOver = (Number(r.modelOverCount) / nonNull) * 100;
+          const delta = hitRate * 100 - avgModelPOver;
+          biasMap.set(`${r.sport ?? ""}|${r.statType}|${r.tier}`, delta);
+        }
+
+        const bw = cfg.biasWeight;
+        for (const sp of allScoredProps) {
+          const delta =
+            biasMap.get(`${sp.sport}|${sp.statType}|${sp.lineType}`) ??
+            biasMap.get(`${sp.sport}|${sp.statType}|standard`) ??
+            biasMap.get(`|${sp.statType}|${sp.lineType}`) ??
+            biasMap.get(`|${sp.statType}|standard`) ??
+            null;
+          if (delta != null) {
+            sp.compositeScore = Math.round((sp.compositeScore + bw * delta) * 100) / 100;
+          }
+        }
+      } catch (err) {
+        logger.warn({ err }, "bias adjustment failed — proceeding without bias");
+      }
     }
 
     const eligiblePropCount = allScoredProps.length;

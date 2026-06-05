@@ -1011,6 +1011,12 @@ export interface LineupFactoryConfig {
   monteCarloIterations?: number;
   /** ppLineIds that must appear in every generated lineup */
   requiredLineIds?: number[];
+  /**
+     * Weight applied to personal bias delta when scoring props (0=off, 1=full weight). Nudges composite score by biasWeight × biasDelta so picks where the user historically outperforms the model rank higher.
+     * @minimum 0
+     * @maximum 1
+     */
+  biasWeight?: number;
 }
 
 export type FactoryScoredPropDirection = typeof FactoryScoredPropDirection[keyof typeof FactoryScoredPropDirection];

@@ -2406,6 +2406,7 @@ components:
         sport: { type: string }
         monteCarloIterations: { type: integer, minimum: 1000, maximum: 50000 }
         requiredLineIds: { type: array, items: { type: integer }, description: "ppLineIds that must appear in every generated lineup" }
+        biasWeight: { type: number, minimum: 0, maximum: 1, description: "Weight applied to personal bias delta when scoring props (0=off, 1=full weight). Nudges composite score by biasWeight × biasDelta so picks where the user historically outperforms the model rank higher." }
       required: [format, picksPerEntry, numEntries, varianceProfile, optimizationObjective, maxPlayerExposure, maxPickExposure, maxTeamExposure, maxGameExposure, maxPairwiseOverlap, stakePerEntry, allowGtdPlayers, allowSingleBookData, allowStaleMarketData, demonUnderAllowed]
 
     FactoryScoredProp:

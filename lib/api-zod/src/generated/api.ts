@@ -1825,6 +1825,9 @@ export const generateLineupFactoryBodyNumEntriesMax = 25;
 export const generateLineupFactoryBodyMonteCarloIterationsMin = 1000;
 export const generateLineupFactoryBodyMonteCarloIterationsMax = 50000;
 
+export const generateLineupFactoryBodyBiasWeightMin = 0;
+export const generateLineupFactoryBodyBiasWeightMax = 1;
+
 
 
 export const GenerateLineupFactoryBody = zod.object({
@@ -1848,7 +1851,8 @@ export const GenerateLineupFactoryBody = zod.object({
   "demonUnderAllowed": zod.boolean(),
   "sport": zod.string().optional(),
   "monteCarloIterations": zod.number().min(generateLineupFactoryBodyMonteCarloIterationsMin).max(generateLineupFactoryBodyMonteCarloIterationsMax).optional(),
-  "requiredLineIds": zod.array(zod.number()).optional().describe('ppLineIds that must appear in every generated lineup')
+  "requiredLineIds": zod.array(zod.number()).optional().describe('ppLineIds that must appear in every generated lineup'),
+  "biasWeight": zod.number().min(generateLineupFactoryBodyBiasWeightMin).max(generateLineupFactoryBodyBiasWeightMax).optional().describe('Weight applied to personal bias delta when scoring props (0=off, 1=full weight). Nudges composite score by biasWeight × biasDelta so picks where the user historically outperforms the model rank higher.')
 })
 
 export const GenerateLineupFactoryResponse = zod.object({

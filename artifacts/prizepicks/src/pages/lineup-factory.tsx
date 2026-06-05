@@ -115,6 +115,7 @@ const DEFAULTS: LineupFactoryConfig = {
   allowStaleMarketData: true,
   demonUnderAllowed: false,
   monteCarloIterations: 10000,
+  biasWeight: 0,
 };
 
 const ITERATION_OPTIONS = [
@@ -323,6 +324,27 @@ function ConfigPanel({
               options={ITERATION_OPTIONS}
             />
             <p className="text-[10px] text-muted-foreground mt-1">More iterations = more accurate break-even/profit odds, slightly slower.</p>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1.5 block">
+              Bias Weight
+              {(cfg.biasWeight ?? 0) > 0 && (
+                <span className="ml-1.5 text-[9px] text-amber-400 uppercase tracking-wider font-bold">active</span>
+              )}
+            </Label>
+            <ToggleGroup
+              value={cfg.biasWeight ?? 0}
+              onChange={v => set("biasWeight", Number(v))}
+              options={[
+                { label: "Off",  value: 0    },
+                { label: "Low",  value: 0.25 },
+                { label: "Med",  value: 0.5  },
+                { label: "High", value: 1.0  },
+              ]}
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Nudges picks up/down based on your historical edge vs the model. Applied at generation time.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -550,9 +572,12 @@ function LineupCard({ lineup, index, onLoad }: { lineup: GeneratedLineup; index:
 }
 
 // ─── Scored props table ───────────────────────────────────────────────────────
-function ScoredPropsTable({ props, pinnedIds }: { props: FactoryScoredProp[]; pinnedIds: Set<number> }) {
+function ScoredPropsTable({ props, pinnedIds, biasWeight }: {
+  props: FactoryScoredProp[];
+  pinnedIds: Set<number>;
+  biasWeight: number;
+}) {
   const [filter, setFilter] = useState<"all" | "eligible" | "excluded">("all");
-  const [biasWeight, setBiasWeight] = useState<number>(0);
 
   // Share bias cache with Slate Board via same queryKey → zero extra network requests
   const { data: biasRaw } = useQuery({
@@ -633,22 +658,9 @@ function ScoredPropsTable({ props, pinnedIds }: { props: FactoryScoredProp[]; pi
           ]}
         />
         <span className="text-xs text-muted-foreground ml-2">Showing {displayed.length} of {props.length}</span>
-        <div className="ml-auto flex items-center gap-2 shrink-0">
-          <span className="text-[10px] text-muted-foreground font-mono shrink-0">Bias weight</span>
-          <ToggleGroup
-            value={biasWeight}
-            onChange={v => setBiasWeight(Number(v))}
-            options={[
-              { label: "Off",  value: 0    },
-              { label: "Low",  value: 0.25 },
-              { label: "Med",  value: 0.5  },
-              { label: "High", value: 1.0  },
-            ]}
-          />
-          {biasActive && (
-            <span className="text-[9px] font-mono text-amber-400 uppercase tracking-wider shrink-0">bias-adj</span>
-          )}
-        </div>
+        {biasActive && (
+          <span className="ml-auto text-[9px] font-mono text-amber-400 uppercase tracking-wider shrink-0">bias-adj</span>
+        )}
       </div>
       <div className="overflow-auto max-h-[520px] rounded border border-slate-800">
         <Table>
@@ -1257,7 +1269,7 @@ export default function LineupFactory() {
 
                 {/* Scored props */}
                 <TabsContent value="props" className="mt-4">
-                  <ScoredPropsTable props={result.scoredProps} pinnedIds={pinnedIds} />
+                  <ScoredPropsTable props={result.scoredProps} pinnedIds={pinnedIds} biasWeight={cfg.biasWeight ?? 0} />
                 </TabsContent>
 
                 {/* Exposure */}
