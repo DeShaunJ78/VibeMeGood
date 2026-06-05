@@ -287,11 +287,11 @@ async function seed() {
 
   // ---- Historical Entries ----
   const entryDefs = [
-    { entryDate: "2026-05-20", entryType: "power", pickCount: 3, stake: "20", displayedPayoutMultiplier: "6", potentialPayout: "120", actualPayout: "120", result: "win", notes: "Jokic monster + two easy ALT lines. Clean sweep.", emotionalState: "confident", earlyExitEligible: false },
-    { entryDate: "2026-05-21", entryType: "flex", pickCount: 4, stake: "20", displayedPayoutMultiplier: "0", potentialPayout: "60", actualPayout: "30", result: "partial", notes: "3/4. Butler DNP killed the Tatum leg — correlation risk was worth it.", emotionalState: "neutral", earlyExitEligible: false },
-    { entryDate: "2026-05-22", entryType: "power", pickCount: 2, stake: "10", displayedPayoutMultiplier: "3", potentialPayout: "30", actualPayout: "0", result: "loss", notes: "Curry threes missed badly. Bad beat night.", emotionalState: "frustrated", earlyExitEligible: false },
-    { entryDate: "2026-05-22", entryType: "power", pickCount: 3, stake: "15", displayedPayoutMultiplier: "6", potentialPayout: "90", actualPayout: "90", result: "win", notes: "Evening game — Giannis and Donovan both went off.", emotionalState: "confident", earlyExitEligible: false },
-    { entryDate: "2026-05-23", entryType: "power", pickCount: 3, stake: "20", result: "pending", notes: "Building for tonight — waiting on Butler status.", earlyExitEligible: true, earlyExitValue: "14.50" },
+    { entryDate: "2026-05-20", entryType: "power", pickCount: 3, stake: "20", displayedPayoutMultiplier: "6", potentialPayout: "120", actualPayout: "120", result: "win", notes: "Jokic monster + two easy ALT lines. Clean sweep.", emotionalState: "confident", earlyExitEligible: false, kellySuggested: "26" },
+    { entryDate: "2026-05-21", entryType: "flex", pickCount: 4, stake: "20", displayedPayoutMultiplier: "0", potentialPayout: "60", actualPayout: "30", result: "partial", notes: "3/4. Butler DNP killed the Tatum leg — correlation risk was worth it.", emotionalState: "neutral", earlyExitEligible: false, kellySuggested: "20" },
+    { entryDate: "2026-05-22", entryType: "power", pickCount: 2, stake: "10", displayedPayoutMultiplier: "3", potentialPayout: "30", actualPayout: "0", result: "loss", notes: "Curry threes missed badly. Bad beat night.", emotionalState: "frustrated", earlyExitEligible: false, kellySuggested: "16" },
+    { entryDate: "2026-05-22", entryType: "power", pickCount: 3, stake: "15", displayedPayoutMultiplier: "6", potentialPayout: "90", actualPayout: "90", result: "win", notes: "Evening game — Giannis and Donovan both went off.", emotionalState: "confident", earlyExitEligible: false, kellySuggested: "20" },
+    { entryDate: "2026-05-23", entryType: "power", pickCount: 3, stake: "20", result: "pending", notes: "Building for tonight — waiting on Butler status.", earlyExitEligible: true, earlyExitValue: "14.50", kellySuggested: "24" },
   ];
   const entries = await db.insert(entriesTable).values(entryDefs).returning();
   console.log(`Inserted ${entries.length} entries`);
