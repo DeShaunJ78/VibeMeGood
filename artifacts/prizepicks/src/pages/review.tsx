@@ -8,8 +8,26 @@ import {
 } from "recharts";
 import { TrendingUp, TrendingDown, Percent, DollarSign, Target, Brain, ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
+import { PlayerAvatar } from "@/components/ui/player-avatar";
 
 interface StatBiasBucket {
+  sport: string | null;
+  statType: string;
+  tier: string;
+  totalCount: number;
+  gradedCount: number;
+  pendingCount: number;
+  hitCount: number;
+  hitRate: number | null;
+  avgModelPOver: number | null;
+  delta: number | null;
+  hasEnoughData: boolean;
+}
+
+interface PlayerBiasBucket {
+  playerId: number | null;
+  playerName: string | null;
+  imageUrl: string | null;
   sport: string | null;
   statType: string;
   tier: string;
@@ -35,8 +53,11 @@ export default function Review() {
     query: { queryKey: ["review-stats"] }
   });
   const [biasOpen, setBiasOpen] = useState(true);
+  const [biasGroupBy, setBiasGroupBy] = useState<"statType" | "player">("statType");
   const [biasSortKey, setBiasSortKey] = useState<"hitRate" | "delta" | "gradedCount">("hitRate");
   const [biasSortDir, setBiasSortDir] = useState<"desc" | "asc">("desc");
+  const [playerSortKey, setPlayerSortKey] = useState<"hitRate" | "delta" | "gradedCount">("hitRate");
+  const [playerSortDir, setPlayerSortDir] = useState<"desc" | "asc">("desc");
 
   const { data: biasData } = useQuery<{ buckets: StatBiasBucket[] }>({
     queryKey: ["stat-bias"],
@@ -48,8 +69,23 @@ export default function Review() {
     staleTime: 60_000,
   });
 
+  const { data: playerBiasData } = useQuery<{ buckets: PlayerBiasBucket[] }>({
+    queryKey: ["stat-bias-player"],
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/dashboard/stat-bias?groupBy=player`);
+      if (!r.ok) throw new Error("Failed to load player bias");
+      return r.json();
+    },
+    staleTime: 60_000,
+    enabled: biasGroupBy === "player",
+  });
+
   const allBuckets = (biasData?.buckets ?? []) as StatBiasBucket[];
   const qualifiedBuckets = allBuckets.filter(b => b.hasEnoughData);
+
+  const allPlayerBuckets = (playerBiasData?.buckets ?? []) as PlayerBiasBucket[];
+  const qualifiedPlayerBuckets = allPlayerBuckets.filter(b => b.hasEnoughData);
+  const insufficientPlayerBuckets = allPlayerBuckets.filter(b => !b.hasEnoughData);
 
   function toggleBiasSort(key: "hitRate" | "delta" | "gradedCount") {
     if (biasSortKey === key) {
@@ -57,6 +93,15 @@ export default function Review() {
     } else {
       setBiasSortKey(key);
       setBiasSortDir("desc");
+    }
+  }
+
+  function togglePlayerSort(key: "hitRate" | "delta" | "gradedCount") {
+    if (playerSortKey === key) {
+      setPlayerSortDir(d => d === "desc" ? "asc" : "desc");
+    } else {
+      setPlayerSortKey(key);
+      setPlayerSortDir("desc");
     }
   }
 
@@ -68,6 +113,13 @@ export default function Review() {
   });
   const insufficientBuckets = allBuckets.filter(b => !b.hasEnoughData);
   const sortedBuckets = [...sortedQualified, ...insufficientBuckets];
+
+  const sortedQualifiedPlayers = [...qualifiedPlayerBuckets].sort((a, b) => {
+    const av = a[playerSortKey] ?? -Infinity;
+    const bv = b[playerSortKey] ?? -Infinity;
+    return playerSortDir === "desc" ? (bv as number) - (av as number) : (av as number) - (bv as number);
+  });
+  const sortedPlayerBuckets = [...sortedQualifiedPlayers, ...insufficientPlayerBuckets];
 
   const s = stats as any;
 
@@ -323,99 +375,218 @@ export default function Review() {
 
           {/* Stat Type Edge Tracker */}
           <Card className="bg-slate-900 border-slate-800">
-            <CardHeader className="pb-2 cursor-pointer select-none" onClick={() => setBiasOpen(v => !v)}>
+            <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-mono uppercase tracking-wider">Stat Type Edge</CardTitle>
+                <CardTitle
+                  className="text-sm font-mono uppercase tracking-wider cursor-pointer select-none"
+                  onClick={() => setBiasOpen(v => !v)}
+                >
+                  Stat Type Edge
+                </CardTitle>
                 <div className="flex items-center gap-2">
-                  {qualifiedBuckets.length > 0 && (
-                    <span className="text-[10px] font-mono text-muted-foreground">{qualifiedBuckets.length} buckets ≥ 10 picks</span>
+                  {/* By Stat Type / By Player toggle */}
+                  <div className="flex rounded border border-slate-700 overflow-hidden text-[10px] font-mono">
+                    <button
+                      className={`px-2 py-0.5 transition-colors ${biasGroupBy === "statType" ? "bg-slate-700 text-slate-100" : "text-muted-foreground hover:text-slate-300"}`}
+                      onClick={e => { e.stopPropagation(); setBiasGroupBy("statType"); }}
+                    >
+                      By Stat Type
+                    </button>
+                    <button
+                      className={`px-2 py-0.5 border-l border-slate-700 transition-colors ${biasGroupBy === "player" ? "bg-slate-700 text-slate-100" : "text-muted-foreground hover:text-slate-300"}`}
+                      onClick={e => { e.stopPropagation(); setBiasGroupBy("player"); }}
+                    >
+                      By Player
+                    </button>
+                  </div>
+                  {biasGroupBy === "statType" && qualifiedBuckets.length > 0 && (
+                    <span className="text-[10px] font-mono text-muted-foreground">{qualifiedBuckets.length} buckets ≥ 10</span>
                   )}
-                  {biasOpen ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                  {biasGroupBy === "player" && qualifiedPlayerBuckets.length > 0 && (
+                    <span className="text-[10px] font-mono text-muted-foreground">{qualifiedPlayerBuckets.length} buckets ≥ 5</span>
+                  )}
+                  <div className="cursor-pointer select-none" onClick={() => setBiasOpen(v => !v)}>
+                    {biasOpen ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                  </div>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Your personal hit rate vs. model projection by stat type and tier. Bias correction can be enabled in Settings.</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {biasGroupBy === "statType"
+                  ? "Your personal hit rate vs. model projection by stat type and tier. Bias correction can be enabled in Settings."
+                  : "Your personal hit rate vs. model projection broken down per player. Minimum 5 graded picks per bucket."}
+              </p>
             </CardHeader>
             {biasOpen && (
               <CardContent>
-                {allBuckets.length === 0 ? (
-                  <div className="text-center py-6 text-xs font-mono text-muted-foreground">
-                    No picks logged yet. Log entries to see buckets grow here.
-                  </div>
+                {biasGroupBy === "statType" ? (
+                  /* ── By Stat Type ── */
+                  allBuckets.length === 0 ? (
+                    <div className="text-center py-6 text-xs font-mono text-muted-foreground">
+                      No picks logged yet. Log entries to see buckets grow here.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs font-mono">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-muted-foreground text-[10px] uppercase tracking-wider">
+                            <th className="text-left py-2 pr-4">Stat Type · Tier</th>
+                            <th className="text-left py-2 pr-3">Sport</th>
+                            <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleBiasSort("gradedCount")}>
+                              Graded{biasSortKey === "gradedCount" ? (biasSortDir === "desc" ? " ↓" : " ↑") : ""}
+                            </th>
+                            <th className="text-right py-2 px-2 text-amber-600/70">Pending</th>
+                            <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleBiasSort("hitRate")}>
+                              Hit Rate{biasSortKey === "hitRate" ? (biasSortDir === "desc" ? " ↓" : " ↑") : ""}
+                            </th>
+                            <th className="text-right py-2 px-2 text-slate-500">Model P̄(O)</th>
+                            <th className="text-right py-2 pl-2 cursor-pointer hover:text-foreground" onClick={() => toggleBiasSort("delta")}>
+                              Delta{biasSortKey === "delta" ? (biasSortDir === "desc" ? " ↓" : " ↑") : ""}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedBuckets.map((b, i) => {
+                            const insufficient = !b.hasEnoughData;
+                            const pct = Math.min(100, Math.round((b.gradedCount / 10) * 100));
+                            const deltaVal = b.delta ?? 0;
+                            const deltaColor = insufficient ? "text-muted-foreground"
+                              : deltaVal > 10 ? "text-emerald-400" : deltaVal < -10 ? "text-rose-400" : "text-amber-400";
+                            const hitColor = insufficient || b.hitRate == null ? "text-muted-foreground"
+                              : b.hitRate >= 0.6 ? "text-emerald-400"
+                              : b.hitRate >= 0.5 ? "text-amber-400"
+                              : "text-rose-400";
+                            return (
+                              <tr key={i} className={`border-b border-slate-800/50 transition-colors ${insufficient ? "opacity-60" : "hover:bg-slate-800/30"}`}>
+                                <td className={`py-2 pr-4 ${insufficient ? "text-muted-foreground" : "text-slate-200 font-semibold"}`}>
+                                  {b.statType}
+                                  <span className="ml-1 text-[10px] text-muted-foreground capitalize font-normal">{b.tier}</span>
+                                </td>
+                                <td className="py-2 pr-3 text-muted-foreground">{b.sport ?? "—"}</td>
+                                <td className="py-2 px-2 text-right">
+                                  {insufficient ? (
+                                    <span className="text-amber-600 font-bold">{b.gradedCount}
+                                      <span className="text-muted-foreground font-normal">/10</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-300">{b.gradedCount}</span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-2 text-right text-amber-600/70">
+                                  {b.pendingCount > 0 ? `+${b.pendingCount}` : <span className="text-muted-foreground">—</span>}
+                                </td>
+                                <td className={`py-2 px-2 text-right font-bold ${hitColor}`}>
+                                  {b.hitRate != null
+                                    ? `${(b.hitRate * 100).toFixed(1)}%`
+                                    : insufficient
+                                      ? <span className="text-[10px] text-muted-foreground italic">{pct}% there</span>
+                                      : "—"}
+                                </td>
+                                <td className="py-2 px-2 text-right text-muted-foreground">
+                                  {b.avgModelPOver != null ? `${b.avgModelPOver.toFixed(1)}%` : "—"}
+                                </td>
+                                <td className={`py-2 pl-2 text-right font-bold ${deltaColor}`}>
+                                  {b.delta != null ? `${b.delta > 0 ? "+" : ""}${b.delta.toFixed(1)}pp` : "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      {insufficientBuckets.length > 0 && (
+                        <p className="mt-2 text-[10px] font-mono text-slate-600">
+                          {insufficientBuckets.length} bucket{insufficientBuckets.length !== 1 ? "s" : ""} building toward 10 graded picks (dimmed). Delta highlights at ±10 pp.
+                        </p>
+                      )}
+                    </div>
+                  )
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs font-mono">
-                      <thead>
-                        <tr className="border-b border-slate-800 text-muted-foreground text-[10px] uppercase tracking-wider">
-                          <th className="text-left py-2 pr-4">Stat Type · Tier</th>
-                          <th className="text-left py-2 pr-3">Sport</th>
-                          <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleBiasSort("gradedCount")}>
-                            Graded{biasSortKey === "gradedCount" ? (biasSortDir === "desc" ? " ↓" : " ↑") : ""}
-                          </th>
-                          <th className="text-right py-2 px-2 text-amber-600/70">Pending</th>
-                          <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleBiasSort("hitRate")}>
-                            Hit Rate{biasSortKey === "hitRate" ? (biasSortDir === "desc" ? " ↓" : " ↑") : ""}
-                          </th>
-                          <th className="text-right py-2 px-2 text-slate-500">Model P̄(O)</th>
-                          <th className="text-right py-2 pl-2 cursor-pointer hover:text-foreground" onClick={() => toggleBiasSort("delta")}>
-                            Delta{biasSortKey === "delta" ? (biasSortDir === "desc" ? " ↓" : " ↑") : ""}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedBuckets.map((b, i) => {
-                          const insufficient = !b.hasEnoughData;
-                          const pct = Math.min(100, Math.round((b.gradedCount / 10) * 100));
-                          const deltaVal = b.delta ?? 0;
-                          // Divergence highlight at >10pp (per spec)
-                          const deltaColor = insufficient ? "text-muted-foreground"
-                            : deltaVal > 10 ? "text-emerald-400" : deltaVal < -10 ? "text-rose-400" : "text-amber-400";
-                          const hitColor = insufficient || b.hitRate == null ? "text-muted-foreground"
-                            : b.hitRate >= 0.6 ? "text-emerald-400"
-                            : b.hitRate >= 0.5 ? "text-amber-400"
-                            : "text-rose-400";
-                          return (
-                            <tr key={i} className={`border-b border-slate-800/50 transition-colors ${insufficient ? "opacity-60" : "hover:bg-slate-800/30"}`}>
-                              <td className={`py-2 pr-4 ${insufficient ? "text-muted-foreground" : "text-slate-200 font-semibold"}`}>
-                                {b.statType}
-                                <span className="ml-1 text-[10px] text-muted-foreground capitalize font-normal">{b.tier}</span>
-                              </td>
-                              <td className="py-2 pr-3 text-muted-foreground">{b.sport ?? "—"}</td>
-                              <td className="py-2 px-2 text-right">
-                                {insufficient ? (
-                                  <span className="text-amber-600 font-bold">{b.gradedCount}
-                                    <span className="text-muted-foreground font-normal">/10</span>
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-300">{b.gradedCount}</span>
-                                )}
-                              </td>
-                              <td className="py-2 px-2 text-right text-amber-600/70">
-                                {b.pendingCount > 0 ? `+${b.pendingCount}` : <span className="text-muted-foreground">—</span>}
-                              </td>
-                              <td className={`py-2 px-2 text-right font-bold ${hitColor}`}>
-                                {b.hitRate != null
-                                  ? `${(b.hitRate * 100).toFixed(1)}%`
-                                  : insufficient
-                                    ? <span className="text-[10px] text-muted-foreground italic">{pct}% there</span>
-                                    : "—"}
-                              </td>
-                              <td className="py-2 px-2 text-right text-muted-foreground">
-                                {b.avgModelPOver != null ? `${b.avgModelPOver.toFixed(1)}%` : "—"}
-                              </td>
-                              <td className={`py-2 pl-2 text-right font-bold ${deltaColor}`}>
-                                {b.delta != null ? `${b.delta > 0 ? "+" : ""}${b.delta.toFixed(1)}pp` : "—"}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    {insufficientBuckets.length > 0 && (
-                      <p className="mt-2 text-[10px] font-mono text-slate-600">
-                        {insufficientBuckets.length} bucket{insufficientBuckets.length !== 1 ? "s" : ""} building toward 10 graded picks (dimmed). Delta highlights at ±10 pp.
-                      </p>
-                    )}
-                  </div>
+                  /* ── By Player ── */
+                  allPlayerBuckets.length === 0 ? (
+                    <div className="text-center py-6 text-xs font-mono text-muted-foreground">
+                      No player picks logged yet. Log entries to see player buckets grow here.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs font-mono">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-muted-foreground text-[10px] uppercase tracking-wider">
+                            <th className="text-left py-2 pr-4">Player</th>
+                            <th className="text-left py-2 pr-3">Stat · Tier</th>
+                            <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => togglePlayerSort("gradedCount")}>
+                              Graded{playerSortKey === "gradedCount" ? (playerSortDir === "desc" ? " ↓" : " ↑") : ""}
+                            </th>
+                            <th className="text-right py-2 px-2 text-amber-600/70">Pending</th>
+                            <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => togglePlayerSort("hitRate")}>
+                              Hit Rate{playerSortKey === "hitRate" ? (playerSortDir === "desc" ? " ↓" : " ↑") : ""}
+                            </th>
+                            <th className="text-right py-2 px-2 text-slate-500">Model P̄(O)</th>
+                            <th className="text-right py-2 pl-2 cursor-pointer hover:text-foreground" onClick={() => togglePlayerSort("delta")}>
+                              Delta{playerSortKey === "delta" ? (playerSortDir === "desc" ? " ↓" : " ↑") : ""}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedPlayerBuckets.map((b, i) => {
+                            const insufficient = !b.hasEnoughData;
+                            const pct = Math.min(100, Math.round((b.gradedCount / 5) * 100));
+                            const deltaVal = b.delta ?? 0;
+                            const deltaColor = insufficient ? "text-muted-foreground"
+                              : deltaVal > 10 ? "text-emerald-400" : deltaVal < -10 ? "text-rose-400" : "text-amber-400";
+                            const hitColor = insufficient || b.hitRate == null ? "text-muted-foreground"
+                              : b.hitRate >= 0.6 ? "text-emerald-400"
+                              : b.hitRate >= 0.5 ? "text-amber-400"
+                              : "text-rose-400";
+                            return (
+                              <tr key={i} className={`border-b border-slate-800/50 transition-colors ${insufficient ? "opacity-60" : "hover:bg-slate-800/30"}`}>
+                                <td className="py-1.5 pr-4">
+                                  <div className="flex items-center gap-2">
+                                    <PlayerAvatar name={b.playerName ?? "?"} imageUrl={b.imageUrl} size="xs" />
+                                    <span className={insufficient ? "text-muted-foreground" : "text-slate-200 font-semibold"}>
+                                      {b.playerName ?? "Unknown"}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="py-1.5 pr-3 text-muted-foreground">
+                                  {b.statType}
+                                  <span className="ml-1 text-[10px] capitalize">{b.tier}</span>
+                                </td>
+                                <td className="py-1.5 px-2 text-right">
+                                  {insufficient ? (
+                                    <span className="text-amber-600 font-bold">{b.gradedCount}
+                                      <span className="text-muted-foreground font-normal">/5</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-300">{b.gradedCount}</span>
+                                  )}
+                                </td>
+                                <td className="py-1.5 px-2 text-right text-amber-600/70">
+                                  {b.pendingCount > 0 ? `+${b.pendingCount}` : <span className="text-muted-foreground">—</span>}
+                                </td>
+                                <td className={`py-1.5 px-2 text-right font-bold ${hitColor}`}>
+                                  {b.hitRate != null
+                                    ? `${(b.hitRate * 100).toFixed(1)}%`
+                                    : insufficient
+                                      ? <span className="text-[10px] text-muted-foreground italic">{pct}% there</span>
+                                      : "—"}
+                                </td>
+                                <td className="py-1.5 px-2 text-right text-muted-foreground">
+                                  {b.avgModelPOver != null ? `${b.avgModelPOver.toFixed(1)}%` : "—"}
+                                </td>
+                                <td className={`py-1.5 pl-2 text-right font-bold ${deltaColor}`}>
+                                  {b.delta != null ? `${b.delta > 0 ? "+" : ""}${b.delta.toFixed(1)}pp` : "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      {insufficientPlayerBuckets.length > 0 && (
+                        <p className="mt-2 text-[10px] font-mono text-slate-600">
+                          {insufficientPlayerBuckets.length} bucket{insufficientPlayerBuckets.length !== 1 ? "s" : ""} building toward 5 graded picks (dimmed). Delta highlights at ±10 pp.
+                        </p>
+                      )}
+                    </div>
+                  )
                 )}
               </CardContent>
             )}

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { entryPicksTable, entriesTable, playersTable } from "@workspace/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, isNotNull, sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -19,71 +19,143 @@ export interface StatBiasBucket {
   hasEnoughData: boolean;
 }
 
-const MIN_GRADED = 10;
+export interface PlayerBiasBucket {
+  playerId: number | null;
+  playerName: string | null;
+  imageUrl: string | null;
+  sport: string | null;
+  statType: string;
+  tier: string;
+  totalCount: number;
+  gradedCount: number;
+  pendingCount: number;
+  hitCount: number;
+  hitRate: number | null;
+  avgModelPOver: number | null;
+  delta: number | null;
+  hasEnoughData: boolean;
+}
+
+const MIN_GRADED        = 10;
+const MIN_GRADED_PLAYER = 5;
+
+/** Shared SQL aggregation columns used by both groupBy modes. */
+const aggCols = {
+  totalCount:      sql<number>`count(*)`,
+  gradedCount:     sql<number>`count(*) filter (where ${entryPicksTable.result} in ('hit', 'miss'))`,
+  pendingCount:    sql<number>`count(*) filter (where ${entryPicksTable.result} = 'pending')`,
+  hitCount:        sql<number>`count(*) filter (where ${entryPicksTable.result} = 'hit')`,
+  modelOverCount:  sql<number>`count(*) filter (where ${entryPicksTable.result} in ('hit','miss') and ${entryPicksTable.projectionGap} is not null and ${entryPicksTable.projectionGap}::float > 0)`,
+  modelNonNullCount: sql<number>`count(*) filter (where ${entryPicksTable.result} in ('hit','miss') and ${entryPicksTable.projectionGap} is not null)`,
+};
+
+function calcBucketFields(r: {
+  gradedCount: number; totalCount: number; pendingCount: number;
+  hitCount: number; modelOverCount: number; modelNonNullCount: number;
+}, minGraded: number) {
+  const gradedCount  = Number(r.gradedCount);
+  const totalCount   = Number(r.totalCount);
+  const pendingCount = Number(r.pendingCount);
+  const hitCount     = Number(r.hitCount);
+  const hasEnoughData = gradedCount >= minGraded;
+
+  const hitRate = gradedCount > 0 ? hitCount / gradedCount : null;
+
+  const modelNonNull = Number(r.modelNonNullCount);
+  const modelOver    = Number(r.modelOverCount);
+  const avgModelPOver = modelNonNull > 0
+    ? Math.round((modelOver / modelNonNull) * 1000) / 10
+    : null;
+
+  const delta = hitRate != null && avgModelPOver != null
+    ? Math.round((hitRate * 100 - avgModelPOver) * 10) / 10
+    : null;
+
+  return {
+    totalCount, gradedCount, pendingCount, hitCount,
+    hitRate: hitRate != null ? Math.round(hitRate * 1000) / 1000 : null,
+    avgModelPOver,
+    delta,
+    hasEnoughData,
+  };
+}
 
 router.get("/dashboard/stat-bias", async (req, res) => {
+  const groupBy = (req.query as Record<string, string>).groupBy ?? "statType";
+
   try {
-    // Include ALL picks (pending + graded + dnp) so buckets appear immediately
-    // as entries are logged — users can monitor progress toward the 10-graded threshold.
+    if (groupBy === "player") {
+      // ── Player-level breakdown ───────────────────────────────────────────────
+      const rows = await db
+        .select({
+          playerId:  entryPicksTable.playerId,
+          playerName: playersTable.fullName,
+          imageUrl:  playersTable.imageUrl,
+          sport:     playersTable.sport,
+          statType:  entryPicksTable.statType,
+          tier:      entryPicksTable.lineType,
+          ...aggCols,
+        })
+        .from(entryPicksTable)
+        .innerJoin(entriesTable, eq(entryPicksTable.entryId, entriesTable.id))
+        .leftJoin(playersTable, eq(entryPicksTable.playerId, playersTable.id))
+        .where(isNotNull(entryPicksTable.playerId))
+        .groupBy(
+          entryPicksTable.playerId,
+          playersTable.fullName,
+          playersTable.imageUrl,
+          playersTable.sport,
+          entryPicksTable.statType,
+          entryPicksTable.lineType,
+        );
+
+      const buckets: PlayerBiasBucket[] = rows.map(r => ({
+        playerId:   r.playerId,
+        playerName: r.playerName ?? null,
+        imageUrl:   r.imageUrl ?? null,
+        sport:      r.sport ?? null,
+        statType:   r.statType,
+        tier:       r.tier,
+        ...calcBucketFields(r as any, MIN_GRADED_PLAYER),
+      }));
+
+      buckets.sort((a, b) => {
+        const nc = (a.playerName ?? "").localeCompare(b.playerName ?? "");
+        if (nc !== 0) return nc;
+        const sc = a.statType.localeCompare(b.statType);
+        if (sc !== 0) return sc;
+        return a.tier.localeCompare(b.tier);
+      });
+
+      res.json({ buckets });
+      return;
+    }
+
+    // ── Default: stat-type × sport breakdown ────────────────────────────────
     const rows = await db
       .select({
-        sport: playersTable.sport,
+        sport:    playersTable.sport,
         statType: entryPicksTable.statType,
-        tier: entryPicksTable.lineType,
-        totalCount: sql<number>`count(*)`,
-        gradedCount: sql<number>`count(*) filter (where ${entryPicksTable.result} in ('hit', 'miss'))`,
-        pendingCount: sql<number>`count(*) filter (where ${entryPicksTable.result} = 'pending')`,
-        hitCount: sql<number>`count(*) filter (where ${entryPicksTable.result} = 'hit')`,
-        // Model pOver proxy: fraction of graded picks where the model projected
-        // above the PrizePicks line (projectionGap > 0). Returned on 0–100 scale.
-        modelOverCount: sql<number>`count(*) filter (where ${entryPicksTable.result} in ('hit','miss') and ${entryPicksTable.projectionGap} is not null and ${entryPicksTable.projectionGap}::float > 0)`,
-        modelNonNullCount: sql<number>`count(*) filter (where ${entryPicksTable.result} in ('hit','miss') and ${entryPicksTable.projectionGap} is not null)`,
+        tier:     entryPicksTable.lineType,
+        ...aggCols,
       })
       .from(entryPicksTable)
       .innerJoin(entriesTable, eq(entryPicksTable.entryId, entriesTable.id))
       .leftJoin(playersTable, eq(entryPicksTable.playerId, playersTable.id))
-      // No WHERE on result — include pending so buckets grow visibly before grading
       .groupBy(playersTable.sport, entryPicksTable.statType, entryPicksTable.lineType);
 
-    const buckets: StatBiasBucket[] = rows.map(r => {
-      const gradedCount = Number(r.gradedCount);
-      const totalCount = Number(r.totalCount);
-      const pendingCount = Number(r.pendingCount);
-      const hitCount = Number(r.hitCount);
-      const hasEnoughData = gradedCount >= MIN_GRADED;
-
-      const hitRate = gradedCount > 0 ? hitCount / gradedCount : null;
-
-      const modelNonNull = Number(r.modelNonNullCount);
-      const modelOver = Number(r.modelOverCount);
-      const avgModelPOver = modelNonNull > 0
-        ? Math.round((modelOver / modelNonNull) * 1000) / 10
-        : null;
-
-      const delta = hitRate != null && avgModelPOver != null
-        ? Math.round((hitRate * 100 - avgModelPOver) * 10) / 10
-        : null;
-
-      return {
-        sport: r.sport ?? null,
-        statType: r.statType,
-        tier: r.tier,
-        totalCount,
-        gradedCount,
-        pendingCount,
-        hitCount,
-        hitRate: hitRate != null ? Math.round(hitRate * 1000) / 1000 : null,
-        avgModelPOver,
-        delta,
-        hasEnoughData,
-      };
-    });
+    const buckets: StatBiasBucket[] = rows.map(r => ({
+      sport:    r.sport ?? null,
+      statType: r.statType,
+      tier:     r.tier,
+      ...calcBucketFields(r as any, MIN_GRADED),
+    }));
 
     buckets.sort((a, b) => {
-      const sportCmp = (a.sport ?? "").localeCompare(b.sport ?? "");
-      if (sportCmp !== 0) return sportCmp;
-      const stCmp = a.statType.localeCompare(b.statType);
-      if (stCmp !== 0) return stCmp;
+      const sc = (a.sport ?? "").localeCompare(b.sport ?? "");
+      if (sc !== 0) return sc;
+      const st = a.statType.localeCompare(b.statType);
+      if (st !== 0) return st;
       return a.tier.localeCompare(b.tier);
     });
 
