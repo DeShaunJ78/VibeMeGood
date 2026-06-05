@@ -818,6 +818,7 @@ function EmptyState() {
 // ─── Pinned picks panel ───────────────────────────────────────────────────────
 function PinnedPanel({
   picks, requiredIds, picksPerEntry, onRemove, onClear, onToggleRequired,
+  lockedCoverage, totalLineups,
 }: {
   picks: PinnedPick[];
   requiredIds: Set<number>;
@@ -825,6 +826,8 @@ function PinnedPanel({
   onRemove: (id: number) => void;
   onClear: () => void;
   onToggleRequired: (id: number) => void;
+  lockedCoverage?: Map<number, number>;
+  totalLineups?: number;
 }) {
   if (picks.length === 0) return null;
   const requiredCount = picks.filter(p => requiredIds.has(p.ppLineId)).length;
@@ -886,6 +889,21 @@ function PinnedPanel({
                 <span className="text-slate-500 shrink-0">{p.lineValue}</span>
                 {isRequired && (
                   <span className="text-[8px] uppercase tracking-wider text-primary font-bold shrink-0">locked</span>
+                )}
+                {isRequired && lockedCoverage !== undefined && totalLineups !== undefined && totalLineups > 0 && (
+                  (() => {
+                    const count = lockedCoverage.get(p.ppLineId) ?? 0;
+                    const full = count === totalLineups;
+                    return (
+                      <span className={cn(
+                        "text-[8px] font-mono shrink-0 px-1 py-0.5 rounded",
+                        full ? "bg-emerald-950/60 text-emerald-400 border border-emerald-700/40"
+                             : "bg-amber-950/60 text-amber-400 border border-amber-700/40",
+                      )}>
+                        {count}/{totalLineups}
+                      </span>
+                    );
+                  })()
                 )}
                 <button
                   onClick={() => onRemove(p.ppLineId)}
@@ -1070,6 +1088,20 @@ export default function LineupFactory() {
   const activeEntry = activeId ? savedLineups.find(e => e.id === activeId) : null;
   const result = activeEntry?.result ?? (generate.isPending ? null : (generate.data ?? cachedResult));
 
+  // For each locked pick, count how many generated lineups actually contain it
+  const lockedCoverage = useMemo(() => {
+    if (!result?.lineups?.length) return undefined;
+    const map = new Map<number, number>();
+    for (const lu of result.lineups) {
+      for (const pick of lu.picks) {
+        if (requiredPinnedIds.has(pick.ppLineId)) {
+          map.set(pick.ppLineId, (map.get(pick.ppLineId) ?? 0) + 1);
+        }
+      }
+    }
+    return map;
+  }, [result?.lineups, requiredPinnedIds]);
+
   const pinnedIds = new Set(pinnedPicks.map(p => p.ppLineId));
 
   function handleGenerate() {
@@ -1180,6 +1212,8 @@ export default function LineupFactory() {
             onRemove={handleRemovePinned}
             onClear={handleClearPinned}
             onToggleRequired={handleToggleRequired}
+            lockedCoverage={lockedCoverage}
+            totalLineups={result?.lineups?.length}
           />
           <HistoryPanel
             entries={savedLineups}
