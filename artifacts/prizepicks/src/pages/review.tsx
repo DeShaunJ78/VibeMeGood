@@ -6,9 +6,15 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, ReferenceLine,
 } from "recharts";
-import { TrendingUp, TrendingDown, Percent, DollarSign, Target, Brain, ChevronDown, ChevronUp } from "lucide-react";
+import { TrendingUp, TrendingDown, Percent, DollarSign, Target, Brain, ChevronDown, ChevronUp, Download } from "lucide-react";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
+import { CsvColumnPickerDialog, type CsvColGroup } from "@/lib/csv-export";
+
+const SPORTS = ["NFL", "NBA", "MLB", "NHL", "WNBA", "MMA", "PGA", "NASCAR", "SOCCER"];
 
 interface StatBiasBucket {
   sport: string | null;
@@ -52,6 +58,11 @@ export default function Review() {
   const { data: stats, isLoading } = useGetReviewStats(undefined, {
     query: { queryKey: ["review-stats"] }
   });
+  const [csvPickerOpen, setCsvPickerOpen] = useState(false);
+  const [csvDateFrom, setCsvDateFrom] = useState("");
+  const [csvDateTo, setCsvDateTo] = useState("");
+  const [csvSport, setCsvSport] = useState("");
+  const [csvEntryType, setCsvEntryType] = useState("");
   const [biasOpen, setBiasOpen] = useState(true);
   const [biasGroupBy, setBiasGroupBy] = useState<"statType" | "player">("statType");
   const [biasSortKey, setBiasSortKey] = useState<"hitRate" | "delta" | "gradedCount">("hitRate");
@@ -121,13 +132,97 @@ export default function Review() {
   });
   const sortedPlayerBuckets = [...sortedQualifiedPlayers, ...insufficientPlayerBuckets];
 
+  function handleExportCsv(cols: Set<CsvColGroup>) {
+    const qs = new URLSearchParams();
+    if (csvDateFrom)  qs.set("dateFrom", csvDateFrom);
+    if (csvDateTo)    qs.set("dateTo", csvDateTo);
+    if (csvSport)     qs.set("sport", csvSport);
+    if (csvEntryType) qs.set("entryType", csvEntryType);
+    if (cols.size < 4) qs.set("cols", [...cols].join(","));
+    const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+    const url = `${base}/api/entries/export.csv?${qs.toString()}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `review-export-${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
   const s = stats as any;
 
   return (
     <div className="space-y-6 h-full overflow-auto">
-      <div className="border-b border-border pb-4">
-        <h1 className="text-2xl font-bold tracking-tight">Review Dashboard</h1>
+      <div className="border-b border-border pb-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Review Dashboard</h1>
+          <Button
+            variant="outline"
+            onClick={() => setCsvPickerOpen(true)}
+            title="Export pick-level data to CSV"
+            className="font-mono text-xs h-8 px-3 border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 gap-1.5"
+          >
+            <Download className="w-3.5 h-3.5" /> CSV
+          </Button>
+        </div>
+        {/* ── Compact export filter bar ── */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-mono text-slate-500 uppercase">Export filters:</span>
+          <div className="flex items-center gap-1">
+            <label className="text-[10px] font-mono text-slate-500 uppercase">From</label>
+            <Input
+              type="date"
+              value={csvDateFrom}
+              onChange={e => setCsvDateFrom(e.target.value)}
+              className="bg-slate-900 border-slate-800 font-mono text-xs h-7 w-32 px-2"
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <label className="text-[10px] font-mono text-slate-500 uppercase">To</label>
+            <Input
+              type="date"
+              value={csvDateTo}
+              onChange={e => setCsvDateTo(e.target.value)}
+              className="bg-slate-900 border-slate-800 font-mono text-xs h-7 w-32 px-2"
+            />
+          </div>
+          <Select value={csvSport || "_all"} onValueChange={v => setCsvSport(v === "_all" ? "" : v)}>
+            <SelectTrigger className="bg-slate-900 border-slate-800 font-mono text-xs h-7 w-24">
+              <SelectValue placeholder="Sport" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all" className="font-mono text-xs">All sports</SelectItem>
+              {SPORTS.map(s => (
+                <SelectItem key={s} value={s} className="font-mono text-xs">{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={csvEntryType || "_all"} onValueChange={v => setCsvEntryType(v === "_all" ? "" : v)}>
+            <SelectTrigger className="bg-slate-900 border-slate-800 font-mono text-xs h-7 w-24">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all" className="font-mono text-xs">All types</SelectItem>
+              <SelectItem value="power" className="font-mono text-xs">Power</SelectItem>
+              <SelectItem value="flex" className="font-mono text-xs">Flex</SelectItem>
+            </SelectContent>
+          </Select>
+          {(csvDateFrom || csvDateTo || csvSport || csvEntryType) && (
+            <button
+              onClick={() => { setCsvDateFrom(""); setCsvDateTo(""); setCsvSport(""); setCsvEntryType(""); }}
+              className="text-[10px] font-mono text-slate-500 hover:text-slate-300 underline underline-offset-2"
+            >
+              clear
+            </button>
+          )}
+        </div>
       </div>
+
+      <CsvColumnPickerDialog
+        open={csvPickerOpen}
+        onClose={() => setCsvPickerOpen(false)}
+        onExport={handleExportCsv}
+      />
 
       {isLoading ? (
         <div className="space-y-6">
