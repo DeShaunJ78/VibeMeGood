@@ -1440,9 +1440,19 @@ export default function SlateBoard() {
                 const getSaved = () => { try { return (JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>)[p.label] ?? null; } catch { return null; } };
                 const savedCfg = getSaved();
                 const savedSport = savedCfg?.sport && savedCfg.sport !== "all" ? savedCfg.sport.toUpperCase() : null;
+                const myStyleTooltip = p.label === "My Style" && savedCfg ? (() => {
+                  const parts: string[] = [];
+                  if (savedCfg.sport && savedCfg.sport !== "all") parts.push(savedCfg.sport.toUpperCase());
+                  if (savedCfg.actionTag && savedCfg.actionTag !== "all") parts.push(savedCfg.actionTag);
+                  if (savedCfg.lineType && savedCfg.lineType !== "all") parts.push(savedCfg.lineType.charAt(0).toUpperCase() + savedCfg.lineType.slice(1));
+                  if (savedCfg.minEdge) parts.push(`Edge ≥${savedCfg.minEdge}`);
+                  if (savedCfg.sharpOnly) parts.push("Sharp");
+                  return parts.length ? parts.join(" · ") : null;
+                })() : null;
                 return (
                   <button
                     key={p.label}
+                    title={myStyleTooltip ?? undefined}
                     onClick={() => {
                       if (isActive) { setSport("all"); setLineTypeFilter("all"); setMinEdge(""); setActionTagFilter("all"); setSharpOnly(false); setActivePreset(null); return; }
                       const cfg = getSaved() ?? p;
