@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import {
   externalLinesTable, ppLinesTable, playersTable, propScoresTable,
   lineMoveEventsTable, ourProjectionsTable, dataPullLogsTable,
+  playerGameLogsTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { logger } from "../logger";
@@ -370,12 +371,29 @@ export async function recalcPropScores(): Promise<void> {
   }
 
   // --- Batch-load all related data upfront (eliminates N+1 queries) ---
-  const [allExtLines, allProjections] = await Promise.all([
+  const uniquePlayerIds = [...new Set(lines.map(r => r.line.playerId))];
+  const [allExtLines, allProjections, allGameLogs] = await Promise.all([
     db.select().from(externalLinesTable).where(inArray(externalLinesTable.ppLineId, activeIds)),
     db.select().from(ourProjectionsTable).where(
-      inArray(ourProjectionsTable.playerId, [...new Set(lines.map(r => r.line.playerId))]),
+      inArray(ourProjectionsTable.playerId, uniquePlayerIds),
     ),
+    db.select({
+      playerId: playerGameLogsTable.playerId,
+      statType: playerGameLogsTable.statType,
+      value: playerGameLogsTable.value,
+      gameDate: playerGameLogsTable.gameDate,
+    }).from(playerGameLogsTable)
+      .where(inArray(playerGameLogsTable.playerId, uniquePlayerIds))
+      .orderBy(desc(playerGameLogsTable.gameDate)),
   ]);
+
+  // Index game logs: "playerId:statType" → values[] (most recent first)
+  const gameLogsByKey = new Map<string, number[]>();
+  for (const gl of allGameLogs) {
+    const key = `${gl.playerId}:${gl.statType}`;
+    if (!gameLogsByKey.has(key)) gameLogsByKey.set(key, []);
+    gameLogsByKey.get(key)!.push(Number(gl.value));
+  }
 
   // Index for O(1) lookups
   const extLinesByPpLineId = new Map<number, typeof allExtLines>();
@@ -514,11 +532,31 @@ export async function recalcPropScores(): Promise<void> {
         }
       }
 
+      // --- Form factor: z-score of last 5 games vs historical mean/stddev ---
+      // Positive z = hot streak, negative = cold. Contributes ±15 pts to edge.
+      // Null when player has fewer than 5 logged games for this stat type.
+      const formKey = `${line.playerId}:${line.statType}`;
+      const formLogs = gameLogsByKey.get(formKey) ?? [];
+      let formZScore: number | null = null;
+      let formContribution = 0;
+      if (formLogs.length >= 5) {
+        const histMean = formLogs.reduce((a, b) => a + b, 0) / formLogs.length;
+        const histVariance = formLogs.reduce((a, b) => a + (b - histMean) ** 2, 0) / formLogs.length;
+        const histStd = Math.sqrt(histVariance);
+        if (histStd >= 0.01) {
+          const recentMean = formLogs.slice(0, 5).reduce((a, b) => a + b, 0) / 5;
+          const z = (recentMean - histMean) / histStd;
+          formZScore = Math.round(z * 100) / 100;
+          const zClamped = Math.max(-3, Math.min(3, z));
+          formContribution = (zClamped / 3) * 15;
+        }
+      }
+
       // --- Gate 1: Edge Score ---
-      const edgeScore = Math.min(100,
+      const baseEdge =
         Math.max(0, (pOver !== null ? (pOver - 50) * 2 : 0)) * 0.6 +
-        Math.max(0, (marketEdge / Math.max(ppLine, 0.1)) * 150) * 0.4,
-      );
+        Math.max(0, (marketEdge / Math.max(ppLine, 0.1)) * 150) * 0.4;
+      const edgeScore = Math.min(100, Math.max(0, baseEdge + formContribution));
 
       // --- Gate 2: Stability Score ---
       const confidenceBonus =
@@ -596,6 +634,7 @@ export async function recalcPropScores(): Promise<void> {
         recommendedSide,
         bestTierInGroup:    false, // resolved in the second pass below
         reasoning,
+        formZScore:         formZScore != null ? String(formZScore) : null,
         scoredAt:           new Date(),
       };
 

@@ -44,6 +44,7 @@ import type {
   EntryPickUpdate,
   EntryUpdate,
   EntryWithPicks,
+  ExportEntriesCsvParams,
   ExternalLine,
   Game,
   GameInput,
@@ -2434,6 +2435,90 @@ export function useGetSlateRow<TData = Awaited<ReturnType<typeof getSlateRow>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetSlateRowQueryOptions(ppLineId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getExportEntriesCsvUrl = (params?: ExportEntriesCsvParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/entries/export.csv?${stringifiedParams}` : `/api/entries/export.csv`
+}
+
+/**
+ * @summary Export journal entries as CSV (one row per pick leg)
+ */
+export const exportEntriesCsv = async (params?: ExportEntriesCsvParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportEntriesCsvUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportEntriesCsvQueryKey = (params?: ExportEntriesCsvParams,) => {
+    return [
+    `/api/entries/export.csv`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportEntriesCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportEntriesCsv>>, TError = ErrorType<unknown>>(params?: ExportEntriesCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportEntriesCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportEntriesCsvQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportEntriesCsv>>> = ({ signal }) => exportEntriesCsv(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportEntriesCsv>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportEntriesCsvQueryResult = NonNullable<Awaited<ReturnType<typeof exportEntriesCsv>>>
+export type ExportEntriesCsvQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Export journal entries as CSV (one row per pick leg)
+ */
+
+export function useExportEntriesCsv<TData = Awaited<ReturnType<typeof exportEntriesCsv>>, TError = ErrorType<unknown>>(
+ params?: ExportEntriesCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportEntriesCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportEntriesCsvQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

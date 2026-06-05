@@ -108,6 +108,12 @@ interface TierRung {
   bestTierInGroup: boolean;
 }
 
+interface FormData {
+  zScore: number;
+  last5: number[];
+  trend: "hot" | "cold" | "neutral";
+}
+
 interface PropDetail {
   siblingTiers?: TierRung[];
   ppLine: any;
@@ -117,6 +123,7 @@ interface PropDetail {
   projection: any | null;
   ourProjection: OurProjection | null;
   recentGames: { date: string; value: number }[];
+  formData: FormData | null;
   externalLines: any[];
   propScore: any | null;
   injuries: any[];
@@ -796,6 +803,67 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                       <span className="inline-block w-2 h-2 rounded-sm bg-rose-500/70" /> under
                     </span>
                     <span className="text-slate-600">recent →</span>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Recent Form ── */}
+              {data?.formData && (
+                <div className="px-5 py-4 border-b border-slate-800/50">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      {data.formData.trend === "hot" && <TrendingUp className="w-3 h-3 text-emerald-400" />}
+                      {data.formData.trend === "cold" && <TrendingDown className="w-3 h-3 text-rose-400" />}
+                      {data.formData.trend === "neutral" && <Activity className="w-3 h-3 text-slate-400" />}
+                      <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                        Recent Form (Last 5 Games)
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {data.formData.trend === "hot" && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950/50 text-emerald-400 border border-emerald-800/40">
+                          ↑ HOT
+                        </span>
+                      )}
+                      {data.formData.trend === "cold" && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-950/50 text-rose-400 border border-rose-800/40">
+                          ↓ COLD
+                        </span>
+                      )}
+                      {data.formData.trend === "neutral" && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800/50 text-slate-400 border border-slate-700/40">
+                          — NEUTRAL
+                        </span>
+                      )}
+                      <span className={`text-sm font-mono font-bold ${
+                        data.formData.zScore >= 0.5 ? "text-emerald-400" :
+                        data.formData.zScore <= -0.5 ? "text-rose-400" :
+                        "text-slate-400"
+                      }`}>
+                        {data.formData.zScore > 0 ? "+" : ""}{data.formData.zScore.toFixed(2)}σ
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-end gap-1.5 h-10">
+                    {data.formData.last5.map((v, i) => {
+                      const lineVal = Number(data.ppLine?.lineValueOverride ?? data.ppLine?.lineValue ?? 0);
+                      const isOver = v > lineVal;
+                      const maxVal = Math.max(...data.formData!.last5, lineVal) * 1.2 || 1;
+                      const barH = Math.max(8, Math.round((v / maxVal) * 40));
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-0.5 group relative">
+                          <div
+                            className={`w-full rounded-t transition-opacity ${isOver ? "bg-emerald-500/70" : "bg-rose-500/70"}`}
+                            style={{ height: barH }}
+                          />
+                          <span className="text-[8px] font-mono text-slate-500 group-hover:text-slate-300 transition-colors">{v.toFixed(1)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between text-[9px] font-mono text-slate-600 mt-1">
+                    <span>← G-5</span>
+                    <span>Last game →</span>
                   </div>
                 </div>
               )}

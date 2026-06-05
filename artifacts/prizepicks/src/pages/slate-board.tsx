@@ -1875,6 +1875,14 @@ export default function SlateBoard() {
                   </SortTh>
                   <SortTh col="pOver" label="P(Over)" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="w-20 text-center" />
                   <TableHead className="hidden md:table-cell w-14 font-mono text-xs text-center">Streak</TableHead>
+                  <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-center">
+                    <Tooltip>
+                      <TooltipTrigger className="cursor-help">Form</TooltipTrigger>
+                      <TooltipContent className="text-xs max-w-xs">
+                        Recency trend — z-score of last 5 games vs historical mean. ↑ hot (≥+0.5σ), ↓ cold (≤−0.5σ), — neutral.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TableHead>
                   <TableHead className="hidden lg:table-cell w-20 font-mono text-xs text-center">Pace</TableHead>
                   {isNflSlate && <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-center">Snap%</TableHead>}
                   {isNflSlate && <TableHead className="hidden lg:table-cell w-20 font-mono text-xs text-center">Tgt Shr</TableHead>}
@@ -2197,6 +2205,42 @@ export default function SlateBoard() {
                           ) : (
                             <span className="text-slate-600">—</span>
                           )}
+                        </TableCell>
+
+                        {/* Form — recency trend chip */}
+                        <TableCell className="hidden lg:table-cell text-center font-mono text-xs">
+                          {(() => {
+                            const z = row.formZScore ?? null;
+                            if (z === null) return <span className="text-slate-600">—</span>;
+                            if (z >= 0.5) return (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-0.5 text-emerald-400 font-bold cursor-help">
+                                    ↑ <span className="text-[9px] text-emerald-500">HOT</span>
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-xs">{z > 0 ? "+" : ""}{z.toFixed(2)}σ above historical avg (last 5 games)</TooltipContent>
+                              </Tooltip>
+                            );
+                            if (z <= -0.5) return (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-0.5 text-rose-400 font-bold cursor-help">
+                                    ↓ <span className="text-[9px] text-rose-500">COLD</span>
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-xs">{z.toFixed(2)}σ below historical avg (last 5 games)</TooltipContent>
+                              </Tooltip>
+                            );
+                            return (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-slate-500 cursor-help">—</span>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-xs">{z > 0 ? "+" : ""}{z.toFixed(2)}σ — within normal range</TooltipContent>
+                              </Tooltip>
+                            );
+                          })()}
                         </TableCell>
 
                         {/* Pace */}

@@ -1774,6 +1774,7 @@ components:
         evValue: { type: ["number", "null"], description: Expected value (pHit × payout) of the recommended side. }
         recommendedSide: { type: ["string", "null"], description: over | under — the side the EV is computed for. }
         bestTierInGroup: { type: boolean, description: True when this is the highest-EV tier among the player's standard/demon/goblin siblings. }
+        formZScore: { type: ["number", "null"], description: "Z-score of last 5 games vs historical mean/stddev. Positive = hot streak, negative = cold. Null when <5 games available." }
         isWatched: { type: boolean }
         watchlistId: { type: ["integer", "null"] }
         updatedAt: { type: string, format: date-time }

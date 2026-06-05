@@ -159,6 +159,7 @@ router.get("/slate", async (req, res) => {
         evValue: score?.evValue != null ? Number(score.evValue) : null,
         recommendedSide: score?.recommendedSide ?? null,
         bestTierInGroup: score?.bestTierInGroup ?? false,
+        formZScore: score?.formZScore != null ? Number(score.formZScore) : null,
         isWatched: watchlistSet.has(`${line.playerId}:${line.statType}`),
         watchlistId: watchlistIdMap.get(`${line.playerId}:${line.statType}`) ?? null,
         updatedAt: line.updatedAt.toISOString(),
@@ -332,6 +333,19 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
         date: g.gameDate,
         value: parseFloat(g.value.toString()),
       })).reverse(),
+      formData: (() => {
+        if (recentGames.length < 5) return null;
+        const vals = recentGames.map(g => parseFloat(g.value.toString())); // most-recent-first (desc order)
+        const last5 = vals.slice(0, 5);
+        const histMean = vals.reduce((a, b) => a + b, 0) / vals.length;
+        const histVariance = vals.reduce((a, b) => a + (b - histMean) ** 2, 0) / vals.length;
+        const histStd = Math.sqrt(histVariance);
+        if (histStd < 0.01) return { zScore: 0, last5: last5.slice().reverse(), trend: "neutral" as const };
+        const recentMean = last5.reduce((a, b) => a + b, 0) / 5;
+        const z = Math.round(((recentMean - histMean) / histStd) * 100) / 100;
+        const trend = z >= 0.5 ? "hot" : z <= -0.5 ? "cold" : "neutral";
+        return { zScore: z, last5: last5.slice().reverse(), trend };
+      })(),
       externalLines,
       propScore: score ?? null,
       injuries,

@@ -20,6 +20,7 @@ export const propScoresTable = pgTable("prop_scores", {
   recommendedSide: text("recommended_side"), // over | under
   bestTierInGroup: boolean("best_tier_in_group").notNull().default(false),
   reasoning: jsonb("reasoning"),
+  formZScore: numeric("form_z_score"),
   scoredAt: timestamp("scored_at").notNull(),
 }, (t) => [
   index("prop_scores_pp_line_id_idx").on(t.ppLineId),

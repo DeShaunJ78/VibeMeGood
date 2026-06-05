@@ -658,6 +658,7 @@ export const GetSlateResponseItem = zod.object({
   "evValue": zod.number().nullish().describe('Expected value (pHit × payout) of the recommended side.'),
   "recommendedSide": zod.string().nullish().describe('over | under — the side the EV is computed for.'),
   "bestTierInGroup": zod.boolean().optional().describe('True when this is the highest-EV tier among the player\'s standard\/demon\/goblin siblings.'),
+  "formZScore": zod.number().nullish().describe('Z-score of last 5 games vs historical mean\/stddev. Positive = hot streak, negative = cold. Null when <5 games available.'),
   "isWatched": zod.boolean(),
   "watchlistId": zod.number().nullish(),
   "updatedAt": zod.coerce.date(),
@@ -764,6 +765,20 @@ export const GetSlateRowResponse = zod.object({
   "lineupConfirmation": zod.unknown().optional(),
   "isWatched": zod.boolean(),
   "watchlistId": zod.number().nullish()
+})
+
+
+/**
+ * @summary Export journal entries as CSV (one row per pick leg)
+ */
+export const ExportEntriesCsvQueryParams = zod.object({
+  "result": zod.coerce.string().optional(),
+  "entryType": zod.coerce.string().optional(),
+  "since": zod.date().optional(),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional(),
+  "sport": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional()
 })
 
 

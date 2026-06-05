@@ -359,6 +359,11 @@ export interface SlateRow {
   recommendedSide?: string | null;
   /** True when this is the highest-EV tier among the player's standard/demon/goblin siblings. */
   bestTierInGroup?: boolean;
+  /**
+     * Z-score of last 5 games vs historical mean/stddev. Positive = hot streak, negative = cold. Null when <5 games available.
+     * @nullable
+     */
+  formZScore?: number | null;
   isWatched: boolean;
   /** @nullable */
   watchlistId?: number | null;
@@ -1270,6 +1275,16 @@ minEdgeScore?: number;
 maxRiskScore?: number;
 watchlistOnly?: boolean;
 date?: string;
+};
+
+export type ExportEntriesCsvParams = {
+result?: string;
+entryType?: string;
+since?: string;
+dateFrom?: string;
+dateTo?: string;
+sport?: string;
+search?: string;
 };
 
 export type ListEntriesParams = {
