@@ -1,120 +1,163 @@
 /**
  * Stat-type normalisation — shared across auto-grading, projection, and calibration.
  *
- * PrizePicks and various stat providers use different names for the same stat.
- * All three surfaces that touch stat types (auto-grade, compute.ts, calibration)
- * must resolve to the SAME canonical string before hitting the DB so that:
- *   - game-log lookups find rows regardless of how the pick was imported
- *   - calibration bucket keys built from game logs are the same ones looked up
- *     at projection time
- *   - prior keys in priors.ts always match
+ * Canonical stat_type values are exactly what historical-stats.ts writes into
+ * player_game_logs (they are the source of truth). Keys in this map are all the
+ * abbreviations and alternate spellings that PrizePicks or other data sources
+ * may use; values are the canonical DB strings.
  *
- * Canonical stat_type strings are what player_game_logs actually stores.
+ * Aliases verified against:
+ *   - historical-stats.ts (NBA/MLB/NHL/NFL upsert arrays)
+ *   - priors.ts PRIORS keys (must match to avoid DEFAULT_PRIOR fallthrough)
+ *   - SELECT DISTINCT stat_type FROM player_game_logs (live DB audit)
+ *
  * Add mappings here whenever a new mismatch is discovered; never duplicate
  * this map in individual modules.
  */
 
-/** Abbreviations / alternate names → canonical DB stat_type string. */
 export const STAT_TYPE_ALIASES: Record<string, string> = {
   // ── NBA ──────────────────────────────────────────────────────────────────
-  PTS:                       "Points",
-  REB:                       "Rebounds",
-  AST:                       "Assists",
-  STL:                       "Steals",
-  BLK:                       "Blocks",
-  "Blocked Shots":           "Blocks",      // PP sometimes uses long form
-  "3PM":                     "3-PT Made",
-  "3-Pointers Made":         "3-PT Made",
-  "3 Pointers Made":         "3-PT Made",
-  "3PA":                     "3-Point Attempts",
-  "3-Pointers Attempted":    "3-Point Attempts",
-  "3 Pointers Attempted":    "3-Point Attempts",
-  TO:                        "Turnovers",
-  FGA:                       "Field Goals Attempted",
-  FGM:                       "Field Goals Made",
-  FTA:                       "Free Throws Attempted",
-  FTM:                       "Free Throws Made",
-  // ── MLB ──────────────────────────────────────────────────────────────────
-  H:                         "Hits",
-  HR:                        "Home Runs",
-  "Home Run":                "Home Runs",
-  RBI:                       "RBIs",
-  SB:                        "Stolen Bases",
-  BB:                        "Walks",
-  K:                         "Strikeouts",
-  SO:                        "Strikeouts",
-  ER:                        "Earned Runs",
-  IP:                        "Innings Pitched",
+  // Canonical: "Points", "Rebounds", "Assists", "Steals", "Blocked Shots",
+  //            "Turnovers", "3-PT Made", "Pts+Rebs+Asts", "Pts+Rebs",
+  //            "Pts+Asts", "Rebs+Asts"
+  PTS:                    "Points",
+  REB:                    "Rebounds",
+  AST:                    "Assists",
+  STL:                    "Steals",
+  BLK:                    "Blocked Shots",
+  "Blocks":               "Blocked Shots",   // PP sometimes uses short form
+  "Blks":                 "Blocked Shots",
+  TO:                     "Turnovers",
+  TOV:                    "Turnovers",
+  "3PM":                  "3-PT Made",
+  "3-Pointers Made":      "3-PT Made",
+  "3 Pointers Made":      "3-PT Made",
+  "Threes Made":          "3-PT Made",
+  FGA:                    "Field Goals Attempted",
+  FGM:                    "Field Goals Made",
+  FTA:                    "Free Throws Attempted",
+  FTM:                    "Free Throws Made",
+
+  // ── MLB — hitters ─────────────────────────────────────────────────────────
+  // Canonical: "Hits", "Singles", "Doubles", "Triples", "Home Runs",
+  //            "Total Bases", "RBIs", "Runs", "Walks", "Stolen Bases",
+  //            "Hitter Strikeouts", "Hits+Runs+RBIs"
+  HR:                     "Home Runs",
+  "Home Run":             "Home Runs",
+  RBI:                    "RBIs",
+  SB:                     "Stolen Bases",
+  BB:                     "Walks",
+  "Walks (Batter)":       "Walks",
+  "Strikeouts (Batter)":  "Hitter Strikeouts",
+  "Batter Strikeouts":    "Hitter Strikeouts",
+  "K (Batter)":           "Hitter Strikeouts",
+  "H+R+RBI":              "Hits+Runs+RBIs",
+  "Hits+Runs+RBI":        "Hits+Runs+RBIs",
+
+  // ── MLB — pitchers ────────────────────────────────────────────────────────
+  // Canonical: "Pitcher Strikeouts", "Walks Allowed", "Hits Allowed",
+  //            "Earned Runs Allowed", "Pitching Outs"
+  // NOTE: "IP" (Innings Pitched) is stored as "Pitching Outs" in the DB
+  //       (1 IP = 3 outs).  Map common display forms to the stored canonical.
+  IP:                     "Pitching Outs",
+  "Innings Pitched":      "Pitching Outs",
+  ER:                     "Earned Runs Allowed",
+  "Earned Runs":          "Earned Runs Allowed",
+  "K (Pitcher)":          "Pitcher Strikeouts",
+  "Strikeouts (Pitcher)": "Pitcher Strikeouts",
+  "Pitcher Ks":           "Pitcher Strikeouts",
+  "Walks (Pitcher)":      "Walks Allowed",
+  "BB Allowed":           "Walks Allowed",
+  "HA":                   "Hits Allowed",
+  "H Allowed":            "Hits Allowed",
+
   // ── NHL ──────────────────────────────────────────────────────────────────
-  G:                         "Goals",
-  "Shots":                   "Shots on Goal",
-  SOG:                       "Shots on Goal",
-  HIT:                       "Hits",         // context: NHL hits
+  // Canonical: "Goals", "Assists", "Shots On Goal", "Power Play Points",
+  //            "Goal + Assist"  (historical-stats.ts line 666–672)
+  SOG:                    "Shots On Goal",
+  "Shots":                "Shots On Goal",
+  "Shots on Goal":        "Shots On Goal",   // lowercase "on" variant
+  "Goals + Assists":      "Goal + Assist",
+  "G+A":                  "Goal + Assist",
+  PPP:                    "Power Play Points",
+  "PP Points":            "Power Play Points",
+
   // ── NFL ──────────────────────────────────────────────────────────────────
-  PassYds:                   "Passing Yards",
-  "Pass Yds":                "Passing Yards",
-  "Passing Yds":             "Passing Yards",
-  RushYds:                   "Rushing Yards",
-  "Rush Yds":                "Rushing Yards",
-  RecYds:                    "Receiving Yards",
-  "Rec Yds":                 "Receiving Yards",
-  PassTD:                    "Passing TDs",
-  "Pass TDs":                "Passing TDs",
-  "Passing Touchdowns":      "Passing TDs",
-  RushTD:                    "Rushing TDs",
-  "Rush TDs":                "Rushing TDs",
-  "Rushing Touchdowns":      "Rushing TDs",
-  RecTD:                     "Receiving TDs",
-  "Rec TDs":                 "Receiving TDs",
-  "Receiving Touchdowns":    "Receiving TDs",
-  Rec:                       "Receptions",
-  PassAtt:                   "Pass Attempts",
-  "Pass Att":                "Pass Attempts",
-  RushAtt:                   "Rush Attempts",
-  "Rush Att":                "Rush Attempts",
+  // Canonical: "Pass Yards", "Rush Yards", "Receiving Yards", "Receptions",
+  //            "Rush TDs", "Rec TDs", "Pass TDs", "Interceptions", "Sacks"
+  //            (historical-stats.ts line 832–844)
+  PassYds:                "Pass Yards",
+  "Passing Yards":        "Pass Yards",
+  "Pass Yds":             "Pass Yards",
+  "Passing Yds":          "Pass Yards",
+  RushYds:                "Rush Yards",
+  "Rushing Yards":        "Rush Yards",
+  "Rush Yds":             "Rush Yards",
+  "Rushing Yds":          "Rush Yards",
+  RecYds:                 "Receiving Yards",
+  "Rec Yards":            "Receiving Yards",
+  "Rec Yds":              "Receiving Yards",
+  "Receiving Yds":        "Receiving Yards",
+  Rec:                    "Receptions",
+  "Catches":              "Receptions",
+  PassTD:                 "Pass TDs",
+  "Passing TDs":          "Pass TDs",
+  "Passing Touchdowns":   "Pass TDs",
+  "Pass Touchdowns":      "Pass TDs",
+  RushTD:                 "Rush TDs",
+  "Rushing TDs":          "Rush TDs",
+  "Rushing Touchdowns":   "Rush TDs",
+  RecTD:                  "Rec TDs",
+  "Receiving TDs":        "Rec TDs",
+  "Receiving Touchdowns": "Rec TDs",
+  PassAtt:                "Passing Attempts",
+  "Pass Attempts":        "Passing Attempts",
+  "Pass Att":             "Passing Attempts",
+  "QB Completions":       "Completions",
+  "INT":                  "Interceptions",
 };
 
-/** Reverse map: canonical (lowercased) → canonical (original case). */
-const reverseAliases: Record<string, string> = {};
+/**
+ * Case-insensitive reverse index: canonical.toLowerCase() → canonical (original case).
+ * Used to handle callers that pass a canonical in the wrong case.
+ */
+const canonicalByLower: Record<string, string> = {};
 for (const canonical of Object.values(STAT_TYPE_ALIASES)) {
-  reverseAliases[canonical.toLowerCase()] = canonical;
+  canonicalByLower[canonical.toLowerCase()] = canonical;
 }
 
 /**
- * Resolve a stat-type string to its canonical DB form.
+ * Resolve any stat-type string to its canonical DB form.
  *
  * Resolution order:
  *   1. Exact key in STAT_TYPE_ALIASES → canonical value
- *   2. Input lowercased matches a canonical value → return canonical (fixes case drift)
- *   3. Otherwise return input unchanged (assumed already canonical)
+ *   2. Input lowercased matches a known canonical → return correct-cased canonical
+ *   3. Otherwise return input unchanged (assumed already canonical or unknown)
  */
 export function normalizeStatType(s: string): string {
   const direct = STAT_TYPE_ALIASES[s];
   if (direct != null) return direct;
 
-  const fromReverse = reverseAliases[s.toLowerCase()];
-  if (fromReverse != null) return fromReverse;
+  const fromLower = canonicalByLower[s.toLowerCase()];
+  if (fromLower != null) return fromLower;
 
   return s;
 }
 
 /**
  * Return every stat-type form that a game-log lookup should try for `s`.
- * Used by the auto-grade resolver to find logs regardless of which direction
- * the mismatch runs (pick = abbreviation, log = canonical, or vice-versa).
  *
- * Emits 1–3 distinct strings; always includes `normalizeStatType(s)` first
- * so callers can short-circuit on the first hit.
+ * Emits 1–N distinct strings; always starts with `normalizeStatType(s)` so
+ * callers can short-circuit on the first hit. Includes the raw input and all
+ * abbreviations that alias to the same canonical — useful when the pick was
+ * stored with the canonical but the log uses the abbreviation (rare but real).
  */
 export function statTypeCandidates(s: string): string[] {
   const canonical = normalizeStatType(s);
   const seen = new Set<string>([canonical]);
 
-  // Also try the raw input in case it was already the right form but didn't
-  // match the alias map (e.g. a new stat type not yet in the map).
   if (!seen.has(s)) seen.add(s);
 
-  // Reverse: if the input was a canonical and someone stored the abbreviation.
   for (const [abbrev, can] of Object.entries(STAT_TYPE_ALIASES)) {
     if (can === canonical && !seen.has(abbrev)) seen.add(abbrev);
   }
