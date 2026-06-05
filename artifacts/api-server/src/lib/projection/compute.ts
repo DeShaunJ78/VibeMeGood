@@ -22,6 +22,7 @@ import {
   type FactorResult,
 } from "./factors";
 import { logger } from "../logger";
+import { normalizeStatType } from "../stat-type";
 
 export interface ProjectionOutput {
   mean: number;
@@ -74,6 +75,12 @@ export async function computeProjection(
   calibrationMap?: CalibrationMap | null,
   cache?: ProjectionCache,
 ): Promise<ProjectionOutput> {
+  // Normalise before every downstream lookup so abbreviations ("PTS") and
+  // alternate spellings ("3-Pointers Made") resolve to the canonical DB form
+  // ("Points", "3-PT Made"). This ensures game-log cache hits, prior lookups,
+  // calibration bucket matches, and distribution family selection all agree.
+  statType = normalizeStatType(statType);
+
   const prior = getPrior(sport, statType);
   const deductions: string[] = [];
 

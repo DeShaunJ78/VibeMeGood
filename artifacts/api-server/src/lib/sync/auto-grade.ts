@@ -1,73 +1,23 @@
 import { db } from "@workspace/db";
 import { entryPicksTable, entriesTable, playerGameLogsTable } from "@workspace/db/schema";
 import { eq, and, isNotNull, inArray } from "drizzle-orm";
+import { statTypeCandidates } from "../stat-type";
+
+// Re-export so existing imports of STAT_TYPE_ALIASES from this module keep working.
+export { STAT_TYPE_ALIASES } from "../stat-type";
 
 // ---------------------------------------------------------------------------
-// Stat-type alias maps — fuzzy matching for pick→game-log linking (#94)
-// The DB stores canonical names ("Points") but picks may arrive with
-// abbreviations ("PTS") or vice-versa. We try both directions.
+// Log-value resolver — tries every candidate form of the stat type so a pick
+// stored as "PTS" matches a game log stored as "Points" (and vice-versa).
 // ---------------------------------------------------------------------------
-export const STAT_TYPE_ALIASES: Record<string, string> = {
-  // NBA
-  PTS:   "Points",
-  REB:   "Rebounds",
-  AST:   "Assists",
-  STL:   "Steals",
-  BLK:   "Blocks",
-  "3PM": "3-Pointers Made",
-  "3PA": "3-Point Attempts",
-  TO:    "Turnovers",
-  FGA:   "Field Goals Attempted",
-  FGM:   "Field Goals Made",
-  FTA:   "Free Throws Attempted",
-  FTM:   "Free Throws Made",
-  // MLB
-  H:    "Hits",
-  HR:   "Home Runs",
-  RBI:  "RBIs",
-  SB:   "Stolen Bases",
-  BB:   "Walks",
-  K:    "Strikeouts",
-  SO:   "Strikeouts",
-  ER:   "Earned Runs",
-  IP:   "Innings Pitched",
-  // NHL
-  G:    "Goals",
-  SOG:  "Shots on Goal",
-  HIT:  "Hits",
-  // NFL
-  PassYds:  "Passing Yards",
-  RushYds:  "Rushing Yards",
-  RecYds:   "Receiving Yards",
-  PassTD:   "Passing TDs",
-  RushTD:   "Rushing TDs",
-  RecTD:    "Receiving TDs",
-  Rec:      "Receptions",
-  PassAtt:  "Pass Attempts",
-  RushAtt:  "Rush Attempts",
-};
-
-const reverseAliases: Record<string, string> = {};
-for (const [abbrev, canonical] of Object.entries(STAT_TYPE_ALIASES)) {
-  reverseAliases[canonical] = abbrev;
-}
-
 function resolveLogValue(
   logMap: Map<string, number>,
   playerId: number,
   date: string,
   statType: string,
 ): number | undefined {
-  const exact = logMap.get(`${playerId}|${date}|${statType}`);
-  if (exact != null) return exact;
-  const aliased = STAT_TYPE_ALIASES[statType];
-  if (aliased) {
-    const v = logMap.get(`${playerId}|${date}|${aliased}`);
-    if (v != null) return v;
-  }
-  const rev = reverseAliases[statType];
-  if (rev) {
-    const v = logMap.get(`${playerId}|${date}|${rev}`);
+  for (const candidate of statTypeCandidates(statType)) {
+    const v = logMap.get(`${playerId}|${date}|${candidate}`);
     if (v != null) return v;
   }
   return undefined;
