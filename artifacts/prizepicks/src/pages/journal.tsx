@@ -116,10 +116,10 @@ function MarkResultPanel({ entry, onDone }: { entry: any; onDone: () => void }) 
     return Number(entry.stake) * mult;
   })();
 
-  // Auto-open the confirm panel for Power entries the moment all picks are graded.
+  // Auto-open the confirm panel the moment all picks are graded (Power AND Flex).
   // Intentionally excludes confirmResult from deps so a user-cancel does not re-open.
   useEffect(() => {
-    if (allPicksGraded && entry.entryType === "power" && confirmResult === null && picksSummary) {
+    if (allPicksGraded && confirmResult === null && picksSummary) {
       setConfirmResult(picksSummary.suggested);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
