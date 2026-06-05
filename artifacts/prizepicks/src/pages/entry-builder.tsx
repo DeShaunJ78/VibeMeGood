@@ -15,7 +15,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useUserSettings } from "@/hooks/use-user-settings";
 import { useEntry } from "@/lib/entry-context";
-import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown, ShieldAlert, AlertTriangle, ClipboardCheck, BarChart2, Shuffle, Loader2 } from "lucide-react";
+import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown, ShieldAlert, AlertTriangle, ClipboardCheck, BarChart2, Shuffle, Loader2, DollarSign, ChevronDown, ChevronUp } from "lucide-react";
 import { Link } from "wouter";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
 import {
@@ -105,6 +105,63 @@ function computeEV(
   return { pWin, ev, evPct: (ev / stake) * 100, hasAllData, legData };
 }
 
+interface KellyResult {
+  fullKelly: number;
+  halfKelly: number;
+  pWin: number;
+  effectiveMult: number;
+  hasAllData: boolean;
+  missingPicks: string[];
+}
+
+function computeKellyResult(
+  picks: EntryPick[],
+  playstyle: "power" | "flex",
+  multiplier: number,
+  flexPayouts: Record<string, number>,
+): KellyResult | null {
+  if (picks.length < 2) return null;
+  const missingPicks = picks.filter(p => p.pOver == null).map(p => abbreviateName(p.playerName));
+  const hasAllData = missingPicks.length === 0;
+  const probsFilled = picks.map(p => legPHit(p) ?? 0.5);
+
+  if (playstyle === "power") {
+    if (multiplier <= 1) return null;
+    const pWin = probsFilled.reduce((acc, p) => acc * p, 1);
+    const b = multiplier - 1;
+    const fullKelly = (pWin * multiplier - 1) / b;
+    return { fullKelly, halfKelly: fullKelly / 2, pWin, effectiveMult: multiplier, hasAllData, missingPicks };
+  }
+
+  // Flex: DP across all outcome tiers, compute effective net odds
+  const n = picks.length;
+  const flexKeys = Object.keys(flexPayouts);
+  if (flexKeys.length === 0) return null;
+  let dp = new Array(n + 1).fill(0) as number[];
+  dp[0] = 1;
+  for (let i = 0; i < n; i++) {
+    const p = probsFilled[i];
+    const next = new Array(n + 1).fill(0) as number[];
+    for (let k = 0; k <= i; k++) {
+      next[k] += dp[k] * (1 - p);
+      next[k + 1] += dp[k] * p;
+    }
+    dp = next;
+  }
+  let expectedGross = 0;
+  let pWin = 0;
+  for (let k = 0; k <= n; k++) {
+    const mult = flexPayouts[`${k}/${n}`] ?? 0;
+    if (mult > 0) { expectedGross += dp[k] * mult; pWin += dp[k]; }
+  }
+  if (pWin <= 0) return null;
+  const effectiveMult = expectedGross / pWin;
+  if (effectiveMult <= 1) return null;
+  const b = effectiveMult - 1;
+  const fullKelly = (pWin * effectiveMult - 1) / b;
+  return { fullKelly, halfKelly: fullKelly / 2, pWin, effectiveMult, hasAllData, missingPicks };
+}
+
 interface LossLimitState {
   exceeded: boolean;
   totalLoss: number;
@@ -175,6 +232,7 @@ export default function EntryBuilder() {
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [portfolioResult, setPortfolioResult] = useState<PortfolioResult | null>(null);
   const [portfolioLoggedSet, setPortfolioLoggedSet] = useState<Set<number>>(new Set());
+  const [kellyOpen, setKellyOpen] = useState(true);
   const { picks, removePick, updateDirection, clearPicks } = useEntry();
   function togglePickSort(col: string) {
     if (pickSortCol === col) {
