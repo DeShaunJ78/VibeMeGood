@@ -624,8 +624,12 @@ export default function SlateBoard() {
   const [presetRevision, setPresetRevision] = useState(0);
 
   const activeFilterCount = [sport !== "all" && sport, lineTypeFilter !== "all" && lineTypeFilter, minEdge, actionTagFilter !== "all" && actionTagFilter].filter(Boolean).length;
-  const [optPickCount, setOptPickCount] = useState(4);
-  const [maxPerTeam, setMaxPerTeam] = useState(2);
+  const [optPickCount, setOptPickCount] = useState<number>(() => {
+    try { return Number(localStorage.getItem("opt-pick-count")) || 4; } catch { return 4; }
+  });
+  const [maxPerTeam, setMaxPerTeam] = useState<number>(() => {
+    try { return Number(localStorage.getItem("opt-max-per-team")) || 2; } catch { return 2; }
+  });
   const [diversityNote, setDiversityNote] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -2699,7 +2703,7 @@ export default function SlateBoard() {
             {[2, 3, 4, 5, 6].map(n => (
               <button
                 key={n}
-                onClick={() => { setOptPickCount(n); setOptLoaded(false); }}
+                onClick={() => { setOptPickCount(n); setOptLoaded(false); try { localStorage.setItem("opt-pick-count", String(n)); } catch {} }}
                 className={`px-2.5 py-1 rounded text-xs font-mono transition-colors ${
                   optPickCount === n
                     ? "bg-violet-700 text-white"
@@ -2724,7 +2728,7 @@ export default function SlateBoard() {
             {[1, 2, 3].map(n => (
               <button
                 key={n}
-                onClick={() => { setMaxPerTeam(n); setOptLoaded(false); }}
+                onClick={() => { setMaxPerTeam(n); setOptLoaded(false); try { localStorage.setItem("opt-max-per-team", String(n)); } catch {} }}
                 className={`px-2.5 py-1 rounded text-xs font-mono transition-colors ${
                   maxPerTeam === n
                     ? "bg-violet-700 text-white"
