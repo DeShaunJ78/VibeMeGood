@@ -337,7 +337,10 @@ router.post("/sync/injuries", async (req, res) => {
 });
 
 router.post("/sync/external-odds", async (req, res) => {
-  await runSync("the-odds-api", "external-odds", syncExternalOdds, res);
+  // Manual trigger always uses force=true (5-min floor only) so the user can
+  // sync right before slate lock regardless of when the cron last ran.
+  // The cron path calls syncExternalOdds() without force, keeping the 170-min cooldown.
+  await runSync("the-odds-api", "external-odds", () => syncExternalOdds(true), res);
 });
 
 router.post("/sync/game-odds", async (req, res) => {
