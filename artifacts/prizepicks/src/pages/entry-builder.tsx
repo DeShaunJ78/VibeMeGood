@@ -119,6 +119,7 @@ function computeKellyResult(
   playstyle: "power" | "flex",
   multiplier: number,
   flexPayouts: Record<string, number>,
+  fallbackMult?: number,
 ): KellyResult | null {
   if (picks.length < 2) return null;
   const missingPicks = picks.filter(p => legPHit(p) == null).map(p => abbreviateName(p.playerName));
@@ -128,11 +129,13 @@ function computeKellyResult(
   if (knownProbs.length === 0) return null;
 
   if (playstyle === "power") {
-    if (multiplier <= 1) return null;
+    // When the real multiplier is unknown, fall back to the standard Power table value
+    const effectiveMult = multiplier > 1 ? multiplier : (fallbackMult ?? 0);
+    if (effectiveMult <= 1) return null;
     const pWin = knownProbs.reduce((acc, p) => acc * p, 1);
-    const b = multiplier - 1;
-    const fullKelly = (pWin * multiplier - 1) / b;
-    return { fullKelly, halfKelly: fullKelly / 2, pWin, effectiveMult: multiplier, hasAllData, missingPicks };
+    const b = effectiveMult - 1;
+    const fullKelly = (pWin * effectiveMult - 1) / b;
+    return { fullKelly, halfKelly: fullKelly / 2, pWin, effectiveMult, hasAllData, missingPicks };
   }
 
   // Flex: DP across all outcome tiers using only the picks with known probability.
@@ -463,6 +466,14 @@ export default function EntryBuilder() {
     const effectiveStyle: "power" | "flex" = (playstyle === "flex" && usesManual) ? "power" : playstyle;
     return computeKellyResult(picks, effectiveStyle, multiplier, flexPayouts);
   }, [picks, playstyle, multiplier, flexPayouts, n, multiplierUnknown, usesManual]);
+
+  // When the entry has goblin/demon legs (multiplierUnknown) and playstyle is Power,
+  // the standard Power table multiplier is a reasonable estimate — show Kelly sizing
+  // with an "est." label so the user has a starting point before entering the real mult.
+  const kellyEstimate = useMemo(() => {
+    if (!multiplierUnknown || playstyle !== "power" || fixedMult <= 1 || n < 2) return null;
+    return computeKellyResult(picks, "power", 0, {}, fixedMult);
+  }, [picks, playstyle, fixedMult, n, multiplierUnknown]);
 
   const evPct       = activeEV?.evPct ?? flexEstimatedEvPct ?? powerEstimatedEvPct;
   // Indicator thresholds: green >5%, amber -0.5% to 5% (covers break-even), red <-0.5%
@@ -1095,71 +1106,94 @@ export default function EntryBuilder() {
               </CardHeader>
               {kellyOpen && (
                 <CardContent className="space-y-3 pb-4">
-                  {multiplierUnknown ? (
-                    <div className="text-center py-3 text-xs font-mono text-amber-400/70">
-                      Enter the PrizePicks multiplier above to see Kelly sizing
-                    </div>
-                  ) : kellyResult === null ? (
-                    <div className="text-center py-3 text-xs font-mono text-muted-foreground">
-                      {playstyle === "flex" && Object.keys(flexPayouts).length === 0
-                        ? "Flex unavailable for this pick count"
-                        : multiplier <= 1 ? "Set multiplier to see Kelly sizing" : "Kelly unavailable"}
-                    </div>
-                  ) : kellyResult.fullKelly <= 0 ? (
-                    <div className="bg-rose-950/40 border border-rose-700/40 rounded-lg px-4 py-3 text-center space-y-1">
-                      <div className="text-rose-400 font-mono font-bold text-sm">No edge</div>
-                      <div className="text-[10px] font-mono text-rose-400/70">Kelly says skip this entry</div>
-                      <div className="text-[10px] font-mono text-slate-600 mt-1">
-                        P(win) {(kellyResult.pWin * 100).toFixed(1)}% × {kellyResult.effectiveMult.toFixed(2)}× &lt; 1
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="space-y-1.5">
-                        {([
-                          { label: "Full Kelly",   fraction: kellyResult.fullKelly,                desc: "Theoretically optimal — high variance" },
-                          { label: "Half Kelly",   fraction: kellyResult.halfKelly,                desc: "Recommended — lower variance",          rec: true },
-                          { label: `${Math.round(kellyFracNum * 100)}% Kelly`, fraction: kellyResult.fullKelly * kellyFracNum, desc: "Your configured fraction" },
-                        ] as { label: string; fraction: number; desc: string; rec?: boolean }[]).map(({ label, fraction, desc, rec }) => {
-                          const pct = Math.max(0, fraction) * 100;
-                          const dollars = Math.max(0, fraction) * bankrollNum;
-                          const color = pct > 2 ? "text-emerald-400" : pct > 0 ? "text-amber-400" : "text-rose-400";
-                          return (
-                            <div key={label} className={`flex items-center gap-3 rounded px-3 py-2 ${rec ? "bg-emerald-950/30 border border-emerald-700/30" : "bg-slate-800/40"}`}>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-[11px] font-mono font-semibold text-slate-300 flex items-center gap-1.5">
-                                  {label}
-                                  {rec && <span className="text-[9px] text-emerald-400 border border-emerald-700/40 rounded px-1 py-0.5 font-bold tracking-wider">REC</span>}
-                                </div>
-                                <div className="text-[10px] font-mono text-slate-500">{desc}</div>
-                              </div>
-                              <div className="text-right shrink-0">
-                                <div className={`font-mono font-bold text-sm ${color}`}>${dollars.toFixed(2)}</div>
-                                <div className="text-[10px] font-mono text-slate-500">{pct.toFixed(1)}%</div>
-                              </div>
-                              <button
-                                onClick={() => setStake(dollars.toFixed(2))}
-                                className="shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white transition-colors"
-                                title="Apply this stake"
-                              >
-                                ↑ Use
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div className="text-[10px] font-mono text-slate-600 space-y-0.5 pt-1 border-t border-slate-800">
-                        <div>P(win) {(kellyResult.pWin * 100).toFixed(1)}% · eff. mult {kellyResult.effectiveMult.toFixed(2)}× · bankroll ${bankrollNum.toFixed(0)}</div>
-                        {!kellyResult.hasAllData && (
-                          <div className="text-amber-500/60">⚠ {kellyResult.missingPicks.join(", ")} excluded (no model data) — partial Kelly estimate</div>
+                  {(() => {
+                    // Use the estimate (standard Power table) when multiplierUnknown and estimate is available
+                    const activeResult = multiplierUnknown ? kellyEstimate : kellyResult;
+                    const isEstimate   = multiplierUnknown && kellyEstimate != null;
+
+                    if (activeResult === null) {
+                      return multiplierUnknown ? (
+                        <div className="text-center py-3 text-xs font-mono text-amber-400/70">
+                          Enter the PrizePicks multiplier above to see Kelly sizing
+                        </div>
+                      ) : (
+                        <div className="text-center py-3 text-xs font-mono text-muted-foreground">
+                          {playstyle === "flex" && Object.keys(flexPayouts).length === 0
+                            ? "Flex unavailable for this pick count"
+                            : multiplier <= 1 ? "Set multiplier to see Kelly sizing" : "Kelly unavailable"}
+                        </div>
+                      );
+                    }
+
+                    if (activeResult.fullKelly <= 0) {
+                      return (
+                        <div className="bg-rose-950/40 border border-rose-700/40 rounded-lg px-4 py-3 text-center space-y-1">
+                          <div className="text-rose-400 font-mono font-bold text-sm">No edge</div>
+                          <div className="text-[10px] font-mono text-rose-400/70">Kelly says skip this entry</div>
+                          <div className="text-[10px] font-mono text-slate-600 mt-1">
+                            P(win) {(activeResult.pWin * 100).toFixed(1)}% × {activeResult.effectiveMult.toFixed(2)}× &lt; 1
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        {isEstimate && (
+                          <div className="flex items-center gap-1.5 px-1">
+                            <span className="text-[10px] font-mono font-bold text-amber-400 border border-amber-700/40 bg-amber-900/20 rounded px-1.5 py-0.5 tracking-wider">est.</span>
+                            <span className="text-[10px] font-mono text-amber-400/70">
+                              Based on standard {n}-pick Power table ({activeResult.effectiveMult.toFixed(0)}×) — enter the real multiplier above to refine
+                            </span>
+                          </div>
                         )}
-                        <div>
-                          Adjust in{" "}
-                          <Link href="/settings" className="text-cyan-400 hover:text-cyan-300 transition-colors">Settings → Bankroll &amp; Staking</Link>
+                        <div className="space-y-1.5">
+                          {([
+                            { label: "Full Kelly",   fraction: activeResult.fullKelly,                desc: "Theoretically optimal — high variance" },
+                            { label: "Half Kelly",   fraction: activeResult.halfKelly,                desc: "Recommended — lower variance",          rec: true },
+                            { label: `${Math.round(kellyFracNum * 100)}% Kelly`, fraction: activeResult.fullKelly * kellyFracNum, desc: "Your configured fraction" },
+                          ] as { label: string; fraction: number; desc: string; rec?: boolean }[]).map(({ label, fraction, desc, rec }) => {
+                            const pct = Math.max(0, fraction) * 100;
+                            const dollars = Math.max(0, fraction) * bankrollNum;
+                            const color = pct > 2 ? "text-emerald-400" : pct > 0 ? "text-amber-400" : "text-rose-400";
+                            return (
+                              <div key={label} className={`flex items-center gap-3 rounded px-3 py-2 ${rec ? "bg-emerald-950/30 border border-emerald-700/30" : "bg-slate-800/40"}`}>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-[11px] font-mono font-semibold text-slate-300 flex items-center gap-1.5">
+                                    {label}
+                                    {rec && <span className="text-[9px] text-emerald-400 border border-emerald-700/40 rounded px-1 py-0.5 font-bold tracking-wider">REC</span>}
+                                    {isEstimate && <span className="text-[9px] text-amber-400/60 font-mono">est.</span>}
+                                  </div>
+                                  <div className="text-[10px] font-mono text-slate-500">{desc}</div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <div className={`font-mono font-bold text-sm ${color}`}>${dollars.toFixed(2)}</div>
+                                  <div className="text-[10px] font-mono text-slate-500">{pct.toFixed(1)}%</div>
+                                </div>
+                                <button
+                                  onClick={() => setStake(dollars.toFixed(2))}
+                                  className="shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white transition-colors"
+                                  title="Apply this stake"
+                                >
+                                  ↑ Use
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-600 space-y-0.5 pt-1 border-t border-slate-800">
+                          <div>P(win) {(activeResult.pWin * 100).toFixed(1)}% · eff. mult {activeResult.effectiveMult.toFixed(2)}× · bankroll ${bankrollNum.toFixed(0)}</div>
+                          {!activeResult.hasAllData && (
+                            <div className="text-amber-500/60">⚠ {activeResult.missingPicks.join(", ")} excluded (no model data) — partial Kelly estimate</div>
+                          )}
+                          <div>
+                            Adjust in{" "}
+                            <Link href="/settings" className="text-cyan-400 hover:text-cyan-300 transition-colors">Settings → Bankroll &amp; Staking</Link>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </CardContent>
               )}
             </Card>
