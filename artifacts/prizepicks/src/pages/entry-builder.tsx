@@ -1134,6 +1134,13 @@ export default function EntryBuilder() {
                                 <div className={`font-mono font-bold text-sm ${color}`}>${dollars.toFixed(2)}</div>
                                 <div className="text-[10px] font-mono text-slate-500">{pct.toFixed(1)}%</div>
                               </div>
+                              <button
+                                onClick={() => setStake(dollars.toFixed(2))}
+                                className="shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white transition-colors"
+                                title="Apply this stake"
+                              >
+                                ↑ Use
+                              </button>
                             </div>
                           );
                         })}
