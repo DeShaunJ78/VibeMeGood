@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   useGenerateLineupFactory,
   type LineupFactoryConfig,
@@ -551,6 +552,28 @@ function LineupCard({ lineup, index, onLoad }: { lineup: GeneratedLineup; index:
 // ─── Scored props table ───────────────────────────────────────────────────────
 function ScoredPropsTable({ props, pinnedIds }: { props: FactoryScoredProp[]; pinnedIds: Set<number> }) {
   const [filter, setFilter] = useState<"all" | "eligible" | "excluded">("all");
+
+  const { data: biasRaw } = useQuery({
+    queryKey: ["lf-stat-bias"],
+    queryFn: async () => {
+      const b = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+      const r = await fetch(`${b}/api/dashboard/stat-bias`);
+      if (!r.ok) return { buckets: [] };
+      return r.json() as Promise<{ buckets: Array<{ statType: string; delta: number | null; hasEnoughData: boolean }> }>;
+    },
+    staleTime: 60_000,
+  });
+
+  const statBiasMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const bkt of biasRaw?.buckets ?? []) {
+      if (bkt.hasEnoughData && bkt.delta != null && !m.has(bkt.statType)) {
+        m.set(bkt.statType, bkt.delta);
+      }
+    }
+    return m;
+  }, [biasRaw]);
+
   const filtered = props.filter(p => {
     if (filter === "eligible") return !p.noPlayReason;
     if (filter === "excluded") return !!p.noPlayReason;
@@ -587,6 +610,7 @@ function ScoredPropsTable({ props, pinnedIds }: { props: FactoryScoredProp[]; pi
               <TableHead className="text-xs text-muted-foreground">Source</TableHead>
               <TableHead className="text-xs text-muted-foreground">EV</TableHead>
               <TableHead className="text-xs text-muted-foreground">Edge</TableHead>
+              <TableHead className="text-xs text-muted-foreground">Bias</TableHead>
               <TableHead className="text-xs text-muted-foreground">Vol</TableHead>
               <TableHead className="text-xs text-muted-foreground">Flags</TableHead>
             </TableRow>
@@ -637,6 +661,17 @@ function ScoredPropsTable({ props, pinnedIds }: { props: FactoryScoredProp[]; pi
                 </TableCell>
                 <TableCell className="py-1.5 text-xs font-mono text-muted-foreground">
                   {p.edgeScore != null ? p.edgeScore.toFixed(1) : "—"}
+                </TableCell>
+                <TableCell className="py-1.5 text-xs font-mono">
+                  {(() => {
+                    const bd = statBiasMap.get(p.statType);
+                    if (bd == null) return <span className="text-muted-foreground/40">—</span>;
+                    return (
+                      <span className={bd >= 0 ? "text-emerald-400" : "text-rose-400"} title={`Personal bias: ${bd >= 0 ? "+" : ""}${bd.toFixed(1)}pp on ${p.statType}`}>
+                        {bd >= 0 ? "+" : ""}{bd.toFixed(1)}
+                      </span>
+                    );
+                  })()}
                 </TableCell>
                 <TableCell className="py-1.5 text-xs">
                   {p.volatilityRating === "high"   && <span className="text-red-400">↑</span>}

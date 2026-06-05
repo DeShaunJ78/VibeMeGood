@@ -2593,23 +2593,49 @@ export default function SlateBoard() {
                                 const bd = biasDeltaMap.get(bKey);
                                 if (bd == null) return null;
                                 const pos = bd >= 0;
+                                const flipUp   = bd >= 8  && (row.actionTag === "WATCH" || row.actionTag === "ACTION");
+                                const flipDown = bd <= -8 && row.actionTag === "PLAY";
                                 return (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span className={`font-mono text-[9px] font-bold px-1 py-px rounded border leading-none cursor-help ${
-                                        pos
-                                          ? "text-emerald-400 bg-emerald-950/40 border-emerald-700/40"
-                                          : "text-rose-400 bg-rose-950/40 border-rose-700/40"
-                                      }`}>
-                                        {pos ? "+" : ""}{bd.toFixed(1)}
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="left" className="font-mono text-xs max-w-xs">
-                                      <p className="font-bold mb-0.5">Personal Bias</p>
-                                      <p className="text-slate-400">Your {row.statType} hit rate is {Math.abs(bd).toFixed(1)} pp {pos ? "above" : "below"} model expectations on {row.lineType} lines.</p>
-                                      <p className="text-slate-500 mt-0.5">From Review → Stat Type Edge.</p>
-                                    </TooltipContent>
-                                  </Tooltip>
+                                  <>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className={`font-mono text-[9px] font-bold px-1 py-px rounded border leading-none cursor-help ${
+                                          pos
+                                            ? "text-emerald-400 bg-emerald-950/40 border-emerald-700/40"
+                                            : "text-rose-400 bg-rose-950/40 border-rose-700/40"
+                                        }`}>
+                                          {pos ? "+" : ""}{bd.toFixed(1)}
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="left" className="font-mono text-xs max-w-xs">
+                                        <p className="font-bold mb-0.5">Personal Bias</p>
+                                        <p className="text-slate-400">Your {row.statType} hit rate is {Math.abs(bd).toFixed(1)} pp {pos ? "above" : "below"} model expectations on {row.lineType} lines.</p>
+                                        <p className="text-slate-500 mt-0.5">From Review → Stat Type Edge.</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                    {flipUp && (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className="font-mono text-[9px] font-bold px-1 py-px rounded border text-emerald-300 bg-emerald-950/50 border-emerald-600/50 leading-none cursor-help">↑PLAY?</span>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="left" className="font-mono text-xs max-w-xs">
+                                          <p className="font-bold text-emerald-400 mb-0.5">Bias-Adjusted Upgrade</p>
+                                          <p className="text-slate-400">Your +{bd.toFixed(1)}pp personal edge on {row.statType} {row.lineType} lines may push this into PLAY territory for you.</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    )}
+                                    {flipDown && (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className="font-mono text-[9px] font-bold px-1 py-px rounded border text-amber-300 bg-amber-950/50 border-amber-600/50 leading-none cursor-help">⚠PLAY</span>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="left" className="font-mono text-xs max-w-xs">
+                                          <p className="font-bold text-amber-400 mb-0.5">Bias Warning</p>
+                                          <p className="text-slate-400">Your {bd.toFixed(1)}pp personal shortfall on {row.statType} {row.lineType} lines may weaken this PLAY for you specifically.</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    )}
+                                  </>
                                 );
                               })()}
                             </div>

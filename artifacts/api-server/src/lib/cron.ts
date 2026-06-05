@@ -20,6 +20,7 @@ import { syncWeather } from "./sync/weather";
 import { computeMatchupHistory } from "./sync/matchup-history";
 import { backfillHistoricalStats } from "./sync/historical-stats";
 import { calibrationJob } from "../scripts/calibration-job";
+import { gradePicksJob } from "./sync/auto-grade";
 
 export let preLockActive = false;
 export function isPreLockActive(): boolean { return preLockActive; }
@@ -278,6 +279,13 @@ export function startCronJobs() {
       const r = await backfillHistoricalStats({ nba: true, mlb: true, nhl: true, nfl: false });
       return r.total;
     })
+  );
+
+  // Auto-grade pending picks at 3:30 AM nightly — after game-logs (2 AM) and
+  // cleanup (3 AM) have run. Fuzzy stat-type alias matching resolves abbreviation
+  // mismatches (e.g. "PTS" ↔ "Points") before falling back to DNP inference.
+  cron.schedule("30 3 * * *", () =>
+    logPull("internal", "auto-grade-picks", gradePicksJob)
   );
 
   // Nightly matchup history rebuild at 4 AM (after game logs are updated)

@@ -475,6 +475,24 @@ export default function EntryBuilder() {
     return computeKellyResult(picks, "power", 0, {}, fixedMult);
   }, [picks, playstyle, fixedMult, n, multiplierUnknown]);
 
+  // For Flex entries with goblin/demon legs: estimate using default per-leg payout
+  // multipliers (demon ≈ 1.5×, goblin ≈ 0.75×, standard = 1.0×) applied as a
+  // product factor on the standard Flex payout table.
+  const kellyFlexEstimate = useMemo(() => {
+    if (!multiplierUnknown || playstyle !== "flex" || n < 3) return null;
+    const basePayouts = FLEX_PAYOUTS[n];
+    if (!basePayouts) return null;
+    const legFactor = picks.reduce((acc, p) => {
+      const est = p.lineType === "demon" ? 1.5 : p.lineType === "goblin" ? 0.75 : 1.0;
+      return acc * est;
+    }, 1);
+    const estimatedPayouts: Record<string, number> = {};
+    for (const [key, mult] of Object.entries(basePayouts)) {
+      estimatedPayouts[key] = mult * legFactor;
+    }
+    return computeKellyResult(picks, "flex", 0, estimatedPayouts);
+  }, [picks, playstyle, n, multiplierUnknown]);
+
   const evPct       = activeEV?.evPct ?? flexEstimatedEvPct ?? powerEstimatedEvPct;
   // Indicator thresholds: green >5%, amber -0.5% to 5% (covers break-even), red <-0.5%
   const evDotColor  = evPct == null ? "bg-slate-700" :
@@ -1107,9 +1125,9 @@ export default function EntryBuilder() {
               {kellyOpen && (
                 <CardContent className="space-y-3 pb-4">
                   {(() => {
-                    // Use the estimate (standard Power table) when multiplierUnknown and estimate is available
-                    const activeResult = multiplierUnknown ? kellyEstimate : kellyResult;
-                    const isEstimate   = multiplierUnknown && kellyEstimate != null;
+                    // Use the estimate when multiplierUnknown: Power → kellyEstimate, Flex → kellyFlexEstimate
+                    const activeResult = multiplierUnknown ? (kellyEstimate ?? kellyFlexEstimate) : kellyResult;
+                    const isEstimate   = multiplierUnknown && (kellyEstimate != null || kellyFlexEstimate != null);
 
                     if (activeResult === null) {
                       return multiplierUnknown ? (
@@ -1143,7 +1161,9 @@ export default function EntryBuilder() {
                           <div className="flex items-center gap-1.5 px-1">
                             <span className="text-[10px] font-mono font-bold text-amber-400 border border-amber-700/40 bg-amber-900/20 rounded px-1.5 py-0.5 tracking-wider">est.</span>
                             <span className="text-[10px] font-mono text-amber-400/70">
-                              Based on standard {n}-pick Power table ({activeResult.effectiveMult.toFixed(0)}×) — enter the real multiplier above to refine
+                              {playstyle === "flex"
+                                ? `Based on standard Flex table × estimated leg factors (demon 1.5×, goblin 0.75×) — enter the real multiplier to refine`
+                                : `Based on standard ${n}-pick Power table (${activeResult.effectiveMult.toFixed(0)}×) — enter the real multiplier above to refine`}
                             </span>
                           </div>
                         )}

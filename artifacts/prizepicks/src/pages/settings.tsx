@@ -325,6 +325,19 @@ export default function Settings() {
 
   const [calibrationNudge, setCalibrationNudge] = useState(false);
 
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  const { data: autoGradeStats, refetch: refetchGradeStats } = useQuery({
+    queryKey: ["auto-grade-stats"],
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/sync/auto-grade-stats`);
+      if (!r.ok) return { pendingPastDated: 0, pendingTotal: 0 };
+      return r.json() as Promise<{ pendingPastDated: number; pendingTotal: number }>;
+    },
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
+
   const { data: calStatus } = useQuery({
     queryKey: ["calibration-status"],
     queryFn: async () => {
@@ -683,6 +696,59 @@ export default function Settings() {
               const failed = prov?.status === "error";
               const ageMs = prov?.lastSuccessAt ? Date.now() - new Date(prov.lastSuccessAt).getTime() : null;
               const isStale = job.staleDays != null && ageMs != null && ageMs > job.staleDays * 86400000;
+
+              if (job.endpoint === "/api/sync/auto-grade-picks") {
+                const gradeRunning = syncingJob === job.endpoint;
+                const gradeProv = JOB_PROVIDER[job.endpoint] ? providerByName[JOB_PROVIDER[job.endpoint]] : undefined;
+                const gradeOk = gradeProv?.status === "success";
+                const gradeFailed = gradeProv?.status === "error";
+                const pendingCount = autoGradeStats?.pendingPastDated ?? 0;
+                const pendingDot = gradeRunning ? "bg-amber-400 animate-pulse"
+                  : gradeFailed ? "bg-rose-400"
+                  : pendingCount > 0 ? "bg-amber-400"
+                  : gradeOk ? "bg-emerald-400"
+                  : "bg-slate-600";
+                return (
+                  <div key={job.endpoint} className={`flex flex-col gap-1.5 p-3 bg-slate-950 border rounded ${gradeFailed ? "border-rose-500/30" : pendingCount > 0 ? "border-amber-500/20" : "border-slate-800"}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <span className={`w-2 h-2 rounded-full inline-block shrink-0 ${pendingDot}`} />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-sm">{job.label}</span>
+                            {pendingCount > 0 && (
+                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-900/40 border border-amber-700/40 text-amber-300">
+                                {pendingCount} need review
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] font-mono text-muted-foreground">
+                            {gradeProv?.lastSuccessAt
+                              ? `${gradeProv.recordsLastSync != null ? `${gradeProv.recordsLastSync} graded · ` : ""}${formatDistanceToNow(new Date(gradeProv.lastSuccessAt), { addSuffix: true })}`
+                              : "Runs nightly at 3:30 AM"}
+                          </span>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { triggerSync(job.endpoint, job.label); setTimeout(() => refetchGradeStats(), 3000); }}
+                        disabled={gradeRunning || syncingAll}
+                        className={`h-7 font-mono text-xs ${pendingCount > 0 ? "border-amber-600/50 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20" : "border-slate-700 bg-slate-800 hover:bg-slate-700"}`}
+                      >
+                        <RefreshCw className={`w-3 h-3 mr-1 ${gradeRunning ? "animate-spin" : ""}`} />
+                        {gradeRunning ? "Running" : "Grade Now"}
+                      </Button>
+                    </div>
+                    {pendingCount > 0 && (
+                      <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-400/80 bg-amber-900/20 border border-amber-700/30 rounded px-2 py-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        {pendingCount} past-dated {pendingCount === 1 ? "pick" : "picks"} couldn't be auto-graded — missing game log data. Check Journal to grade manually.
+                      </div>
+                    )}
+                  </div>
+                );
+              }
 
               if (job.endpoint === "/api/sync/calibration") {
                 const calIsStale = calStatus?.isStale ?? isStale;

@@ -6,6 +6,7 @@ import { dataPullLogsTable, alertsTable, syncRunsTable, playersTable, injuriesTa
 import { eq, and, isNull, isNotNull, or, gte, lte, sql, inArray } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { broadcastSyncStatus, broadcast } from "../lib/sse";
+import { gradePicksJob, getAutoGradeStats } from "../lib/sync/auto-grade";
 import { processPpData } from "../lib/sync/prizepicks";
 import { syncExternalOdds, recalcPropScores } from "../lib/sync/external-odds";
 import { computeAllProjections } from "../lib/projection/compute";
@@ -568,102 +569,20 @@ router.get("/data-readiness", async (_req, res) => {
 // POST /sync/auto-grade-picks — match pending entry picks against player_game_logs
 // and auto-set result to hit / miss / dnp for any past-dated pick that has a
 // game-log record (or where other picks from the same date do, signalling DNP).
+// Fuzzy stat-type alias matching is handled in auto-grade.ts (#94).
 router.post("/sync/auto-grade-picks", async (req, res) => {
-  await runSync("internal", "auto-grade-picks", async () => {
-    const todayStr = new Date().toISOString().slice(0, 10);
+  await runSync("internal", "auto-grade-picks", gradePicksJob, res);
+});
 
-    // 1. Fetch all pending picks that have a linked player
-    const pendingPicks = await db
-      .select({
-        pickId:    entryPicksTable.id,
-        entryId:   entryPicksTable.entryId,
-        playerId:  entryPicksTable.playerId,
-        statType:  entryPicksTable.statType,
-        direction: entryPicksTable.direction,
-        lineValue: entryPicksTable.lineValue,
-      })
-      .from(entryPicksTable)
-      .where(and(
-        eq(entryPicksTable.result, "pending"),
-        isNotNull(entryPicksTable.playerId),
-      ));
-
-    if (pendingPicks.length === 0) return 0;
-
-    // 2. Resolve entry dates (needed to match game-log dates)
-    const entryIds = [...new Set(pendingPicks.map(p => p.entryId))];
-    const entryRows = await db
-      .select({ id: entriesTable.id, entryDate: entriesTable.entryDate })
-      .from(entriesTable)
-      .where(inArray(entriesTable.id, entryIds));
-    const entryDateMap = new Map(entryRows.map(e => [e.id, e.entryDate]));
-
-    // 3. Only grade picks whose entry date is strictly in the past
-    const pastPicks = pendingPicks.filter(p => {
-      const d = entryDateMap.get(p.entryId);
-      return d != null && String(d) < todayStr;
-    });
-
-    if (pastPicks.length === 0) return 0;
-
-    // 4. Fetch relevant game logs in one query
-    const playerIds = [...new Set(pastPicks.map(p => p.playerId as number))];
-    const dates     = [...new Set(pastPicks.map(p => String(entryDateMap.get(p.entryId)!)))];
-
-    const gameLogs = await db
-      .select({
-        playerId: playerGameLogsTable.playerId,
-        gameDate: playerGameLogsTable.gameDate,
-        statType: playerGameLogsTable.statType,
-        value:    playerGameLogsTable.value,
-      })
-      .from(playerGameLogsTable)
-      .where(and(
-        inArray(playerGameLogsTable.playerId, playerIds),
-        inArray(playerGameLogsTable.gameDate, dates),
-      ));
-
-    // key: "playerId|date|statType" → numeric value
-    const logMap = new Map<string, number>();
-    for (const gl of gameLogs) {
-      logMap.set(`${gl.playerId}|${String(gl.gameDate)}|${gl.statType}`, Number(gl.value));
-    }
-
-    // Dates where we have at least one game log — used to infer DNP
-    const datesWithData = new Set(gameLogs.map(gl => String(gl.gameDate)));
-
-    // 5. Grade each past pick
-    let graded = 0;
-    for (const pick of pastPicks) {
-      const date = String(entryDateMap.get(pick.entryId)!);
-      const key  = `${pick.playerId}|${date}|${pick.statType}`;
-      const logValue = logMap.get(key);
-
-      let result: "hit" | "miss" | "dnp";
-      if (logValue != null) {
-        const line = Number(pick.lineValue);
-        if (pick.direction === "more") {
-          result = logValue >= line ? "hit" : "miss";
-        } else {
-          result = logValue <= line ? "hit" : "miss";
-        }
-      } else if (datesWithData.has(date)) {
-        // We have game-log data for this date but not for this player — DNP
-        result = "dnp";
-      } else {
-        // No game-log data at all for this date; skip rather than guess
-        continue;
-      }
-
-      await db
-        .update(entryPicksTable)
-        .set({ result })
-        .where(eq(entryPicksTable.id, pick.pickId));
-      graded++;
-    }
-
-    return graded;
-  }, res);
+// GET /sync/auto-grade-stats — pending pick counts for the Settings health panel (#93)
+router.get("/sync/auto-grade-stats", async (req, res) => {
+  try {
+    const stats = await getAutoGradeStats();
+    res.json(stats);
+  } catch (err) {
+    logger.error({ err }, "auto-grade-stats failed");
+    res.status(500).json({ error: "Failed to load auto-grade stats" });
+  }
 });
 
 // GET /sync/extension-download — streams the chrome-extension folder as a zip
