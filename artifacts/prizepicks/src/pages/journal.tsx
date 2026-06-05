@@ -389,7 +389,18 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
             <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded shrink-0 ${pick.direction === "more" ? "bg-emerald-900/30 text-emerald-400" : "bg-rose-900/30 text-rose-400"}`}>
               {pick.direction === "more" ? "↑ MORE" : "↓ LESS"}
             </span>
-            <span className="text-primary font-bold w-8 shrink-0">{pick.lineValue}</span>
+            {/* Line value: show locked → closing movement when CLV data is available */}
+            <span className="font-bold shrink-0 whitespace-nowrap text-primary">
+              {pick.lineValue}
+              {pick.closingLine != null && (
+                <>
+                  <span className="text-slate-600 mx-0.5">→</span>
+                  <span className={Number(pick.clv ?? 0) > 0 ? "text-emerald-400" : Number(pick.clv ?? 0) < 0 ? "text-rose-400" : "text-slate-400"}>
+                    {Number(pick.closingLine).toFixed(1)}
+                  </span>
+                </>
+              )}
+            </span>
             {pick.lineType && pick.lineType !== "standard" && (
               <Badge className={`text-[10px] px-1 py-0 shrink-0 ${pick.lineType === "demon" ? "bg-fuchsia-900/40 text-fuchsia-300" : "bg-orange-900/40 text-orange-300"}`}>
                 {pick.lineType}
@@ -404,13 +415,20 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
                 {Number(pick.projectionGap) > 0 ? "+" : ""}{Number(pick.projectionGap).toFixed(1)} edge
               </span>
             )}
-            {pick.result !== "pending" && pick.closingLine != null && pick.clv != null && (() => {
+            {/* CLV badge — shown whenever closing line is recorded, regardless of result */}
+            {pick.closingLine != null && pick.clv != null && (() => {
               const clv = Number(pick.clv);
-              const color = clv > 0 ? "text-emerald-400" : clv < 0 ? "text-rose-400" : "text-slate-500";
-              const icon  = clv > 0 ? "✅" : clv < 0 ? "❌" : "➡️";
+              const style = clv > 0
+                ? "bg-emerald-900/30 text-emerald-400 border-emerald-800/50"
+                : clv < 0
+                  ? "bg-rose-900/30 text-rose-400 border-rose-800/50"
+                  : "bg-slate-800 text-slate-400 border-slate-700";
               return (
-                <span className={`${color} shrink-0 ml-1 text-[10px] font-mono`}>
-                  CLV: {clv > 0 ? "+" : ""}{clv.toFixed(2)} {icon}
+                <span
+                  className={`${style} border text-[10px] font-bold font-mono px-1.5 py-0.5 rounded shrink-0`}
+                  title={`Locked: ${pick.lineValue} · Closing: ${Number(pick.closingLine).toFixed(1)} · CLV: ${clv > 0 ? "+" : ""}${clv.toFixed(2)}`}
+                >
+                  CLV {clv > 0 ? "+" : ""}{clv.toFixed(2)}
                 </span>
               );
             })()}
