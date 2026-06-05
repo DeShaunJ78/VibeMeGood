@@ -257,13 +257,15 @@ export default function CalibrationPage() {
                 <table className="w-full text-xs font-mono">
                   <thead>
                     <tr className="border-b border-slate-800 text-muted-foreground text-[10px] uppercase tracking-wider">
-                      <th className="text-left px-4 py-3">Bucket</th>
+                      <th className="text-left px-4 py-3">Sport</th>
+                      <th className="text-left px-3 py-3">Stat Type</th>
+                      <th className="text-left px-3 py-3">Edge Bucket</th>
                       <th className="text-left px-3 py-3">Dir</th>
-                      <th className="text-right px-3 py-3">Predicted</th>
-                      <th className="text-right px-3 py-3">Actual</th>
                       <th className="text-right px-3 py-3">Samples</th>
+                      <th className="text-right px-3 py-3">Predicted</th>
+                      <th className="text-right px-3 py-3">Empirical</th>
                       <th className="text-right px-3 py-3">Cal. Error</th>
-                      <th className="text-right px-3 py-3">Bucket Brier</th>
+                      <th className="text-right px-3 py-3">Brier</th>
                       <th className="text-right px-4 py-3">ECE Contrib</th>
                     </tr>
                   </thead>
@@ -273,10 +275,16 @@ export default function CalibrationPage() {
                         key={i}
                         className="border-b border-slate-800/60 hover:bg-slate-800/30 transition-colors"
                       >
-                        <td className="px-4 py-2.5 text-slate-300 font-medium">
+                        <td className="px-4 py-2 text-slate-300 font-medium uppercase text-[10px] tracking-wider">
+                          {b.sport}
+                        </td>
+                        <td className="px-3 py-2 text-slate-400 max-w-[140px] truncate" title={b.statType}>
+                          {b.statType}
+                        </td>
+                        <td className="px-3 py-2 text-slate-300 font-medium">
                           {BUCKET_LABEL[b.edgeBucket] ?? b.edgeBucket}
                         </td>
-                        <td className="px-3 py-2.5">
+                        <td className="px-3 py-2">
                           <span className={cn(
                             "inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider",
                             b.direction === "over"
@@ -286,10 +294,13 @@ export default function CalibrationPage() {
                             {b.direction.toUpperCase()}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-right text-slate-300 tabular-nums">
+                        <td className="px-3 py-2 text-right text-slate-300 tabular-nums font-semibold">
+                          {b.sampleSize.toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-400 tabular-nums">
                           {pct(b.predictedProb)}
                         </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums">
+                        <td className="px-3 py-2 text-right tabular-nums">
                           <span className={cn(
                             Math.abs(b.predictedProb - b.actualRate) <= 0.03 ? "text-emerald-400" :
                             Math.abs(b.predictedProb - b.actualRate) <= 0.07 ? "text-yellow-300" : "text-rose-400"
@@ -297,16 +308,13 @@ export default function CalibrationPage() {
                             {pct(b.actualRate)}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-right text-slate-400 tabular-nums">
-                          {b.sampleSize.toLocaleString()}
-                        </td>
-                        <td className={cn("px-3 py-2.5 text-right tabular-nums font-semibold", errColor(b.calibrationError))}>
+                        <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", errColor(b.calibrationError))}>
                           {pct(b.calibrationError, 2)}
                         </td>
-                        <td className="px-3 py-2.5 text-right text-slate-400 tabular-nums">
+                        <td className="px-3 py-2 text-right text-slate-400 tabular-nums">
                           {b.bucketBrier.toFixed(4)}
                         </td>
-                        <td className="px-4 py-2.5 text-right text-slate-500 tabular-nums">
+                        <td className="px-4 py-2 text-right text-slate-500 tabular-nums">
                           {b.ecContrib.toFixed(4)}
                         </td>
                       </tr>
@@ -314,12 +322,12 @@ export default function CalibrationPage() {
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-slate-700 bg-slate-950/60 font-semibold text-slate-300">
-                      <td className="px-4 py-3" colSpan={2}>TOTALS / OVERALL</td>
-                      <td className="px-3 py-3 text-right tabular-nums">—</td>
-                      <td className="px-3 py-3 text-right tabular-nums">—</td>
+                      <td className="px-4 py-3" colSpan={4}>TOTALS / OVERALL</td>
                       <td className="px-3 py-3 text-right tabular-nums text-slate-400">
                         {d.summary.totalSamples.toLocaleString()}
                       </td>
+                      <td className="px-3 py-3 text-right tabular-nums">—</td>
+                      <td className="px-3 py-3 text-right tabular-nums">—</td>
                       <td className={cn("px-3 py-3 text-right tabular-nums", errColor(d.summary.avgCalibrationError))}>
                         avg {pct(d.summary.avgCalibrationError, 2)}
                       </td>

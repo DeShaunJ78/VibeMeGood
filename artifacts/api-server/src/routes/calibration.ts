@@ -74,12 +74,12 @@ router.get("/calibration/diagnostics", async (req, res) => {
     if (sport)    rows = rows.filter(r => r.sport === sport);
     if (statType) rows = rows.filter(r => r.statType === statType);
 
-    // Aggregate by (edgeBucket, direction) across sports / stat-types
-    type Agg = { edgeBucket: string; direction: string; sampleSize: number; hitCount: number };
+    // Aggregate by (sport, statType, edgeBucket, direction) — one row per combination
+    type Agg = { sport: string; statType: string; edgeBucket: string; direction: string; sampleSize: number; hitCount: number };
     const aggMap = new Map<string, Agg>();
     for (const r of rows) {
-      const key = `${r.edgeBucket}|${r.direction}`;
-      const a = aggMap.get(key) ?? { edgeBucket: r.edgeBucket, direction: r.direction, sampleSize: 0, hitCount: 0 };
+      const key = `${r.sport}|${r.statType}|${r.edgeBucket}|${r.direction}`;
+      const a = aggMap.get(key) ?? { sport: r.sport, statType: r.statType, edgeBucket: r.edgeBucket, direction: r.direction, sampleSize: 0, hitCount: 0 };
       a.sampleSize += r.sampleSize ?? 0;
       a.hitCount   += r.hitCount   ?? 0;
       aggMap.set(key, a);
@@ -102,6 +102,8 @@ router.get("/calibration/diagnostics", async (req, res) => {
              (a.sampleSize - a.hitCount) * Math.pow(predictedProb, 2)) / a.sampleSize
           : 0;
         return {
+          sport:            a.sport,
+          statType:         a.statType,
           edgeBucket:       a.edgeBucket,
           direction:        a.direction,
           predictedProb:    Math.round(predictedProb   * 10000) / 10000,
@@ -114,6 +116,10 @@ router.get("/calibration/diagnostics", async (req, res) => {
         };
       })
       .sort((a, b) => {
+        const sportCmp = a.sport.localeCompare(b.sport);
+        if (sportCmp !== 0) return sportCmp;
+        const stCmp = a.statType.localeCompare(b.statType);
+        if (stCmp !== 0) return stCmp;
         const ai = BUCKET_ORDER.indexOf(a.edgeBucket);
         const bi = BUCKET_ORDER.indexOf(b.edgeBucket);
         return ai !== bi ? ai - bi : a.direction.localeCompare(b.direction);
