@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2, Pencil } from "lucide-react";
+import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2, Pencil, RotateCcw } from "lucide-react";
 import { format } from "date-fns";
 
 const SPORTS = ["NFL", "NBA", "MLB", "NHL", "WNBA", "MMA", "PGA", "NASCAR", "SOCCER"];
@@ -360,8 +360,26 @@ function EntryRow({ entry }: { entry: any }) {
   const abortRef = useRef<AbortController | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [reopening, setReopening] = useState(false);
   const { toast } = useToast();
   const qc = useQueryClient();
+  const patchEntry = useUpdateEntry();
+
+  async function handleReopenResult() {
+    setReopening(true);
+    try {
+      await patchEntry.mutateAsync({
+        id: entry.id,
+        data: { result: "pending", actualPayout: null },
+      });
+      await qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
+      toast({ title: "Entry re-opened", description: "Mark the correct result below." });
+    } catch {
+      toast({ title: "Failed to re-open entry", variant: "destructive" });
+    } finally {
+      setReopening(false);
+    }
+  }
 
   async function handleDeleteEntry(entryId: number) {
     setDeletingId(entryId);
@@ -507,6 +525,24 @@ function EntryRow({ entry }: { entry: any }) {
           {/* Inline result marking for pending entries */}
           {entry.result === "pending" && (
             <MarkResultPanel entry={entry} onDone={() => setExpanded(false)} />
+          )}
+
+          {/* Re-open action for settled entries */}
+          {entry.result !== "pending" && (
+            <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-800 rounded-lg px-3 py-2">
+              <RotateCcw className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                Result settled as <span className="text-slate-300">{entry.result.toUpperCase()}</span>
+              </span>
+              <button
+                onClick={handleReopenResult}
+                disabled={reopening}
+                className="ml-auto text-[10px] font-mono font-bold uppercase text-slate-400 hover:text-amber-400 transition-colors disabled:opacity-50 flex items-center gap-1"
+              >
+                <RotateCcw className="w-3 h-3" />
+                {reopening ? "Re-opening…" : "Re-open result"}
+              </button>
+            </div>
           )}
 
           {Array.isArray(entry.picks) && entry.picks.length > 0 && (
