@@ -447,6 +447,14 @@ export default function EntryBuilder() {
   const goblinCount = picks.filter(p => p.lineType === "goblin").length;
   const demonCount  = picks.filter(p => p.lineType === "demon").length;
 
+  const bankrollNum  = parseFloat(userSettings?.bankroll       ?? "500");
+  const kellyFracNum = parseFloat(userSettings?.kellyFraction  ?? "0.25");
+
+  const kellyResult = useMemo(() => {
+    if (n < 2 || multiplierUnknown) return null;
+    return computeKellyResult(picks, playstyle, multiplier, flexPayouts);
+  }, [picks, playstyle, multiplier, flexPayouts, n, multiplierUnknown]);
+
   const evPct       = activeEV?.evPct ?? flexEstimatedEvPct ?? powerEstimatedEvPct;
   // Indicator thresholds: green >5%, amber -0.5% to 5% (covers break-even), red <-0.5%
   const evDotColor  = evPct == null ? "bg-slate-700" :
@@ -1060,6 +1068,84 @@ export default function EntryBuilder() {
             </CardContent>
           </Card>
 
+          {/* Kelly Sizing Guide */}
+          {n >= 2 && (
+            <Card className="bg-slate-900 border-slate-800 shrink-0">
+              <CardHeader className="pb-2 pt-3">
+                <CardTitle className="text-sm font-mono uppercase tracking-wider flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-emerald-400" /> Sizing Guide
+                  </span>
+                  <button onClick={() => setKellyOpen(o => !o)} className="text-slate-500 hover:text-slate-300 transition-colors">
+                    {kellyOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                </CardTitle>
+              </CardHeader>
+              {kellyOpen && (
+                <CardContent className="space-y-3 pb-4">
+                  {multiplierUnknown ? (
+                    <div className="text-center py-3 text-xs font-mono text-amber-400/70">
+                      Enter the PrizePicks multiplier above to see Kelly sizing
+                    </div>
+                  ) : kellyResult === null ? (
+                    <div className="text-center py-3 text-xs font-mono text-muted-foreground">
+                      {playstyle === "flex" && Object.keys(flexPayouts).length === 0
+                        ? "Flex unavailable for this pick count"
+                        : multiplier <= 1 ? "Set multiplier to see Kelly sizing" : "Kelly unavailable"}
+                    </div>
+                  ) : kellyResult.fullKelly <= 0 ? (
+                    <div className="bg-rose-950/40 border border-rose-700/40 rounded-lg px-4 py-3 text-center space-y-1">
+                      <div className="text-rose-400 font-mono font-bold text-sm">No edge</div>
+                      <div className="text-[10px] font-mono text-rose-400/70">Kelly says skip this entry</div>
+                      <div className="text-[10px] font-mono text-slate-600 mt-1">
+                        P(win) {(kellyResult.pWin * 100).toFixed(1)}% × {kellyResult.effectiveMult.toFixed(2)}× &lt; 1
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        {([
+                          { label: "Full Kelly",   fraction: kellyResult.fullKelly,                desc: "Theoretically optimal — high variance" },
+                          { label: "Half Kelly",   fraction: kellyResult.halfKelly,                desc: "Recommended — lower variance",          rec: true },
+                          { label: `${Math.round(kellyFracNum * 100)}% Kelly`, fraction: kellyResult.fullKelly * kellyFracNum, desc: "Your configured fraction" },
+                        ] as { label: string; fraction: number; desc: string; rec?: boolean }[]).map(({ label, fraction, desc, rec }) => {
+                          const pct = Math.max(0, fraction) * 100;
+                          const dollars = Math.max(0, fraction) * bankrollNum;
+                          const color = pct > 5 ? "text-emerald-400" : pct > 0.5 ? "text-amber-400" : "text-rose-400";
+                          return (
+                            <div key={label} className={`flex items-center gap-3 rounded px-3 py-2 ${rec ? "bg-emerald-950/30 border border-emerald-700/30" : "bg-slate-800/40"}`}>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[11px] font-mono font-semibold text-slate-300 flex items-center gap-1.5">
+                                  {label}
+                                  {rec && <span className="text-[9px] text-emerald-400 border border-emerald-700/40 rounded px-1 py-0.5 font-bold tracking-wider">REC</span>}
+                                </div>
+                                <div className="text-[10px] font-mono text-slate-500">{desc}</div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <div className={`font-mono font-bold text-sm ${color}`}>${dollars.toFixed(2)}</div>
+                                <div className="text-[10px] font-mono text-slate-500">{pct.toFixed(1)}%</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-600 space-y-0.5 pt-1 border-t border-slate-800">
+                        <div>P(win) {(kellyResult.pWin * 100).toFixed(1)}% · eff. mult {kellyResult.effectiveMult.toFixed(2)}× · bankroll ${bankrollNum.toFixed(0)}</div>
+                        {!kellyResult.hasAllData && (
+                          <div className="text-amber-500/60">⚠ Missing pOver for {kellyResult.missingPicks.join(", ")} — using 50% fallback</div>
+                        )}
+                        <div>
+                          Adjust in{" "}
+                          <Link href="/settings" className="text-cyan-400 hover:text-cyan-300 transition-colors">Settings → Bankroll &amp; Staking</Link>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              )}
+            </Card>
+          )}
+
           {/* Payout Math */}
           <Card className="bg-slate-900 border-slate-800 shrink-0">
             <CardHeader className="pb-2 pt-4">
@@ -1195,28 +1281,6 @@ export default function EntryBuilder() {
                         </span>
                       </div>
                     </div>
-                    {/* Kelly Criterion */}
-                    {(() => {
-                      const b = (playstyle === "power" ? (multiplier - 1) : null);
-                      if (b == null || b <= 0) return null;
-                      const kellyFrac = (activeEV.pWin * b - (1 - activeEV.pWin)) / b;
-                      const kf = parseFloat(userSettings?.kellyFraction ?? "0.25");
-                      const bankroll = parseFloat(userSettings?.bankroll ?? "500");
-                      const scaledKelly = Math.max(0, kellyFrac * kf);
-                      const kellyStake = scaledKelly * bankroll;
-                      const kPct = Math.round(kf * 100);
-                      return (
-                        <div className="flex justify-between items-center border-t border-slate-800/60 pt-2">
-                          <span className="text-[10px] font-mono text-muted-foreground uppercase">Kelly Stake</span>
-                          <div className="text-right">
-                            <span className={`font-mono font-bold text-sm ${kellyStake > 0 ? "text-violet-400" : "text-slate-500"}`}>
-                              ${kellyStake.toFixed(2)}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground font-mono ml-1">({kPct}%K · ${bankroll.toFixed(0)})</span>
-                          </div>
-                        </div>
-                      );
-                    })()}
                   </div>
 
                   {!activeEV.hasAllData && (
