@@ -2088,11 +2088,25 @@ export default function SlateBoard() {
 
                     const isExpanded = expandedRow === row.ppLineId;
 
+                    // ── Bias-adjusted tag flip ──────────────────────────────────
+                    const biasEnabled = userSettings?.biasCorrectionEnabled === true;
+                    const bKeyRow = `${row.sport ?? ""}|${row.statType}|${row.lineType}`;
+                    const bDeltaRow = biasEnabled ? (biasDeltaMap.get(bKeyRow) ?? null) : null;
+                    const biasAdjEdge = bDeltaRow != null
+                      ? (row.edgeScore ?? 0) + Math.max(-5, Math.min(5, bDeltaRow))
+                      : null;
+                    const biasFlipToPlay   = biasAdjEdge != null && biasAdjEdge >= 55 && (row.edgeScore ?? 0) < 55;
+                    const biasFlipToAction = biasAdjEdge != null && biasAdjEdge >= 45 && (row.edgeScore ?? 0) < 45 && !biasFlipToPlay;
+                    const biasFlipDown     = biasAdjEdge != null && biasAdjEdge < 55  && (row.edgeScore ?? 0) >= 55;
+
                     return (
                       <React.Fragment key={row.ppLineId}>
                       <TableRow
                         className={`border-slate-800 cursor-pointer transition-colors ${
                           isNoPlay ? "opacity-50 hover:opacity-70" :
+                          biasFlipToPlay   ? "bg-emerald-950/20 hover:bg-emerald-950/30 border-l-2 border-l-emerald-600/60" :
+                          biasFlipToAction ? "bg-sky-950/15 hover:bg-sky-950/25 border-l-2 border-l-sky-600/50" :
+                          biasFlipDown     ? "bg-rose-950/10 hover:bg-rose-950/20 border-l-2 border-l-rose-700/40" :
                           row.isWatched ? "bg-amber-950/10 hover:bg-amber-950/20" :
                           "hover:bg-slate-800/50"
                         }`}
@@ -2588,15 +2602,12 @@ export default function SlateBoard() {
                                   </TooltipContent>
                                 </Tooltip>
                               )}
-                              {(() => {
-                                const bKey = `${row.sport ?? ""}|${row.statType}|${row.lineType}`;
-                                const bd = biasDeltaMap.get(bKey);
-                                if (bd == null) return null;
+                              {bDeltaRow != null && (() => {
+                                const bd = bDeltaRow;
                                 const pos = bd >= 0;
-                                const flipUp   = bd >= 8  && (row.actionTag === "WATCH" || row.actionTag === "ACTION");
-                                const flipDown = bd <= -8 && row.actionTag === "PLAY";
                                 return (
                                   <>
+                                    {/* Numeric delta badge — always shown when bias data exists */}
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <span className={`font-mono text-[9px] font-bold px-1 py-px rounded border leading-none cursor-help ${
@@ -2610,28 +2621,46 @@ export default function SlateBoard() {
                                       <TooltipContent side="left" className="font-mono text-xs max-w-xs">
                                         <p className="font-bold mb-0.5">Personal Bias</p>
                                         <p className="text-slate-400">Your {row.statType} hit rate is {Math.abs(bd).toFixed(1)} pp {pos ? "above" : "below"} model expectations on {row.lineType} lines.</p>
-                                        <p className="text-slate-500 mt-0.5">From Review → Stat Type Edge.</p>
+                                        {!biasEnabled && <p className="text-slate-500 mt-0.5 italic">Enable Bias Correction in Settings to see tag flips.</p>}
+                                        {biasEnabled && biasAdjEdge != null && <p className="text-slate-500 mt-0.5">Bias-adj edge: {biasAdjEdge.toFixed(1)} (raw: {(row.edgeScore ?? 0).toFixed(1)})</p>}
                                       </TooltipContent>
                                     </Tooltip>
-                                    {flipUp && (
+                                    {/* ↑PLAY w/ bias — bias pushes edge past 55 */}
+                                    {biasFlipToPlay && (
                                       <Tooltip>
                                         <TooltipTrigger asChild>
-                                          <span className="font-mono text-[9px] font-bold px-1 py-px rounded border text-emerald-300 bg-emerald-950/50 border-emerald-600/50 leading-none cursor-help">↑PLAY?</span>
+                                          <span className="font-mono text-[9px] font-bold px-1 py-px rounded border text-emerald-300 bg-emerald-950/60 border-emerald-500/60 leading-none cursor-help whitespace-nowrap">↑PLAY w/ bias</span>
                                         </TooltipTrigger>
                                         <TooltipContent side="left" className="font-mono text-xs max-w-xs">
-                                          <p className="font-bold text-emerald-400 mb-0.5">Bias-Adjusted Upgrade</p>
-                                          <p className="text-slate-400">Your +{bd.toFixed(1)}pp personal edge on {row.statType} {row.lineType} lines may push this into PLAY territory for you.</p>
+                                          <p className="font-bold text-emerald-400 mb-0.5">Bias-Adjusted Upgrade → PLAY</p>
+                                          <p className="text-slate-300">Raw edge {(row.edgeScore ?? 0).toFixed(1)} + bias {bd > 0 ? "+" : ""}{Math.max(-5, Math.min(5, bd)).toFixed(1)} pp = <span className="text-emerald-300 font-bold">{biasAdjEdge!.toFixed(1)}</span> (≥55 PLAY threshold).</p>
+                                          <p className="text-slate-400 mt-0.5">Your personal hit-rate edge on {row.statType} {row.lineType} lines crosses this into PLAY territory for you.</p>
                                         </TooltipContent>
                                       </Tooltip>
                                     )}
-                                    {flipDown && (
+                                    {/* ↑ACTION w/ bias — bias pushes edge past 45 but not 55 */}
+                                    {biasFlipToAction && (
                                       <Tooltip>
                                         <TooltipTrigger asChild>
-                                          <span className="font-mono text-[9px] font-bold px-1 py-px rounded border text-amber-300 bg-amber-950/50 border-amber-600/50 leading-none cursor-help">⚠PLAY</span>
+                                          <span className="font-mono text-[9px] font-bold px-1 py-px rounded border text-sky-300 bg-sky-950/50 border-sky-600/50 leading-none cursor-help whitespace-nowrap">↑ACTION w/ bias</span>
                                         </TooltipTrigger>
                                         <TooltipContent side="left" className="font-mono text-xs max-w-xs">
-                                          <p className="font-bold text-amber-400 mb-0.5">Bias Warning</p>
-                                          <p className="text-slate-400">Your {bd.toFixed(1)}pp personal shortfall on {row.statType} {row.lineType} lines may weaken this PLAY for you specifically.</p>
+                                          <p className="font-bold text-sky-400 mb-0.5">Bias-Adjusted Upgrade → ACTION</p>
+                                          <p className="text-slate-300">Raw edge {(row.edgeScore ?? 0).toFixed(1)} + bias +{Math.max(-5, Math.min(5, bd)).toFixed(1)} pp = <span className="text-sky-300 font-bold">{biasAdjEdge!.toFixed(1)}</span> (≥45 ACTION threshold).</p>
+                                          <p className="text-slate-400 mt-0.5">Your hit-rate edge on {row.statType} {row.lineType} lines elevates this above the ACTION threshold for you.</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    )}
+                                    {/* ↓PLAY w/ bias — bias pulls a PLAY below 55 */}
+                                    {biasFlipDown && (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className="font-mono text-[9px] font-bold px-1 py-px rounded border text-rose-300 bg-rose-950/50 border-rose-600/50 leading-none cursor-help whitespace-nowrap">↓PLAY w/ bias</span>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="left" className="font-mono text-xs max-w-xs">
+                                          <p className="font-bold text-rose-400 mb-0.5">Bias Warning — Weakened PLAY</p>
+                                          <p className="text-slate-300">Raw edge {(row.edgeScore ?? 0).toFixed(1)} − bias {Math.abs(Math.max(-5, Math.min(5, bd))).toFixed(1)} pp = <span className="text-rose-300 font-bold">{biasAdjEdge!.toFixed(1)}</span> (below 55 PLAY threshold).</p>
+                                          <p className="text-slate-400 mt-0.5">Your personal shortfall on {row.statType} {row.lineType} lines pulls this below PLAY territory for you.</p>
                                         </TooltipContent>
                                       </Tooltip>
                                     )}
