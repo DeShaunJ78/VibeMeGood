@@ -1368,8 +1368,8 @@ export default function SlateBoard() {
                   {playerRows.length} / {totalPlayerRowCount} rows
                 </span>
               )}
-              {/* mobile filter toggle + sync */}
-              <div className="md:hidden flex items-center gap-2">
+              {/* mobile filter toggle + sync — scrolls horizontally so chips never clip */}
+              <div className="md:hidden flex items-center gap-2 overflow-x-auto scrollbar-none">
                 <Button size="sm" variant="outline" onClick={() => setFilterOpen(true)} className="gap-1.5 font-mono text-xs border-slate-700 text-muted-foreground">
                   <Filter className="w-3.5 h-3.5" />
                   Filters
