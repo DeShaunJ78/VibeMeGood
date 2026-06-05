@@ -685,6 +685,8 @@ export interface ReviewStats {
   /** @nullable */
   avgClv?: number | null;
   /** @nullable */
+  clvCoverage?: number | null;
+  /** @nullable */
   kellyAdherenceRate?: number | null;
   hitRateByPickCount?: unknown;
   hitRateByEntryType?: unknown;

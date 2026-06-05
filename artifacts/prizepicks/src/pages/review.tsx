@@ -165,7 +165,7 @@ export default function Review() {
             <StatCard
               label="Avg CLV"
               value={s.avgClv != null ? `${Number(s.avgClv) > 0 ? "+" : ""}${Number(s.avgClv).toFixed(2)}` : "—"}
-              sub="closing line value"
+              sub={s.clvCoverage != null ? `${Math.round(Number(s.clvCoverage) * 100)}% CLV coverage` : "closing line value"}
               icon={s.avgClv != null && Number(s.avgClv) >= 0 ? TrendingUp : TrendingDown}
               color={s.avgClv != null && Number(s.avgClv) >= 0 ? "text-emerald-400" : "text-rose-400"}
             />

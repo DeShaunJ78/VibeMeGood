@@ -2081,6 +2081,7 @@ components:
         overallHitRate: { type: ["number", "null"] }
         pickHitRate: { type: ["number", "null"] }
         avgClv: { type: ["number", "null"] }
+        clvCoverage: { type: ["number", "null"] }
         kellyAdherenceRate: { type: ["number", "null"] }
         hitRateByPickCount: {}
         hitRateByEntryType: {}

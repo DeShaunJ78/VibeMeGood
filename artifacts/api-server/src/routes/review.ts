@@ -118,11 +118,12 @@ router.get("/dashboard/review", async (req, res) => {
     const hitPicks = completedPicks.filter(p => p.result === "hit");
     const pickHitRate = completedPicks.length > 0 ? hitPicks.length / completedPicks.length : null;
 
-    // CLV stats
+    // CLV stats — only include legs where closing_line was tracked (clv IS NOT NULL)
     const clvPicks = completedPicks.filter(p => p.clv !== null);
     const avgClv = clvPicks.length > 0
       ? clvPicks.reduce((sum, p) => sum + Number(p.clv ?? 0), 0) / clvPicks.length
       : null;
+    const clvCoverage = completedPicks.length > 0 ? clvPicks.length / completedPicks.length : null;
 
     // Model accuracy: projectionGap direction vs actual hit/miss
     const modelPicks = completedPicks.filter(
@@ -176,6 +177,7 @@ router.get("/dashboard/review", async (req, res) => {
       hitRateByEntryType,
       pickHitRate,
       avgClv,
+      clvCoverage,
       kellyAdherenceRate,
       modelAccuracy,
       emotionWinRates,
