@@ -29,8 +29,8 @@ export const CSV_GROUPS: { id: CsvColGroup; label: string; desc: string; columns
   {
     id: "projections",
     label: "Projections",
-    desc: "your projection, P(over) %",
-    columns: ["projection", "pover_pct"],
+    desc: "your projection, P(over) %, CLV",
+    columns: ["projection", "pover_pct", "clv"],
   },
 ];
 

@@ -486,6 +486,7 @@ const CSV_COLS: { header: string; group: CsvColGroup; value: (c: CsvColCtx) => u
   // projections
   { header: "projection",    group: "projections", value: c => c.pick.yourProjection ?? "" },
   { header: "pover_pct",     group: "projections", value: c => c.pOver ?? "" },
+  { header: "clv",           group: "projections", value: c => c.pick.clv != null ? Number(c.pick.clv).toFixed(2) : "" },
 ];
 
 router.get("/entries/export.csv", async (req, res): Promise<void> => {
