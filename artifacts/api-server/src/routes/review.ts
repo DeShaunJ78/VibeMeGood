@@ -86,8 +86,11 @@ router.get("/dashboard/review", async (req, res) => {
       obj.rate = obj.total > 0 ? obj.wins / obj.total : null;
     }
 
-    // Stat-type breakdown — hit/miss only (excludes dnp/pending), min 3 picks
-    const gradedPicks = picks.filter(p => p.result === "hit" || p.result === "miss");
+    // Stat-type breakdown — scoped to the same filtered entry set, hit/miss only, min 3 picks
+    const completedEntryIds = new Set(completedEntries.map(e => e.id));
+    const gradedPicks = picks.filter(p =>
+      completedEntryIds.has(p.entryId) && (p.result === "hit" || p.result === "miss")
+    );
     const statMap: Record<string, { hits: number; total: number; edgeSum: number; edgeCount: number }> = {};
     for (const p of gradedPicks) {
       const st = p.statType;
