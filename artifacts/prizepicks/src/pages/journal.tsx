@@ -423,6 +423,15 @@ function EntryRow({ entry }: { entry: any }) {
     entry.result === "partial" ? payout - stake :
     entry.result === "loss"    ? -stake : null;
 
+  const avgClv = (() => {
+    if (!Array.isArray(entry.picks) || entry.picks.length === 0) return null;
+    const vals = (entry.picks as any[])
+      .map((p: any) => (p.clv != null ? parseFloat(p.clv) : null))
+      .filter((v): v is number => v != null && !isNaN(v));
+    if (vals.length === 0) return null;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  })();
+
   const resultMismatch = (() => {
     if (entry.result === "pending") return false;
     if (!Array.isArray(entry.picks) || entry.picks.length === 0) return false;
@@ -536,6 +545,20 @@ function EntryRow({ entry }: { entry: any }) {
           {pnl != null && (
             <span className={`font-mono text-sm font-bold ${pnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
               {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}
+            </span>
+          )}
+          {avgClv != null && (
+            <span
+              title="Avg CLV across picks with closing line data"
+              className={`font-mono text-[11px] font-semibold px-1.5 py-0.5 rounded border shrink-0 ${
+                avgClv > 0.05
+                  ? "text-emerald-400 border-emerald-800/50 bg-emerald-950/30"
+                  : avgClv < -0.05
+                  ? "text-rose-400 border-rose-800/50 bg-rose-950/30"
+                  : "text-slate-400 border-slate-700 bg-slate-800/30"
+              }`}
+            >
+              CLV {avgClv > 0 ? "+" : ""}{avgClv.toFixed(2)}
             </span>
           )}
           {resultMismatch && (
