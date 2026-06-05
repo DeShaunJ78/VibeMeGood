@@ -286,11 +286,23 @@ async function seed() {
   console.log("Inserted alerts");
 
   // ---- Historical Entries ----
+  // Kelly adherence legend:
+  //   adhering   → stake ≤ kellySuggested × 1.10
+  //   over-sized → stake > kellySuggested × 1.10  (produces amber/red badge)
   const entryDefs = [
-    { entryDate: "2026-05-20", entryType: "power", pickCount: 3, stake: "20", displayedPayoutMultiplier: "6", potentialPayout: "120", actualPayout: "120", result: "win", notes: "Jokic monster + two easy ALT lines. Clean sweep.", emotionalState: "confident", earlyExitEligible: false, kellySuggested: "26" },
-    { entryDate: "2026-05-21", entryType: "flex", pickCount: 4, stake: "20", displayedPayoutMultiplier: "0", potentialPayout: "60", actualPayout: "30", result: "partial", notes: "3/4. Butler DNP killed the Tatum leg — correlation risk was worth it.", emotionalState: "neutral", earlyExitEligible: false, kellySuggested: "20" },
-    { entryDate: "2026-05-22", entryType: "power", pickCount: 2, stake: "10", displayedPayoutMultiplier: "3", potentialPayout: "30", actualPayout: "0", result: "loss", notes: "Curry threes missed badly. Bad beat night.", emotionalState: "frustrated", earlyExitEligible: false, kellySuggested: "16" },
-    { entryDate: "2026-05-22", entryType: "power", pickCount: 3, stake: "15", displayedPayoutMultiplier: "6", potentialPayout: "90", actualPayout: "90", result: "win", notes: "Evening game — Giannis and Donovan both went off.", emotionalState: "confident", earlyExitEligible: false, kellySuggested: "20" },
+    // ── March 2026 (mixed adherence — 2 over-sized, 1 adhering) ──────────────
+    { entryDate: "2026-03-15", entryType: "power", pickCount: 3, stake: "30", displayedPayoutMultiplier: "6",  potentialPayout: "180",  actualPayout: "0",    result: "loss",    notes: "Hot-streak tilt — sized well over Kelly. Paid for it.",           emotionalState: "frustrated", earlyExitEligible: false, kellySuggested: "22" },
+    { entryDate: "2026-03-18", entryType: "power", pickCount: 2, stake: "15", displayedPayoutMultiplier: "3",  potentialPayout: "45",   actualPayout: "45",   result: "win",     notes: "Disciplined two-legger. Stayed well within Kelly.",                emotionalState: "confident",  earlyExitEligible: false, kellySuggested: "18" },
+    { entryDate: "2026-03-25", entryType: "flex",  pickCount: 4, stake: "25", displayedPayoutMultiplier: "0",  potentialPayout: "62.5", actualPayout: "25",   result: "partial", notes: "3/4 but over-sized again. Need to trust the fraction.",             emotionalState: "neutral",    earlyExitEligible: false, kellySuggested: "20" },
+    // ── April 2026 (mixed adherence — 1 over-sized, 2 adhering) ─────────────
+    { entryDate: "2026-04-10", entryType: "power", pickCount: 3, stake: "18", displayedPayoutMultiplier: "6",  potentialPayout: "108",  actualPayout: "108",  result: "win",     notes: "Right-sized. Tatum and Jokic delivered cleanly.",                  emotionalState: "confident",  earlyExitEligible: false, kellySuggested: "22" },
+    { entryDate: "2026-04-20", entryType: "power", pickCount: 2, stake: "20", displayedPayoutMultiplier: "3",  potentialPayout: "60",   actualPayout: "0",    result: "loss",    notes: "Chasing yesterday's loss — sized over Kelly again.",               emotionalState: "frustrated", earlyExitEligible: false, kellySuggested: "16" },
+    { entryDate: "2026-04-28", entryType: "flex",  pickCount: 3, stake: "15", displayedPayoutMultiplier: "0",  potentialPayout: "75",   actualPayout: "75",   result: "win",     notes: "Back on track. Trusted model + Kelly fraction.",                   emotionalState: "confident",  earlyExitEligible: false, kellySuggested: "20" },
+    // ── May 2026 ─────────────────────────────────────────────────────────────
+    { entryDate: "2026-05-20", entryType: "power", pickCount: 3, stake: "20", displayedPayoutMultiplier: "6",  potentialPayout: "120",  actualPayout: "120",  result: "win",     notes: "Jokic monster + two easy ALT lines. Clean sweep.",                 emotionalState: "confident",  earlyExitEligible: false, kellySuggested: "26" },
+    { entryDate: "2026-05-21", entryType: "flex",  pickCount: 4, stake: "20", displayedPayoutMultiplier: "0",  potentialPayout: "60",   actualPayout: "30",   result: "partial", notes: "3/4. Butler DNP killed the Tatum leg — correlation risk was worth it.", emotionalState: "neutral", earlyExitEligible: false, kellySuggested: "20" },
+    { entryDate: "2026-05-22", entryType: "power", pickCount: 2, stake: "10", displayedPayoutMultiplier: "3",  potentialPayout: "30",   actualPayout: "0",    result: "loss",    notes: "Curry threes missed badly. Bad beat night.",                       emotionalState: "frustrated", earlyExitEligible: false, kellySuggested: "16" },
+    { entryDate: "2026-05-22", entryType: "power", pickCount: 3, stake: "15", displayedPayoutMultiplier: "6",  potentialPayout: "90",   actualPayout: "90",   result: "win",     notes: "Evening game — Giannis and Donovan both went off.",                emotionalState: "confident",  earlyExitEligible: false, kellySuggested: "20" },
     { entryDate: "2026-05-23", entryType: "power", pickCount: 3, stake: "20", result: "pending", notes: "Building for tonight — waiting on Butler status.", earlyExitEligible: true, earlyExitValue: "14.50", kellySuggested: "24" },
   ];
   const entries = await db.insert(entriesTable).values(entryDefs).returning();
@@ -303,32 +315,61 @@ async function seed() {
   //   Negative CLV (red)    → closing line dropped (market moved against you)
   //   Zero / null (grey)    → no movement or DNP/pending
   await db.insert(entryPicksTable).values([
-    // Entry 0 — 3-pick Power WIN: favorable (+1.5), flat (0.0), unfavorable (-1.0)
-    { entryId: entries[0].id, playerId: playersByName["Nikola Jokic"].id,            statType: "Points",    direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.2", projectionGap: "1.7",  result: "hit",  closingLine: "31.0", clv: "1.5"  },
-    { entryId: entries[0].id, playerId: playersByName["Jayson Tatum"].id,            statType: "Rebounds",  direction: "more", lineValue: "8.5",  lineType: "standard", yourProjection: "9.2",  projectionGap: "0.7",  result: "hit",  closingLine: "8.5",  clv: "0.0"  },
-    { entryId: entries[0].id, playerId: playersByName["Giannis Antetokounmpo"].id,   statType: "Points",    direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9",  result: "hit",  closingLine: "29.5", clv: "-1.0" },
+    // ── entries[0] 2026-03-15 — 3-pick Power LOSS (over-sized: 30 > 22×1.10=24.2) ──
+    { entryId: entries[0].id, playerId: playersByName["Nikola Jokic"].id,          statType: "Points",    direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.0", projectionGap: "1.5",  result: "miss", closingLine: "28.5", clv: "-1.0" },
+    { entryId: entries[0].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "Points",    direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "32.0", projectionGap: "1.5",  result: "miss", closingLine: "29.5", clv: "-1.0" },
+    { entryId: entries[0].id, playerId: playersByName["Stephen Curry"].id,         statType: "3-PT Made", direction: "more", lineValue: "4.5",  lineType: "demon",    yourProjection: "5.1",  projectionGap: "0.6",  result: "hit",  closingLine: "5.0",  clv: "0.5"  },
 
-    // Entry 1 — 4-pick Flex LOSS: favorable (+1.5), favorable (+1.0), DNP (null), unfavorable (-1.5)
-    { entryId: entries[1].id, playerId: playersByName["Jayson Tatum"].id,            statType: "Points",    direction: "more", lineValue: "27.5", lineType: "standard", yourProjection: "29.8", projectionGap: "2.3",  result: "hit",  closingLine: "29.0", clv: "1.5"  },
-    { entryId: entries[1].id, playerId: playersByName["Kevin Durant"].id,            statType: "Points",    direction: "more", lineValue: "25.5", lineType: "standard", yourProjection: "27.8", projectionGap: "2.3",  result: "hit",  closingLine: "26.5", clv: "1.0"  },
-    { entryId: entries[1].id, playerId: playersByName["Jimmy Butler"].id,            statType: "Points",    direction: "more", lineValue: "20.5", lineType: "goblin",   yourProjection: "17.3", projectionGap: "-3.2", result: "dnp",  closingLine: null,   clv: null   },
-    { entryId: entries[1].id, playerId: playersByName["Devin Booker"].id,            statType: "Points",    direction: "more", lineValue: "24.5", lineType: "standard", yourProjection: "22.1", projectionGap: "-2.4", result: "miss", closingLine: "23.0", clv: "-1.5" },
+    // ── entries[1] 2026-03-18 — 2-pick Power WIN (adhering: 15 ≤ 18×1.10=19.8) ──
+    { entryId: entries[1].id, playerId: playersByName["Jayson Tatum"].id,          statType: "Points",    direction: "more", lineValue: "27.5", lineType: "standard", yourProjection: "29.5", projectionGap: "2.0",  result: "hit",  closingLine: "28.5", clv: "1.0"  },
+    { entryId: entries[1].id, playerId: playersByName["Kevin Durant"].id,          statType: "Points",    direction: "more", lineValue: "25.5", lineType: "standard", yourProjection: "27.0", projectionGap: "1.5",  result: "hit",  closingLine: "26.0", clv: "0.5"  },
 
-    // Entry 2 — 2-pick Flex LOSS: favorable (+1.0), unfavorable (-0.5)
-    { entryId: entries[2].id, playerId: playersByName["Stephen Curry"].id,           statType: "3-PT Made", direction: "more", lineValue: "4.5",  lineType: "demon",    yourProjection: "5.2",  projectionGap: "0.7",  result: "miss", closingLine: "5.5",  clv: "1.0"  },
-    { entryId: entries[2].id, playerId: playersByName["LeBron James"].id,            statType: "Assists",   direction: "more", lineValue: "7.5",  lineType: "standard", yourProjection: "8.4",  projectionGap: "0.9",  result: "miss", closingLine: "7.0",  clv: "-0.5" },
+    // ── entries[2] 2026-03-25 — 4-pick Flex PARTIAL (over-sized: 25 > 20×1.10=22) ──
+    { entryId: entries[2].id, playerId: playersByName["Nikola Jokic"].id,          statType: "Points",    direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.5", projectionGap: "2.0",  result: "hit",  closingLine: "30.5", clv: "1.0"  },
+    { entryId: entries[2].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "Rebounds",  direction: "more", lineValue: "11.5", lineType: "standard", yourProjection: "12.5", projectionGap: "1.0",  result: "hit",  closingLine: "11.5", clv: "0.0"  },
+    { entryId: entries[2].id, playerId: playersByName["LeBron James"].id,          statType: "Assists",   direction: "more", lineValue: "7.5",  lineType: "standard", yourProjection: "8.5",  projectionGap: "1.0",  result: "hit",  closingLine: "7.5",  clv: "0.0"  },
+    { entryId: entries[2].id, playerId: playersByName["Devin Booker"].id,          statType: "Points",    direction: "more", lineValue: "24.5", lineType: "standard", yourProjection: "22.0", projectionGap: "-2.5", result: "miss", closingLine: "23.5", clv: "-1.0" },
 
-    // Entry 3 — 3-pick Power WIN: large favorable (+2.0), flat (0.0), large unfavorable (-1.5)
-    { entryId: entries[3].id, playerId: playersByName["Giannis Antetokounmpo"].id,   statType: "Points",    direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9",  result: "hit",  closingLine: "32.5", clv: "2.0"  },
-    { entryId: entries[3].id, playerId: playersByName["Donovan Mitchell"].id,        statType: "Points",    direction: "more", lineValue: "26.5", lineType: "standard", yourProjection: "28.5", projectionGap: "2.0",  result: "hit",  closingLine: "26.5", clv: "0.0"  },
-    { entryId: entries[3].id, playerId: playersByName["Nikola Jokic"].id,            statType: "Assists",   direction: "more", lineValue: "9.5",  lineType: "demon",    yourProjection: "8.9",  projectionGap: "-0.6", result: "hit",  closingLine: "8.0",  clv: "-1.5" },
+    // ── entries[3] 2026-04-10 — 3-pick Power WIN (adhering: 18 ≤ 22×1.10=24.2) ──
+    { entryId: entries[3].id, playerId: playersByName["Jayson Tatum"].id,          statType: "Points",    direction: "more", lineValue: "27.5", lineType: "standard", yourProjection: "30.0", projectionGap: "2.5",  result: "hit",  closingLine: "29.0", clv: "1.5"  },
+    { entryId: entries[3].id, playerId: playersByName["Nikola Jokic"].id,          statType: "Points",    direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "32.0", projectionGap: "2.5",  result: "hit",  closingLine: "30.5", clv: "1.0"  },
+    { entryId: entries[3].id, playerId: playersByName["Donovan Mitchell"].id,      statType: "Points",    direction: "more", lineValue: "26.5", lineType: "standard", yourProjection: "28.0", projectionGap: "1.5",  result: "hit",  closingLine: "27.0", clv: "0.5"  },
 
-    // Entry 4 — 3-pick Power PENDING: no closing line yet
-    { entryId: entries[4].id, playerId: playersByName["Nikola Jokic"].id,            statType: "Points",    direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.2", projectionGap: "1.7",  result: "pending" },
-    { entryId: entries[4].id, playerId: playersByName["Giannis Antetokounmpo"].id,   statType: "Points",    direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9",  result: "pending" },
-    { entryId: entries[4].id, playerId: playersByName["Stephen Curry"].id,           statType: "Points",    direction: "more", lineValue: "26.5", lineType: "standard", yourProjection: "29.3", projectionGap: "2.8",  result: "pending" },
+    // ── entries[4] 2026-04-20 — 2-pick Power LOSS (over-sized: 20 > 16×1.10=17.6) ──
+    { entryId: entries[4].id, playerId: playersByName["Stephen Curry"].id,         statType: "Points",    direction: "more", lineValue: "26.5", lineType: "standard", yourProjection: "28.5", projectionGap: "2.0",  result: "miss", closingLine: "25.5", clv: "-1.0" },
+    { entryId: entries[4].id, playerId: playersByName["Jaylen Brown"].id,          statType: "Points",    direction: "more", lineValue: "22.5", lineType: "standard", yourProjection: "24.0", projectionGap: "1.5",  result: "miss", closingLine: "21.5", clv: "-1.0" },
+
+    // ── entries[5] 2026-04-28 — 3-pick Flex WIN (adhering: 15 ≤ 20×1.10=22) ──
+    { entryId: entries[5].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "Points",    direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.0", projectionGap: "2.5",  result: "hit",  closingLine: "32.0", clv: "1.5"  },
+    { entryId: entries[5].id, playerId: playersByName["Kevin Durant"].id,          statType: "Points",    direction: "more", lineValue: "25.5", lineType: "standard", yourProjection: "27.5", projectionGap: "2.0",  result: "hit",  closingLine: "26.5", clv: "1.0"  },
+    { entryId: entries[5].id, playerId: playersByName["Jamal Murray"].id,          statType: "Points",    direction: "more", lineValue: "21.5", lineType: "standard", yourProjection: "23.0", projectionGap: "1.5",  result: "hit",  closingLine: "22.0", clv: "0.5"  },
+
+    // ── entries[6] 2026-05-20 — 3-pick Power WIN: favorable (+1.5), flat (0.0), unfavorable (-1.0) ──
+    { entryId: entries[6].id, playerId: playersByName["Nikola Jokic"].id,          statType: "Points",    direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.2", projectionGap: "1.7",  result: "hit",  closingLine: "31.0", clv: "1.5"  },
+    { entryId: entries[6].id, playerId: playersByName["Jayson Tatum"].id,          statType: "Rebounds",  direction: "more", lineValue: "8.5",  lineType: "standard", yourProjection: "9.2",  projectionGap: "0.7",  result: "hit",  closingLine: "8.5",  clv: "0.0"  },
+    { entryId: entries[6].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "Points",    direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9",  result: "hit",  closingLine: "29.5", clv: "-1.0" },
+
+    // ── entries[7] 2026-05-21 — 4-pick Flex PARTIAL: favorable, favorable, DNP, unfavorable ──
+    { entryId: entries[7].id, playerId: playersByName["Jayson Tatum"].id,          statType: "Points",    direction: "more", lineValue: "27.5", lineType: "standard", yourProjection: "29.8", projectionGap: "2.3",  result: "hit",  closingLine: "29.0", clv: "1.5"  },
+    { entryId: entries[7].id, playerId: playersByName["Kevin Durant"].id,          statType: "Points",    direction: "more", lineValue: "25.5", lineType: "standard", yourProjection: "27.8", projectionGap: "2.3",  result: "hit",  closingLine: "26.5", clv: "1.0"  },
+    { entryId: entries[7].id, playerId: playersByName["Jimmy Butler"].id,          statType: "Points",    direction: "more", lineValue: "20.5", lineType: "goblin",   yourProjection: "17.3", projectionGap: "-3.2", result: "dnp",  closingLine: null,   clv: null   },
+    { entryId: entries[7].id, playerId: playersByName["Devin Booker"].id,          statType: "Points",    direction: "more", lineValue: "24.5", lineType: "standard", yourProjection: "22.1", projectionGap: "-2.4", result: "miss", closingLine: "23.0", clv: "-1.5" },
+
+    // ── entries[8] 2026-05-22 — 2-pick Power LOSS: favorable (+1.0), unfavorable (-0.5) ──
+    { entryId: entries[8].id, playerId: playersByName["Stephen Curry"].id,         statType: "3-PT Made", direction: "more", lineValue: "4.5",  lineType: "demon",    yourProjection: "5.2",  projectionGap: "0.7",  result: "miss", closingLine: "5.5",  clv: "1.0"  },
+    { entryId: entries[8].id, playerId: playersByName["LeBron James"].id,          statType: "Assists",   direction: "more", lineValue: "7.5",  lineType: "standard", yourProjection: "8.4",  projectionGap: "0.9",  result: "miss", closingLine: "7.0",  clv: "-0.5" },
+
+    // ── entries[9] 2026-05-22 — 3-pick Power WIN: large favorable, flat, large unfavorable ──
+    { entryId: entries[9].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "Points",    direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9",  result: "hit",  closingLine: "32.5", clv: "2.0"  },
+    { entryId: entries[9].id, playerId: playersByName["Donovan Mitchell"].id,      statType: "Points",    direction: "more", lineValue: "26.5", lineType: "standard", yourProjection: "28.5", projectionGap: "2.0",  result: "hit",  closingLine: "26.5", clv: "0.0"  },
+    { entryId: entries[9].id, playerId: playersByName["Nikola Jokic"].id,          statType: "Assists",   direction: "more", lineValue: "9.5",  lineType: "demon",    yourProjection: "8.9",  projectionGap: "-0.6", result: "hit",  closingLine: "8.0",  clv: "-1.5" },
+
+    // ── entries[10] 2026-05-23 — 3-pick Power PENDING ──
+    { entryId: entries[10].id, playerId: playersByName["Nikola Jokic"].id,          statType: "Points",    direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.2", projectionGap: "1.7",  result: "pending" },
+    { entryId: entries[10].id, playerId: playersByName["Giannis Antetokounmpo"].id, statType: "Points",    direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9",  result: "pending" },
+    { entryId: entries[10].id, playerId: playersByName["Stephen Curry"].id,         statType: "Points",    direction: "more", lineValue: "26.5", lineType: "standard", yourProjection: "29.3", projectionGap: "2.8",  result: "pending" },
   ]);
-  console.log("Inserted 15 entry picks");
+  console.log("Inserted 33 entry picks (6 historical Mar/Apr + 15 May + 3 pending May)");
 
   // ---- Payout Config (Power + Flex — actual PrizePicks multipliers) ----
   await db.insert(payoutConfigTable).values([
