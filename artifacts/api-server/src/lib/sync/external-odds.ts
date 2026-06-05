@@ -75,9 +75,16 @@ const SPORT_STAT_MARKETS: Record<string, Record<string, string>> = {
 };
 
 /** Minimum ms between successful external-odds syncs (normal cron path).
- *  Sits just under the hourly cron so each hour produces exactly one fetch,
+ *  Sits just under the 3-hour cron so each slot produces exactly one fetch,
  *  while rapid/overlapping triggers are coalesced into a score recalc only. */
-const MIN_INTERVAL_MS = 50 * 60 * 1000; // 50 minutes
+const MIN_INTERVAL_MS = 170 * 60 * 1000; // 170 minutes (just under 3 h)
+
+/** Stop spending credits if the Odds API says fewer than this remain for the month. */
+const LOW_CREDITS_THRESHOLD = 2_000;
+
+/** Last known credit balance from the x-requests-remaining header. Persists across
+ *  calls within the same server process so the guard works even before the first sync. */
+let lastKnownRemaining: number | null = null;
 /** Only pull player props for games starting within this window of "lock"
  *  (game start). Keeps credit spend proportional to the imminent slate — games
  *  further out are skipped entirely (the events list call itself is free). */
@@ -198,6 +205,13 @@ async function runSyncExternalOdds(force = false): Promise<number> {
       //    kept tight. A single bad market key would 422 the whole event, so
       //    SPORT_STAT_MARKETS only contains verified keys.
       for (const evMeta of eventList) {
+        // Credit guard: bail out before spending if we know balance is critically low.
+        if (lastKnownRemaining !== null && lastKnownRemaining < LOW_CREDITS_THRESHOLD) {
+          logger.warn({ lastKnownRemaining, threshold: LOW_CREDITS_THRESHOLD },
+            "external-odds: Odds API credits critically low — skipping remaining events to preserve budget");
+          break;
+        }
+
         const oddsRes = await fetch(
           `${ODDS_BASE}/sports/${sportKey}/events/${evMeta.id}/odds?` +
           `apiKey=${ODDS_KEY}&regions=us&markets=${marketsParam}&oddsFormat=american`,
@@ -209,7 +223,13 @@ async function runSyncExternalOdds(force = false): Promise<number> {
         const remaining = oddsRes.headers.get("x-requests-remaining");
         const used = oddsRes.headers.get("x-requests-used");
         if (remaining !== null) {
-          logger.info({ sport, remaining, used }, "Odds API credits");
+          lastKnownRemaining = parseInt(remaining, 10);
+          if (lastKnownRemaining < LOW_CREDITS_THRESHOLD) {
+            logger.warn({ remaining: lastKnownRemaining, used, threshold: LOW_CREDITS_THRESHOLD },
+              "external-odds: Odds API credits critically low — halting further fetches this cycle");
+          } else {
+            logger.info({ sport, remaining, used }, "Odds API credits");
+          }
         }
         const event = await oddsRes.json() as any;
         for (const bookmaker of (event.bookmakers || [])) {

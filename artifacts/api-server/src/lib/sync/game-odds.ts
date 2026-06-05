@@ -15,8 +15,9 @@ const SPORTS: Record<string, { oddsKey: string; espnPath: string }> = {
   NHL:  { oddsKey: "icehockey_nhl",        espnPath: "hockey/nhl" },
 };
 
-/** Min ms between successful game-odds syncs — protects paid Odds API credits. */
-const MIN_INTERVAL_MS = 50 * 60 * 1000; // 50 minutes
+/** Min ms between successful game-odds syncs — protects paid Odds API credits.
+ *  Aligned with the 6-hour cron cadence. */
+const MIN_INTERVAL_MS = 350 * 60 * 1000; // 350 minutes (just under 6 h)
 /** Match an Odds API event to a games row within this window of commence time. */
 const MATCH_WINDOW_MS = 24 * 60 * 60 * 1000; // ±1 day
 

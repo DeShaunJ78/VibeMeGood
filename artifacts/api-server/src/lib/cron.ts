@@ -135,9 +135,10 @@ export function startCronJobs() {
     logPull("injury-news", "injuries", syncInjuries)
   );
 
-  // External odds hourly (player props are pulled per-event near lock; the
-  // in-function gate + 6h window keep credit spend tight)
-  cron.schedule("0 * * * *", () =>
+  // External odds every 3 hours. Pre-lock (2h-before-game trigger above) already
+  // covers time-critical refreshes — the routine cron just keeps the board warm
+  // between games. Cutting from hourly → every-3h saves ~67% of Odds API credits.
+  cron.schedule("0 */3 * * *", () =>
     logPull("the-odds-api", "external-odds", syncExternalOdds)
   );
 
@@ -252,9 +253,9 @@ export function startCronJobs() {
     logPull("espn", "game-schedule", syncGameSchedule)
   );
 
-  // Game odds (spread/total) hourly — bulk /odds endpoint, ~2 credits/sport,
-  // self-guarded by a 50-min floor so overlapping triggers don't double-spend.
-  cron.schedule("15 * * * *", () =>
+  // Game odds (spread/total) every 6 hours — bulk /odds endpoint, ~2 credits/sport.
+  // Lines move slowly enough that 4 pulls/day is plenty; pre-lock covers urgency.
+  cron.schedule("15 */6 * * *", () =>
     logPull("the-odds-api", "game-odds", syncGameOdds)
   );
 
