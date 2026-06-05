@@ -1413,6 +1413,7 @@ export default function LineupFactory() {
         playerName:     pick.playerName,
         imageUrl:       pick.imageUrl ?? null,
         teamAbbr:       null,
+        gameId:         pick.gameId ?? null,
         statType:       pick.statType,
         lineValue:      pick.ppLine,
         lineType:       pick.lineType,

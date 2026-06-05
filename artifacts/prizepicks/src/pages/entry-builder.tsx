@@ -976,10 +976,11 @@ export default function EntryBuilder() {
                       <span className="font-bold">Same-game correlation (SGP) risk</span>
                       {correlatedGames.map((ps, i) => {
                         const teams = [...new Set(ps.map(p => p.teamAbbr).filter(Boolean))];
-                        const label = teams.length >= 2 ? `${teams[0]} vs ${teams[1]}` : teams[0] ?? "same game";
+                        const gameLabel = teams.length >= 2 ? `${teams[0]} vs ${teams[1]}` : teams[0] ?? "same game";
+                        const pickList = ps.map(p => `${p.playerName} ${p.statType}`).join(", ");
                         return (
                           <div key={i} className="text-amber-400/80 mt-0.5">
-                            {ps.length} picks from {label} — outcomes are correlated; parlay math overstates independence
+                            {gameLabel}: {pickList} — outcomes are correlated; parlay math overstates independence
                           </div>
                         );
                       })}

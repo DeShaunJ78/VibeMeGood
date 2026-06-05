@@ -18,6 +18,7 @@ interface TeamRow {
   pickCategory?: string;
   teamPickType?: string | null;
   teamId?: number | null;
+  gameId?: number | null;
 }
 
 interface Props {
@@ -118,7 +119,7 @@ export function TeamPicksBoard({ rows, isLoading, onSelectProp }: Props) {
                             className="font-mono text-xs h-7 px-2 border-emerald-800 text-emerald-400 hover:bg-emerald-900/30"
                             onClick={() => isPicked ? removePick(row.ppLineId) : addPick({
                               ppLineId: row.ppLineId, playerId: row.playerId, playerName: row.teamAbbr ?? "Team",
-                              imageUrl: null, teamAbbr: row.teamAbbr ?? null, statType: row.statType, lineValue: row.lineValue,
+                              imageUrl: null, teamAbbr: row.teamAbbr ?? null, gameId: row.gameId ?? null, statType: row.statType, lineValue: row.lineValue,
                               lineType: row.lineType, direction: "more", yourProjection: null, p99: null, pOver: null, edgeScore: null, actionTag: null,
                             })}
                           >
@@ -130,7 +131,7 @@ export function TeamPicksBoard({ rows, isLoading, onSelectProp }: Props) {
                             className="font-mono text-xs h-7 px-2 border-rose-800 text-rose-400 hover:bg-rose-900/30"
                             onClick={() => addPick({
                               ppLineId: row.ppLineId + 10000, playerId: row.playerId, playerName: row.teamAbbr ?? "Team",
-                              imageUrl: null, teamAbbr: row.teamAbbr ?? null, statType: row.statType, lineValue: row.lineValue,
+                              imageUrl: null, teamAbbr: row.teamAbbr ?? null, gameId: row.gameId ?? null, statType: row.statType, lineValue: row.lineValue,
                               lineType: row.lineType, direction: "less", yourProjection: null, p99: null, pOver: null, edgeScore: null, actionTag: null,
                             })}
                           >
@@ -144,7 +145,7 @@ export function TeamPicksBoard({ rows, isLoading, onSelectProp }: Props) {
                           className="font-mono text-xs h-7 px-3 border-violet-800 text-violet-400 hover:bg-violet-900/30"
                           onClick={() => isPicked ? removePick(row.ppLineId) : addPick({
                             ppLineId: row.ppLineId, playerId: row.playerId, playerName: row.teamAbbr ?? "Team",
-                            imageUrl: null, teamAbbr: row.teamAbbr ?? null, statType: "Win", lineValue: row.lineValue,
+                            imageUrl: null, teamAbbr: row.teamAbbr ?? null, gameId: row.gameId ?? null, statType: "Win", lineValue: row.lineValue,
                             lineType: row.lineType, direction: "more", yourProjection: null, p99: null, pOver: null, edgeScore: null, actionTag: null,
                           })}
                         >
