@@ -275,15 +275,16 @@ function VarianceIntelSection({ settings, onUpdate }: { settings: UserSettings; 
 const SYNC_JOBS: Array<{ label: string; endpoint: string; staleDays?: number }> = [
   // PrizePicks lines are NOT server-syncable (PerimeterX 403s every server fetch).
   // Use the browser copy-paste import card below instead.
-  { label: "Injury Reports",     endpoint: "/api/sync/injuries" },
-  { label: "External Odds",      endpoint: "/api/sync/external-odds" },
-  { label: "Player Projections", endpoint: "/api/sync/projections" },
-  { label: "Game Scores",        endpoint: "/api/sync/scores" },
-  { label: "Variance Compute",   endpoint: "/api/sync/variance" },
-  { label: "Team Pace Ratings",  endpoint: "/api/admin/sync/pace" },
-  { label: "Sync Games",         endpoint: "/api/sync/game-schedule" },
-  { label: "Run Calibration",    endpoint: "/api/sync/calibration", staleDays: 7 },
-  { label: "Backfill History",   endpoint: "/api/sync/historical-stats" },
+  { label: "Injury Reports",       endpoint: "/api/sync/injuries" },
+  { label: "External Odds",        endpoint: "/api/sync/external-odds" },
+  { label: "Player Projections",   endpoint: "/api/sync/projections" },
+  { label: "Game Scores",          endpoint: "/api/sync/scores" },
+  { label: "Grade Pending Picks",  endpoint: "/api/sync/auto-grade-picks" },
+  { label: "Variance Compute",     endpoint: "/api/sync/variance" },
+  { label: "Team Pace Ratings",    endpoint: "/api/admin/sync/pace" },
+  { label: "Sync Games",           endpoint: "/api/sync/game-schedule" },
+  { label: "Run Calibration",      endpoint: "/api/sync/calibration", staleDays: 7 },
+  { label: "Backfill History",     endpoint: "/api/sync/historical-stats" },
 ];
 
 // Maps a manual sync job to the data_pull_logs provider it refreshes, so each
