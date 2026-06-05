@@ -1471,17 +1471,39 @@ export default function SlateBoard() {
                 );
               })}
               {presetsUnlocked && activePreset && (() => {
-                const parts: string[] = [];
-                if (sport && sport !== "all") parts.push(sport.toUpperCase());
-                if (actionTagFilter && actionTagFilter !== "all") parts.push(actionTagFilter);
-                const preview = parts.length ? ` ${parts.join("+")}` : "";
+                const isMyStyle = activePreset === "My Style";
+                const sportLabel = sport && sport !== "all" ? sport.toUpperCase() : null;
+                if (isMyStyle) {
+                  const parts: string[] = [];
+                  if (sport && sport !== "all") parts.push(sport.toUpperCase());
+                  if (actionTagFilter && actionTagFilter !== "all") parts.push(actionTagFilter);
+                  const preview = parts.length ? ` ${parts.join("+")}` : "";
+                  return (
+                    <button
+                      onClick={() => { try { const saved = JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>; saved[activePreset] = { sport, lineType: lineTypeFilter, minEdge, actionTag: actionTagFilter, sharpOnly }; localStorage.setItem(PRESET_LS_KEY, JSON.stringify(saved)); } catch {} }}
+                      className="text-[10px] font-mono text-amber-400 hover:text-amber-300 px-1"
+                      title={`Save current filters as ${activePreset}${preview ? `: ${parts.join(" + ")}` : ""}`}
+                    >
+                      💾 save{preview && <span className="text-amber-300/70">{preview}</span>}
+                    </button>
+                  );
+                }
+                // Safe / Upside / Late-News: only pin the sport; preserve the preset's built-in filter defaults
                 return (
                   <button
-                    onClick={() => { try { const saved = JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>; saved[activePreset] = { sport, lineType: lineTypeFilter, minEdge, actionTag: actionTagFilter, sharpOnly }; localStorage.setItem(PRESET_LS_KEY, JSON.stringify(saved)); } catch {} }}
+                    onClick={() => {
+                      try {
+                        const saved = JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>;
+                        const presetDef = DEFAULT_PRESETS.find(p => p.label === activePreset);
+                        const { label: _l, icon: _i, ...defaults } = presetDef ?? { label: "", icon: "" };
+                        saved[activePreset] = { ...defaults, sport };
+                        localStorage.setItem(PRESET_LS_KEY, JSON.stringify(saved));
+                      } catch {}
+                    }}
                     className="text-[10px] font-mono text-amber-400 hover:text-amber-300 px-1"
-                    title={`Save current filters as ${activePreset}${preview ? `: ${parts.join(" + ")}` : ""}`}
+                    title={sportLabel ? `Pin ${sportLabel} to ${activePreset} preset` : `Remove sport pin from ${activePreset}`}
                   >
-                    💾 save{preview && <span className="text-amber-300/70">{preview}</span>}
+                    📌 {sportLabel ? <>pin <span className="text-amber-300/70">· {sportLabel}</span></> : "unpin"}
                   </button>
                 );
               })()}
