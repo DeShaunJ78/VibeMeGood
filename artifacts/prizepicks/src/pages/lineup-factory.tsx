@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   useGenerateLineupFactory,
   type LineupFactoryConfig,
   type GeneratedLineup,
   type FactoryScoredProp,
   type PortfolioStats,
+  type LineupFactoryResult,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,10 +23,55 @@ import { Separator } from "@/components/ui/separator";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
 import { useEntry } from "@/lib/entry-context";
 import {
+  readPinnedPicks, removePinnedPick, clearPinnedPicks, type PinnedPick,
+} from "@/lib/pinned-picks";
+import {
   Factory, Zap, TrendingUp, DollarSign, AlertTriangle,
-  ChevronRight, BarChart2, RefreshCw, CheckCircle2, Info,
+  ChevronRight, BarChart2, RefreshCw, CheckCircle2, Info, Pin, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// ─── Persistence helpers ───────────────────────────────────────────────────────
+const CFG_KEY    = "lf_cfg";
+const CFG_VER    = 2; // bump when DEFAULTS shape changes to force a reset
+const RESULT_KEY = "lf_last_result";
+const RESULT_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+function loadCfg(): LineupFactoryConfig {
+  try {
+    const raw = localStorage.getItem(CFG_KEY);
+    if (!raw) return DEFAULTS;
+    const { v, data } = JSON.parse(raw) as { v: number; data: LineupFactoryConfig };
+    if (v !== CFG_VER) return DEFAULTS;
+    return { ...DEFAULTS, ...data };
+  } catch {
+    return DEFAULTS;
+  }
+}
+
+function saveCfg(cfg: LineupFactoryConfig): void {
+  try {
+    localStorage.setItem(CFG_KEY, JSON.stringify({ v: CFG_VER, data: cfg }));
+  } catch {}
+}
+
+function loadResult(): LineupFactoryResult | null {
+  try {
+    const raw = localStorage.getItem(RESULT_KEY);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw) as { ts: number; data: LineupFactoryResult };
+    if (Date.now() - ts > RESULT_TTL) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function saveResult(result: LineupFactoryResult): void {
+  try {
+    localStorage.setItem(RESULT_KEY, JSON.stringify({ ts: Date.now(), data: result }));
+  } catch {}
+}
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 const DEFAULTS: LineupFactoryConfig = {
@@ -470,13 +516,19 @@ function LineupCard({ lineup, index, onLoad }: { lineup: GeneratedLineup; index:
 }
 
 // ─── Scored props table ───────────────────────────────────────────────────────
-function ScoredPropsTable({ props }: { props: FactoryScoredProp[] }) {
+function ScoredPropsTable({ props, pinnedIds }: { props: FactoryScoredProp[]; pinnedIds: Set<number> }) {
   const [filter, setFilter] = useState<"all" | "eligible" | "excluded">("all");
-  const displayed = props.filter(p => {
+  const filtered = props.filter(p => {
     if (filter === "eligible") return !p.noPlayReason;
     if (filter === "excluded") return !!p.noPlayReason;
     return true;
-  }).slice(0, 100);
+  });
+  // Pinned picks float to the top
+  const sorted = [
+    ...filtered.filter(p => pinnedIds.has(p.ppLineId)),
+    ...filtered.filter(p => !pinnedIds.has(p.ppLineId)),
+  ];
+  const displayed = sorted.slice(0, 100);
 
   return (
     <div>
@@ -520,6 +572,11 @@ function ScoredPropsTable({ props }: { props: FactoryScoredProp[] }) {
                   <div className="flex items-center gap-1.5">
                     <PlayerAvatar name={p.playerName} imageUrl={p.imageUrl ?? null} size="xs" />
                     <span className="text-xs font-medium truncate max-w-[120px]">{p.playerName}</span>
+                    {pinnedIds.has(p.ppLineId) && (
+                      <span title="Pinned from Slate Board">
+                        <Pin className="w-2.5 h-2.5 text-primary shrink-0 fill-primary" />
+                      </span>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell className="py-1.5 text-xs text-muted-foreground">{p.statType}</TableCell>
@@ -623,15 +680,88 @@ function EmptyState() {
   );
 }
 
+// ─── Pinned picks panel ───────────────────────────────────────────────────────
+function PinnedPanel({
+  picks, onRemove, onClear,
+}: { picks: PinnedPick[]; onRemove: (id: number) => void; onClear: () => void }) {
+  if (picks.length === 0) return null;
+  return (
+    <Card className="bg-primary/5 border-primary/30">
+      <CardHeader className="pb-2 pt-3 px-4">
+        <CardTitle className="text-xs uppercase font-mono text-primary tracking-wider flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <Pin className="w-3 h-3" />
+            Pinned from Slate Board ({picks.length})
+          </span>
+          <button
+            onClick={onClear}
+            className="text-[10px] font-mono text-muted-foreground hover:text-rose-400 transition-colors"
+          >
+            Clear all
+          </button>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 pb-3">
+        <p className="text-[10px] text-muted-foreground font-mono mb-2">
+          These props float to the top of the Scored Props table after generation.
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {picks.map(p => (
+            <div
+              key={p.ppLineId}
+              className="flex items-center gap-1 bg-slate-800 border border-primary/20 rounded px-2 py-0.5 text-[10px] font-mono"
+            >
+              <span className="text-foreground font-medium">{p.playerName}</span>
+              <span className="text-muted-foreground">{p.statType}</span>
+              <span className="text-slate-500">{p.lineValue}</span>
+              <button
+                onClick={() => onRemove(p.ppLineId)}
+                className="ml-0.5 text-slate-600 hover:text-rose-400 transition-colors"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function LineupFactory() {
-  const [cfg, setCfg] = useState<LineupFactoryConfig>(DEFAULTS);
+  const [cfg, setCfg] = useState<LineupFactoryConfig>(() => loadCfg());
+  const [cachedResult, setCachedResult] = useState<LineupFactoryResult | null>(() => loadResult());
+  const [pinnedPicks, setPinnedPicks] = useState<PinnedPick[]>(() => readPinnedPicks());
   const generate = useGenerateLineupFactory();
   const { addPick } = useEntry();
-  const result = generate.data;
+
+  // Persist cfg on every change
+  useEffect(() => { saveCfg(cfg); }, [cfg]);
+
+  // Cache result after each successful generation
+  useEffect(() => {
+    if (generate.data) {
+      saveResult(generate.data);
+      setCachedResult(generate.data);
+    }
+  }, [generate.data]);
+
+  const result = generate.data ?? cachedResult;
+  const pinnedIds = new Set(pinnedPicks.map(p => p.ppLineId));
 
   function handleGenerate() {
     generate.mutate({ data: cfg });
+  }
+
+  function handleRemovePinned(ppLineId: number) {
+    removePinnedPick(ppLineId);
+    setPinnedPicks(readPinnedPicks());
+  }
+
+  function handleClearPinned() {
+    clearPinnedPicks();
+    setPinnedPicks([]);
   }
 
   function handleLoadLineup(lineup: GeneratedLineup) {
@@ -680,7 +810,8 @@ export default function LineupFactory() {
       {/* ── Two-column layout ── */}
       <div className="flex flex-col lg:flex-row lg:flex-1 lg:min-h-0 lg:overflow-hidden">
         {/* Config panel — fixed width on desktop, full width on mobile */}
-        <div className="w-full lg:w-72 shrink-0 border-b lg:border-b-0 lg:border-r border-border/50 lg:overflow-y-auto p-4">
+        <div className="w-full lg:w-72 shrink-0 border-b lg:border-b-0 lg:border-r border-border/50 lg:overflow-y-auto p-4 space-y-4">
+          <PinnedPanel picks={pinnedPicks} onRemove={handleRemovePinned} onClear={handleClearPinned} />
           <ConfigPanel cfg={cfg} onChange={setCfg} onGenerate={handleGenerate} loading={generate.isPending} />
         </div>
 
@@ -747,7 +878,7 @@ export default function LineupFactory() {
 
                 {/* Scored props */}
                 <TabsContent value="props" className="mt-4">
-                  <ScoredPropsTable props={result.scoredProps} />
+                  <ScoredPropsTable props={result.scoredProps} pinnedIds={pinnedIds} />
                 </TabsContent>
 
                 {/* Exposure */}

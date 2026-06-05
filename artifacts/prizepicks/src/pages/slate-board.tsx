@@ -18,7 +18,8 @@ import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge, BestValueBadge } fr
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
 import { TeamPicksBoard } from "@/components/team-picks-board";
 import { CulturePicksBoard } from "@/components/culture-picks-board";
-import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, AlertTriangle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight, Filter, ChevronDown, ChevronRight, X, Clock, Sparkles } from "lucide-react";
+import { Users, User, Eye, EyeOff, RefreshCw, AlertCircle, AlertTriangle, TrendingUp, TrendingDown, Minus, Zap, ArrowRight, Filter, ChevronDown, ChevronRight, X, Clock, Sparkles, Pin } from "lucide-react";
+import { addPinnedPick, removePinnedPick, readPinnedPicks } from "@/lib/pinned-picks";
 import { BarChart, Bar, XAxis, YAxis, ReferenceLine, Cell, ResponsiveContainer, AreaChart, Area } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { useEntry, type EntryPick } from "@/lib/entry-context";
@@ -294,6 +295,47 @@ function ProjectionCell({ proj, ppLine }: { proj: OurProjection | null; ppLine: 
         {proj.stdDev && <p className="text-slate-400 mt-0.5">±1σ: [{(proj.value - proj.stdDev).toFixed(1)}, {(proj.value + proj.stdDev).toFixed(1)}]</p>}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+function PinToOptimizerButton({
+  row, pinnedIds, onToggle,
+}: { row: any; pinnedIds: Set<number>; onToggle: (fn: (prev: Set<number>) => Set<number>) => void }) {
+  const { toast } = useToast();
+  const isPinned = pinnedIds.has(row.ppLineId);
+
+  function handlePin(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (isPinned) {
+      removePinnedPick(row.ppLineId);
+      onToggle(prev => { const next = new Set(prev); next.delete(row.ppLineId); return next; });
+      toast({ title: "Unpinned from Lineup Factory", description: row.playerName });
+    } else {
+      const added = addPinnedPick({
+        ppLineId: row.ppLineId,
+        playerId: row.playerId,
+        playerName: row.playerName,
+        statType: row.statType,
+        sport: row.sport,
+        lineValue: row.lineValue,
+      });
+      if (added) {
+        onToggle(prev => new Set([...prev, row.ppLineId]));
+        toast({ title: "Pinned to Lineup Factory", description: `${row.playerName} · ${row.statType}` });
+      }
+    }
+  }
+
+  return (
+    <button
+      onClick={handlePin}
+      title={isPinned ? "Unpin from Lineup Factory" : "Pin to Lineup Factory"}
+      className={`h-6 w-6 rounded shrink-0 flex items-center justify-center transition-colors ${
+        isPinned ? "text-primary hover:text-primary/70" : "text-slate-700 hover:text-primary/60"
+      }`}
+    >
+      <Pin className={`w-3 h-3 ${isPinned ? "fill-primary" : ""}`} />
+    </button>
   );
 }
 
@@ -643,6 +685,9 @@ export default function SlateBoard() {
     return false;
   });
   const { addPick, hasPick } = useEntry();
+  const [pinnedIds, setPinnedIds] = useState<Set<number>>(
+    () => new Set(readPinnedPicks().map(p => p.ppLineId)),
+  );
 
   const slateParams = {
     sport: sport !== "all" ? sport : undefined,
@@ -1768,13 +1813,20 @@ export default function SlateBoard() {
                 onChange={e => setMinEdge(e.target.value)}
                 className="w-24 bg-slate-900 border-slate-800 font-mono text-sm"
               />
-              <Button
-                onClick={runOptimizer}
-                size="sm"
-                className="font-mono text-xs bg-violet-700 hover:bg-violet-600 text-white gap-1.5"
-              >
-                <Zap className="w-3.5 h-3.5" /> {optLoaded ? "Re-run" : "Optimizer"}
-              </Button>
+              <div className="relative">
+                <Button
+                  onClick={runOptimizer}
+                  size="sm"
+                  className="font-mono text-xs bg-violet-700 hover:bg-violet-600 text-white gap-1.5"
+                >
+                  <Zap className="w-3.5 h-3.5" /> {optLoaded ? "Re-run" : "Optimizer"}
+                </Button>
+                {pinnedIds.size > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-primary text-primary-foreground text-[9px] font-mono font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 leading-none pointer-events-none">
+                    {pinnedIds.size}
+                  </span>
+                )}
+              </div>
               <Button
                 onClick={() => setSharpOnly(v => !v)}
                 size="sm"
@@ -1947,6 +1999,7 @@ export default function SlateBoard() {
                               {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                             </button>
                             <WatchToggle row={row} slateParams={slateParams} />
+                            <PinToOptimizerButton row={row} pinnedIds={pinnedIds} onToggle={setPinnedIds} />
                           </div>
                         </TableCell>
                         <TableCell className="font-mono text-xs text-primary">{row.sport}</TableCell>
