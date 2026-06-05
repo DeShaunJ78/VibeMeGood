@@ -630,6 +630,9 @@ export default function SlateBoard() {
   const [maxPerTeam, setMaxPerTeam] = useState<number>(() => {
     try { return Number(localStorage.getItem("opt-max-per-team")) || 2; } catch { return 2; }
   });
+  const [maxPerGame, setMaxPerGame] = useState<number>(() => {
+    try { return Number(localStorage.getItem("opt-max-per-game")) || 2; } catch { return 2; }
+  });
   const [diversityNote, setDiversityNote] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -1279,13 +1282,22 @@ export default function SlateBoard() {
 
     const goblinProps: typeof sorted = [];
     const teamCount = new Map<string, number>();
+    const gameCount = new Map<number, number>();
     for (const c of sorted) {
       if (goblinProps.length >= optPickCount) break;
       const team = c.teamAbbr ?? null;
       if (team != null) {
         const count = teamCount.get(team) ?? 0;
         if (count >= maxPerTeam) continue; // over cap for this team — skip
-        teamCount.set(team, count + 1);
+      }
+      const gameId = c.gameId ?? null;
+      if (gameId != null) {
+        const gcount = gameCount.get(gameId) ?? 0;
+        if (gcount >= maxPerGame) continue; // over cap for this game — skip
+        gameCount.set(gameId, gcount + 1);
+      }
+      if (team != null) {
+        teamCount.set(team, (teamCount.get(team) ?? 0) + 1);
       }
       goblinProps.push(c);
     }
@@ -1327,7 +1339,7 @@ export default function SlateBoard() {
       localStorage.setItem(OPT_KEY, JSON.stringify(results));
       localStorage.setItem(OPT_TS_KEY, String(Date.now()));
     } catch {}
-  }, [playerRows, optPickCount, maxPerTeam, userSettings, varianceEnabled]);
+  }, [playerRows, optPickCount, maxPerTeam, maxPerGame, userSettings, varianceEnabled]);
 
   function loadOptimizerToEntry() {
     for (const r of optResults) {
@@ -2776,7 +2788,7 @@ export default function SlateBoard() {
           </div>
 
           {/* Team-diversity guard stepper */}
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3 mb-2">
             <span className="text-xs font-mono text-muted-foreground">Max per team:</span>
             {[1, 2, 3].map(n => (
               <button
@@ -2792,6 +2804,25 @@ export default function SlateBoard() {
               </button>
             ))}
             <span className="text-[10px] font-mono text-slate-600 ml-1">per-team cap</span>
+          </div>
+
+          {/* Game-correlation cap stepper */}
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-xs font-mono text-muted-foreground">Max per game:</span>
+            {[1, 2, 3].map(n => (
+              <button
+                key={n}
+                onClick={() => { setMaxPerGame(n); setOptLoaded(false); try { localStorage.setItem("opt-max-per-game", String(n)); } catch {} }}
+                className={`px-2.5 py-1 rounded text-xs font-mono transition-colors ${
+                  maxPerGame === n
+                    ? "bg-violet-700 text-white"
+                    : "bg-slate-800 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+            <span className="text-[10px] font-mono text-slate-600 ml-1">per-game cap</span>
           </div>
           {optLoaded && (() => {
             try {
