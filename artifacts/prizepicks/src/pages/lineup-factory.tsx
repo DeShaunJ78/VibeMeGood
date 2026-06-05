@@ -833,6 +833,9 @@ function PinnedPanel({
   const requiredCount = picks.filter(p => requiredIds.has(p.ppLineId)).length;
   const overLimit = requiredCount > picksPerEntry;
 
+  const lockedSports = new Set(picks.filter(p => requiredIds.has(p.ppLineId)).map(p => p.sport));
+  const mixedSports = lockedSports.size > 1;
+
   return (
     <Card className="bg-primary/5 border-primary/30">
       <CardHeader className="pb-2 pt-3 px-4">
@@ -858,6 +861,14 @@ function PinnedPanel({
             <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
             <span>
               {requiredCount} locked picks exceed the {picksPerEntry}-pick limit. Only the top {picksPerEntry} (by score) will be used per lineup.
+            </span>
+          </div>
+        )}
+        {mixedSports && (
+          <div className="flex items-start gap-1.5 rounded bg-slate-800/80 border border-slate-600/50 px-2 py-1.5 text-[10px] text-slate-400 font-mono">
+            <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5 text-amber-500" />
+            <span>
+              Locked picks span multiple sports ({[...lockedSports].join(", ")}). Each lineup will only include picks from one sport — set the sport filter above to control which.
             </span>
           </div>
         )}
@@ -1136,6 +1147,19 @@ export default function LineupFactory() {
     }
     setRequiredPinnedIds(next);
     saveRequiredIds(next);
+
+    // Auto-set sport filter when all locked picks share the same sport
+    if (next.size > 0) {
+      const lockedSports = new Set(
+        pinnedPicks.filter(p => next.has(p.ppLineId)).map(p => p.sport)
+      );
+      if (lockedSports.size === 1) {
+        const sport = [...lockedSports][0];
+        setCfg(c => ({ ...c, sport }));
+      } else if (lockedSports.size > 1) {
+        setCfg(c => ({ ...c, sport: undefined }));
+      }
+    }
   }
 
   function handleLoadLineup(lineup: GeneratedLineup) {
