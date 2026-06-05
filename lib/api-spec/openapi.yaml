@@ -2394,6 +2394,7 @@ components:
         demonUnderAllowed: { type: boolean }
         sport: { type: string }
         monteCarloIterations: { type: integer, minimum: 1000, maximum: 50000 }
+        requiredLineIds: { type: array, items: { type: integer }, description: "ppLineIds that must appear in every generated lineup" }
       required: [format, picksPerEntry, numEntries, varianceProfile, optimizationObjective, maxPlayerExposure, maxPickExposure, maxTeamExposure, maxGameExposure, maxPairwiseOverlap, stakePerEntry, allowGtdPlayers, allowSingleBookData, allowStaleMarketData, demonUnderAllowed]
 
     FactoryScoredProp:
@@ -2490,6 +2491,7 @@ components:
         eligiblePropCount: { type: integer }
         filteredPropCount: { type: integer }
         generationConfig: {}
+        requiredLinesWarning: { type: string, description: "Set when required lines exceed picksPerEntry or could not be resolved" }
       required: [lineups, portfolioStats, scoredProps, eligiblePropCount, filteredPropCount, generationConfig]
 
     # ─── AUDIT ───────────────────────────────────────────────────────────────

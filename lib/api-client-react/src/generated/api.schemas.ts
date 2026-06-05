@@ -999,6 +999,8 @@ export interface LineupFactoryConfig {
      * @maximum 50000
      */
   monteCarloIterations?: number;
+  /** ppLineIds that must appear in every generated lineup */
+  requiredLineIds?: number[];
 }
 
 export type FactoryScoredPropDirection = typeof FactoryScoredPropDirection[keyof typeof FactoryScoredPropDirection];
@@ -1112,6 +1114,8 @@ export interface LineupFactoryResult {
   eligiblePropCount: number;
   filteredPropCount: number;
   generationConfig: unknown;
+  /** Set when required lines exceed picksPerEntry or could not be resolved */
+  requiredLinesWarning?: string;
 }
 
 export interface AuditSummaryMetrics {

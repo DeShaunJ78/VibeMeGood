@@ -27,15 +27,16 @@ import {
 } from "@/lib/pinned-picks";
 import {
   Factory, Zap, TrendingUp, DollarSign, AlertTriangle,
-  ChevronRight, BarChart2, RefreshCw, CheckCircle2, Info, Pin, X,
+  ChevronRight, BarChart2, RefreshCw, CheckCircle2, Info, Pin, X, Lock, LockOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Persistence helpers ───────────────────────────────────────────────────────
-const CFG_KEY    = "lf_cfg";
-const CFG_VER    = 2; // bump when DEFAULTS shape changes to force a reset
-const RESULT_KEY = "lf_last_result";
-const RESULT_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const CFG_KEY      = "lf_cfg";
+const CFG_VER      = 2; // bump when DEFAULTS shape changes to force a reset
+const RESULT_KEY   = "lf_last_result";
+const RESULT_TTL   = 24 * 60 * 60 * 1000; // 24 hours
+const REQUIRED_KEY = "lf_required_pinned_ids";
 
 function loadCfg(): LineupFactoryConfig {
   try {
@@ -52,6 +53,23 @@ function loadCfg(): LineupFactoryConfig {
 function saveCfg(cfg: LineupFactoryConfig): void {
   try {
     localStorage.setItem(CFG_KEY, JSON.stringify({ v: CFG_VER, data: cfg }));
+  } catch {}
+}
+
+function loadRequiredIds(): Set<number> {
+  try {
+    const s = localStorage.getItem(REQUIRED_KEY);
+    if (!s) return new Set();
+    const arr = JSON.parse(s) as unknown;
+    return new Set(Array.isArray(arr) ? (arr as number[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveRequiredIds(ids: Set<number>): void {
+  try {
+    localStorage.setItem(REQUIRED_KEY, JSON.stringify([...ids]));
   } catch {}
 }
 
@@ -682,9 +700,19 @@ function EmptyState() {
 
 // ─── Pinned picks panel ───────────────────────────────────────────────────────
 function PinnedPanel({
-  picks, onRemove, onClear,
-}: { picks: PinnedPick[]; onRemove: (id: number) => void; onClear: () => void }) {
+  picks, requiredIds, picksPerEntry, onRemove, onClear, onToggleRequired,
+}: {
+  picks: PinnedPick[];
+  requiredIds: Set<number>;
+  picksPerEntry: number;
+  onRemove: (id: number) => void;
+  onClear: () => void;
+  onToggleRequired: (id: number) => void;
+}) {
   if (picks.length === 0) return null;
+  const requiredCount = picks.filter(p => requiredIds.has(p.ppLineId)).length;
+  const overLimit = requiredCount > picksPerEntry;
+
   return (
     <Card className="bg-primary/5 border-primary/30">
       <CardHeader className="pb-2 pt-3 px-4">
@@ -701,27 +729,56 @@ function PinnedPanel({
           </button>
         </CardTitle>
       </CardHeader>
-      <CardContent className="px-4 pb-3">
-        <p className="text-[10px] text-muted-foreground font-mono mb-2">
-          These props float to the top of the Scored Props table after generation.
+      <CardContent className="px-4 pb-3 space-y-2">
+        <p className="text-[10px] text-muted-foreground font-mono">
+          Click <Lock className="inline w-2.5 h-2.5 mb-0.5" /> to lock a pick — locked picks appear in every generated lineup.
         </p>
-        <div className="flex flex-wrap gap-1.5">
-          {picks.map(p => (
-            <div
-              key={p.ppLineId}
-              className="flex items-center gap-1 bg-slate-800 border border-primary/20 rounded px-2 py-0.5 text-[10px] font-mono"
-            >
-              <span className="text-foreground font-medium">{p.playerName}</span>
-              <span className="text-muted-foreground">{p.statType}</span>
-              <span className="text-slate-500">{p.lineValue}</span>
-              <button
-                onClick={() => onRemove(p.ppLineId)}
-                className="ml-0.5 text-slate-600 hover:text-rose-400 transition-colors"
+        {overLimit && (
+          <div className="flex items-start gap-1.5 rounded bg-amber-950/40 border border-amber-700/40 px-2 py-1.5 text-[10px] text-amber-400 font-mono">
+            <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+            <span>
+              {requiredCount} locked picks exceed the {picksPerEntry}-pick limit. Only the top {picksPerEntry} (by score) will be used per lineup.
+            </span>
+          </div>
+        )}
+        <div className="space-y-1">
+          {picks.map(p => {
+            const isRequired = requiredIds.has(p.ppLineId);
+            return (
+              <div
+                key={p.ppLineId}
+                className={cn(
+                  "flex items-center gap-1.5 rounded px-2 py-1 text-[10px] font-mono border transition-colors",
+                  isRequired
+                    ? "bg-primary/10 border-primary/40 text-foreground"
+                    : "bg-slate-800 border-primary/20 text-foreground",
+                )}
               >
-                <X className="w-2.5 h-2.5" />
-              </button>
-            </div>
-          ))}
+                <button
+                  onClick={() => onToggleRequired(p.ppLineId)}
+                  title={isRequired ? "Unlock — remove from required" : "Lock — require in every lineup"}
+                  className={cn(
+                    "shrink-0 transition-colors",
+                    isRequired ? "text-primary hover:text-primary/70" : "text-slate-500 hover:text-primary",
+                  )}
+                >
+                  {isRequired ? <Lock className="w-3 h-3" /> : <LockOpen className="w-3 h-3" />}
+                </button>
+                <span className="font-medium truncate flex-1 min-w-0">{p.playerName}</span>
+                <span className="text-muted-foreground shrink-0">{p.statType}</span>
+                <span className="text-slate-500 shrink-0">{p.lineValue}</span>
+                {isRequired && (
+                  <span className="text-[8px] uppercase tracking-wider text-primary font-bold shrink-0">locked</span>
+                )}
+                <button
+                  onClick={() => onRemove(p.ppLineId)}
+                  className="shrink-0 text-slate-600 hover:text-rose-400 transition-colors"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       </CardContent>
     </Card>
@@ -733,6 +790,7 @@ export default function LineupFactory() {
   const [cfg, setCfg] = useState<LineupFactoryConfig>(() => loadCfg());
   const [cachedResult, setCachedResult] = useState<LineupFactoryResult | null>(() => loadResult());
   const [pinnedPicks, setPinnedPicks] = useState<PinnedPick[]>(() => readPinnedPicks());
+  const [requiredPinnedIds, setRequiredPinnedIds] = useState<Set<number>>(() => loadRequiredIds());
   const generate = useGenerateLineupFactory();
   const { addPick } = useEntry();
 
@@ -751,17 +809,38 @@ export default function LineupFactory() {
   const pinnedIds = new Set(pinnedPicks.map(p => p.ppLineId));
 
   function handleGenerate() {
-    generate.mutate({ data: cfg });
+    const requiredLineIds = [...requiredPinnedIds].filter(id => pinnedPicks.some(p => p.ppLineId === id));
+    generate.mutate({ data: { ...cfg, requiredLineIds: requiredLineIds.length > 0 ? requiredLineIds : undefined } });
   }
 
   function handleRemovePinned(ppLineId: number) {
     removePinnedPick(ppLineId);
     setPinnedPicks(readPinnedPicks());
+    // Also remove from required set if it was locked
+    if (requiredPinnedIds.has(ppLineId)) {
+      const next = new Set(requiredPinnedIds);
+      next.delete(ppLineId);
+      setRequiredPinnedIds(next);
+      saveRequiredIds(next);
+    }
   }
 
   function handleClearPinned() {
     clearPinnedPicks();
     setPinnedPicks([]);
+    setRequiredPinnedIds(new Set());
+    saveRequiredIds(new Set());
+  }
+
+  function handleToggleRequired(ppLineId: number) {
+    const next = new Set(requiredPinnedIds);
+    if (next.has(ppLineId)) {
+      next.delete(ppLineId);
+    } else {
+      next.add(ppLineId);
+    }
+    setRequiredPinnedIds(next);
+    saveRequiredIds(next);
   }
 
   function handleLoadLineup(lineup: GeneratedLineup) {
@@ -811,7 +890,14 @@ export default function LineupFactory() {
       <div className="flex flex-col lg:flex-row lg:flex-1 lg:min-h-0 lg:overflow-hidden">
         {/* Config panel — fixed width on desktop, full width on mobile */}
         <div className="w-full lg:w-72 shrink-0 border-b lg:border-b-0 lg:border-r border-border/50 lg:overflow-y-auto p-4 space-y-4">
-          <PinnedPanel picks={pinnedPicks} onRemove={handleRemovePinned} onClear={handleClearPinned} />
+          <PinnedPanel
+            picks={pinnedPicks}
+            requiredIds={requiredPinnedIds}
+            picksPerEntry={cfg.picksPerEntry}
+            onRemove={handleRemovePinned}
+            onClear={handleClearPinned}
+            onToggleRequired={handleToggleRequired}
+          />
           <ConfigPanel cfg={cfg} onChange={setCfg} onGenerate={handleGenerate} loading={generate.isPending} />
         </div>
 
@@ -838,6 +924,13 @@ export default function LineupFactory() {
 
           {result && !generate.isPending && (
             <div className="space-y-5">
+              {/* Required lines warning */}
+              {result.requiredLinesWarning && (
+                <div className="flex items-start gap-2 rounded border border-amber-700/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-400 font-mono">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span>{result.requiredLinesWarning}</span>
+                </div>
+              )}
               {/* Portfolio stats */}
               <PortfolioStatsBar stats={result.portfolioStats} numLineups={result.lineups.length} />
 

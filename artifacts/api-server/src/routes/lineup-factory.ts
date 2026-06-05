@@ -44,6 +44,7 @@ const configSchema = z.object({
   demonUnderAllowed: z.boolean(),
   sport: z.string().optional(),
   monteCarloIterations: z.number().int().min(1000).max(50000).optional(),
+  requiredLineIds: z.array(z.number().int()).optional(),
 });
 
 type FactoryConfig = z.infer<typeof configSchema>;
@@ -451,6 +452,57 @@ router.post("/lineup-factory/generate", async (req, res) => {
     const filteredPropCount = eligible.length;
 
     // ── 6. Generate lineups ────────────────────────────────────────────────
+
+    // Resolve required picks — sourced from allScoredProps so they bypass
+    // eligibility filters (player_out is still excluded as unplayable).
+    const requiredIds = new Set(cfg.requiredLineIds ?? []);
+    const requiredProps: ScoredProp[] = [];
+    if (requiredIds.size > 0) {
+      for (const sp of allScoredProps) {
+        if (requiredIds.has(sp.ppLineId) && sp.noPlayReason !== "player_out") {
+          requiredProps.push(sp);
+        }
+      }
+    }
+
+    // Build warning message for the caller
+    const warningParts: string[] = [];
+
+    // 1. Picks not found in the active pool (e.g. delisted, or player_out)
+    const missingRequired = [...requiredIds].filter(id => !requiredProps.some(p => p.ppLineId === id));
+    if (missingRequired.length > 0) {
+      warningParts.push(`${missingRequired.length} required pick(s) could not be found in the active prop pool and were skipped.`);
+    }
+
+    // 2. More required picks than the lineup pick limit
+    if (requiredProps.length > cfg.picksPerEntry) {
+      warningParts.push(`${requiredProps.length} required picks exceed the ${cfg.picksPerEntry}-pick limit — only the top ${cfg.picksPerEntry} (by composite score) will be used.`);
+      requiredProps.sort((a, b) => b.compositeScore - a.compositeScore);
+      requiredProps.splice(cfg.picksPerEntry);
+    }
+
+    // 3. Cross-sport conflicts — PrizePicks entries are single-sport, so the first
+    //    required pick's sport wins and any required picks with a different sport would
+    //    be silently skipped in every lineup. Detect this statically and warn up-front.
+    if (requiredProps.length > 1) {
+      const winningSport = requiredProps[0].sport;
+      const crossSportConflicts = requiredProps.filter(p => p.sport !== winningSport);
+      if (crossSportConflicts.length > 0) {
+        const conflictNames = crossSportConflicts.map(p => `${p.playerName} (${p.sport})`).join(", ");
+        warningParts.push(
+          `${crossSportConflicts.length} required pick(s) conflict with the lineup sport (${winningSport}) set by the first locked pick and will be excluded from every lineup: ${conflictNames}.`,
+        );
+        // Remove cross-sport conflicts from required list so the loop is consistent
+        // with the warning and users don't get unexplained missing picks.
+        crossSportConflicts.forEach(c => {
+          const idx = requiredProps.findIndex(p => p.ppLineId === c.ppLineId);
+          if (idx !== -1) requiredProps.splice(idx, 1);
+        });
+      }
+    }
+
+    const requiredLinesWarning = warningParts.length > 0 ? warningParts.join(" ") : undefined;
+
     const lineups: GeneratedLineup[] = [];
     const n = cfg.picksPerEntry;
 
@@ -469,26 +521,37 @@ router.post("/lineup-factory/generate", async (req, res) => {
         }
       }
 
-      // Pool selection with profile-based randomization
+      // Pool selection with profile-based randomization.
+      // Required picks are excluded from the pool — they are pre-seeded below.
+      const requiredPickIds = new Set(requiredProps.map(p => p.ppLineId));
+      const eligiblePool = eligible.filter(p => !requiredPickIds.has(p.ppLineId));
+
       let pool: ScoredProp[];
       const seed = luIdx * 7919 + 31337;
       if (cfg.varianceProfile === "chaos") {
-        pool = seededShuffle(eligible, seed);
+        pool = seededShuffle(eligiblePool, seed);
       } else if (cfg.varianceProfile === "aggressive") {
-        const top = Math.max(n, Math.ceil(eligible.length * 0.70));
-        pool = seededShuffle(eligible.slice(0, top), seed);
+        const top = Math.max(n, Math.ceil(eligiblePool.length * 0.70));
+        pool = seededShuffle(eligiblePool.slice(0, top), seed);
       } else if (cfg.varianceProfile === "balanced") {
-        const top = Math.max(n, Math.ceil(eligible.length * 0.60));
-        pool = seededShuffle(eligible.slice(0, top), seed);
+        const top = Math.max(n, Math.ceil(eligiblePool.length * 0.60));
+        pool = seededShuffle(eligiblePool.slice(0, top), seed);
       } else {
-        const top = Math.max(n, Math.ceil(eligible.length * 0.50));
-        pool = seededShuffle(eligible.slice(0, top), seed + luIdx);
+        const top = Math.max(n, Math.ceil(eligiblePool.length * 0.50));
+        pool = seededShuffle(eligiblePool.slice(0, top), seed + luIdx);
       }
 
+      // Pre-seed picks with required props. The first required pick fixes the
+      // lineup sport; subsequent required picks of a different sport are skipped.
       const picks: ScoredProp[] = [];
-      // A single lineup must stay within one sport — the first accepted pick fixes the
-      // sport and all later picks must match it (PrizePicks entries are single-sport).
       let lineupSport: string | null = null;
+      for (const req of requiredProps) {
+        if (picks.length >= n) break;
+        if (lineupSport && req.sport !== lineupSport) continue;
+        picks.push(req);
+        if (!lineupSport) lineupSport = req.sport;
+      }
+
       const totalFuture = cfg.numEntries;
 
       for (const candidate of pool) {
@@ -638,10 +701,11 @@ router.post("/lineup-factory/generate", async (req, res) => {
         teamExposure,
         topPicksByExposure,
       },
-      scoredProps:       allScoredProps.sort((a, b) => b.compositeScore - a.compositeScore).slice(0, 200),
+      scoredProps:          allScoredProps.sort((a, b) => b.compositeScore - a.compositeScore).slice(0, 200),
       eligiblePropCount,
       filteredPropCount,
-      generationConfig:  cfg,
+      generationConfig:     cfg,
+      ...(requiredLinesWarning ? { requiredLinesWarning } : {}),
     });
   } catch (err) {
     logger.error(err);

@@ -1840,7 +1840,8 @@ export const GenerateLineupFactoryBody = zod.object({
   "allowStaleMarketData": zod.boolean(),
   "demonUnderAllowed": zod.boolean(),
   "sport": zod.string().optional(),
-  "monteCarloIterations": zod.number().min(generateLineupFactoryBodyMonteCarloIterationsMin).max(generateLineupFactoryBodyMonteCarloIterationsMax).optional()
+  "monteCarloIterations": zod.number().min(generateLineupFactoryBodyMonteCarloIterationsMin).max(generateLineupFactoryBodyMonteCarloIterationsMax).optional(),
+  "requiredLineIds": zod.array(zod.number()).optional().describe('ppLineIds that must appear in every generated lineup')
 })
 
 export const GenerateLineupFactoryResponse = zod.object({
@@ -1918,7 +1919,8 @@ export const GenerateLineupFactoryResponse = zod.object({
 })),
   "eligiblePropCount": zod.number(),
   "filteredPropCount": zod.number(),
-  "generationConfig": zod.unknown()
+  "generationConfig": zod.unknown(),
+  "requiredLinesWarning": zod.string().optional().describe('Set when required lines exceed picksPerEntry or could not be resolved')
 })
 
 
