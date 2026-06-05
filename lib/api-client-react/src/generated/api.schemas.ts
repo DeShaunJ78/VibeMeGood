@@ -1200,6 +1200,26 @@ export interface AuditRunMeta {
   predictions: number;
 }
 
+export interface StatBiasBucket {
+  /** @nullable */
+  sport: string | null;
+  statType: string;
+  tier: string;
+  hitCount: number;
+  sampleSize: number;
+  /** @nullable */
+  hitRate: number | null;
+  /** @nullable */
+  avgModelPOver: number | null;
+  /** @nullable */
+  delta: number | null;
+  hasEnoughData: boolean;
+}
+
+export interface StatBiasResponse {
+  buckets: StatBiasBucket[];
+}
+
 export type ListPlayersParams = {
 sport?: string;
 teamId?: number;

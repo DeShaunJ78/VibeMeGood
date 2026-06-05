@@ -1348,6 +1348,24 @@ export const GetReviewStatsResponse = zod.object({
 
 
 /**
+ * @summary Personal pick hit rates aggregated by sport × stat type × tier
+ */
+export const GetStatBiasResponse = zod.object({
+  "buckets": zod.array(zod.object({
+  "sport": zod.string().nullable(),
+  "statType": zod.string(),
+  "tier": zod.string(),
+  "hitCount": zod.number(),
+  "sampleSize": zod.number(),
+  "hitRate": zod.number().nullable(),
+  "avgModelPOver": zod.number().nullable(),
+  "delta": zod.number().nullable(),
+  "hasEnoughData": zod.boolean()
+}))
+})
+
+
+/**
  * @summary Data freshness and provider health
  */
 export const GetDataHealthResponse = zod.object({

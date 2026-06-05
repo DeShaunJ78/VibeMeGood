@@ -2,9 +2,9 @@ import { db } from "@workspace/db";
 import {
   externalLinesTable, ppLinesTable, playersTable, propScoresTable,
   lineMoveEventsTable, ourProjectionsTable, dataPullLogsTable,
-  playerGameLogsTable,
+  playerGameLogsTable, userSettingsTable, entryPicksTable,
 } from "@workspace/db/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { logger } from "../logger";
 import { twoWayHold, noVigProbs } from "../analytics/odds-math";
 import { pOverLine } from "../projection/normal-dist";
@@ -362,6 +362,44 @@ export async function recalcPropScores(): Promise<void> {
     .innerJoin(playersTable, eq(ppLinesTable.playerId, playersTable.id))
     .where(eq(ppLinesTable.isActive, true));
 
+  // --- Personal bias correction ---
+  // Load user setting + aggregate graded pick hit rates per statType×lineType.
+  // Applied later in the per-line loop when biasCorrectionEnabled = true and
+  // the bucket has >= 10 samples (too few samples → skip silently).
+  let biasCorrectionEnabled = false;
+  const biasMap = new Map<string, { hitRate: number; sampleSize: number }>();
+  try {
+    const [settings] = await db
+      .select({ biasCorrectionEnabled: userSettingsTable.biasCorrectionEnabled })
+      .from(userSettingsTable)
+      .where(eq(userSettingsTable.userId, "default"))
+      .limit(1);
+    biasCorrectionEnabled = settings?.biasCorrectionEnabled ?? false;
+    if (biasCorrectionEnabled) {
+      const biasRows = await db
+        .select({
+          statType: entryPicksTable.statType,
+          lineType: entryPicksTable.lineType,
+          hitCount: sql<number>`count(*) filter (where ${entryPicksTable.result} = 'hit')`,
+          sampleSize: sql<number>`count(*)`,
+        })
+        .from(entryPicksTable)
+        .where(inArray(entryPicksTable.result, ["hit", "miss"]))
+        .groupBy(entryPicksTable.statType, entryPicksTable.lineType);
+      for (const r of biasRows) {
+        const n = Number(r.sampleSize);
+        if (n >= 10) {
+          biasMap.set(`${r.statType}:${r.lineType}`, {
+            hitRate: Number(r.hitCount) / n,
+            sampleSize: n,
+          });
+        }
+      }
+    }
+  } catch (e) {
+    logger.warn({ err: e }, "recalcPropScores: bias map load failed — skipping bias correction");
+  }
+
   // Scores are fully recomputed each run, so we clear and rebuild rather than
   // diffing per-row — see the batched delete+insert at the end.
   const activeIds = lines.map(r => r.line.id);
@@ -556,7 +594,23 @@ export async function recalcPropScores(): Promise<void> {
       const baseEdge =
         Math.max(0, (pOver !== null ? (pOver - 50) * 2 : 0)) * 0.6 +
         Math.max(0, (marketEdge / Math.max(ppLine, 0.1)) * 150) * 0.4;
-      const edgeScore = Math.min(100, Math.max(0, baseEdge + formContribution));
+      const rawEdge = Math.min(100, Math.max(0, baseEdge + formContribution));
+
+      // Personal bias correction (optional, toggled per user setting).
+      // When enabled and the personal bucket has ≥ 10 graded picks, apply a ±5
+      // point adjustment proportional to (your hit rate − model pOver).
+      let biasAdjustment = 0;
+      let appliedBiasDelta: number | null = null;
+      if (biasCorrectionEnabled) {
+        const biasKey = `${line.statType}:${line.lineType}`;
+        const bucket = biasMap.get(biasKey);
+        if (bucket) {
+          const modelProb = pOver != null ? pOver / 100 : 0.5;
+          appliedBiasDelta = Math.round((bucket.hitRate - modelProb) * 1000) / 10;
+          biasAdjustment = Math.max(-5, Math.min(5, (bucket.hitRate - modelProb) * 50));
+        }
+      }
+      const edgeScore = Math.min(100, Math.max(0, rawEdge + biasAdjustment));
 
       // --- Gate 2: Stability Score ---
       const confidenceBonus =
@@ -618,6 +672,7 @@ export async function recalcPropScores(): Promise<void> {
         reasonSummary:
           `E${Math.round(edgeScore)} S${Math.round(stabilityScore)} ` +
           `M${Math.round(marketSupportScore)} R${riskScore}`,
+        biasDelta: appliedBiasDelta,
       };
 
       const scorePayload = {

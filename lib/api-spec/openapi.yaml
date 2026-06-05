@@ -977,6 +977,18 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ReviewStats" }
 
+  /dashboard/stat-bias:
+    get:
+      operationId: getStatBias
+      tags: [dashboard]
+      summary: Personal pick hit rates aggregated by sport × stat type × tier
+      responses:
+        "200":
+          description: Stat bias buckets
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StatBiasResponse" }
+
   /dashboard/data-health:
     get:
       operationId: getDataHealth
@@ -2586,3 +2598,23 @@ components:
         series:      { type: integer }
         predictions: { type: integer }
       required: [id, runAt, series, predictions]
+
+    StatBiasBucket:
+      type: object
+      properties:
+        sport:         { type: ["string", "null"] }
+        statType:      { type: string }
+        tier:          { type: string }
+        hitCount:      { type: integer }
+        sampleSize:    { type: integer }
+        hitRate:       { type: ["number", "null"] }
+        avgModelPOver: { type: ["number", "null"] }
+        delta:         { type: ["number", "null"] }
+        hasEnoughData: { type: boolean }
+      required: [sport, statType, tier, hitCount, sampleSize, hitRate, avgModelPOver, delta, hasEnoughData]
+
+    StatBiasResponse:
+      type: object
+      properties:
+        buckets: { type: array, items: { $ref: "#/components/schemas/StatBiasBucket" } }
+      required: [buckets]

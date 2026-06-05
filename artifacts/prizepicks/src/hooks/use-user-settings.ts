@@ -26,6 +26,7 @@ export interface UserSettings {
   } | null;
   experimentalLabEnabled: boolean;
   experimentalLabAcknowledged: boolean;
+  biasCorrectionEnabled: boolean;
 }
 
 const SETTINGS_KEY = ["user-settings"];

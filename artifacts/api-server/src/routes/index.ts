@@ -42,6 +42,7 @@ import nflAdvancedRouter from "./nfl-advanced";
 import portfolioRouter from "./portfolio";
 import auditRouter from "./audit";
 import intelFeedRouter from "./intel-feed";
+import statBiasRouter from "./stat-bias";
 
 const router: IRouter = Router();
 
@@ -88,5 +89,6 @@ router.use(nflAdvancedRouter);
 router.use(portfolioRouter);
 router.use(auditRouter);
 router.use(intelFeedRouter);
+router.use(statBiasRouter);
 
 export default router;

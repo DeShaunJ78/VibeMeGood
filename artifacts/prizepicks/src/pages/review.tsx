@@ -1,11 +1,27 @@
 import { useGetReviewStats } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, ReferenceLine,
 } from "recharts";
-import { TrendingUp, TrendingDown, Percent, DollarSign, Target, Brain } from "lucide-react";
+import { TrendingUp, TrendingDown, Percent, DollarSign, Target, Brain, ChevronDown, ChevronUp } from "lucide-react";
+import { useState } from "react";
+
+interface StatBiasBucket {
+  sport: string | null;
+  statType: string;
+  tier: string;
+  hitCount: number;
+  sampleSize: number;
+  hitRate: number | null;
+  avgModelPOver: number | null;
+  delta: number | null;
+  hasEnoughData: boolean;
+}
+
+const BASE = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
 
 const EMOTION_EMOJI: Record<string, string> = {
   confident: "💪", neutral: "😐", frustrated: "😤",
@@ -15,6 +31,36 @@ const EMOTION_EMOJI: Record<string, string> = {
 export default function Review() {
   const { data: stats, isLoading } = useGetReviewStats(undefined, {
     query: { queryKey: ["review-stats"] }
+  });
+  const [biasOpen, setBiasOpen] = useState(true);
+  const [biasSortKey, setBiasSortKey] = useState<"hitRate" | "delta" | "sampleSize">("hitRate");
+  const [biasSortDir, setBiasSortDir] = useState<"desc" | "asc">("desc");
+
+  const { data: biasData } = useQuery<{ buckets: StatBiasBucket[] }>({
+    queryKey: ["stat-bias"],
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/dashboard/stat-bias`);
+      if (!r.ok) throw new Error("Failed to load stat bias");
+      return r.json();
+    },
+    staleTime: 60_000,
+  });
+
+  const qualifiedBuckets = (biasData?.buckets ?? []).filter(b => b.hasEnoughData);
+
+  function toggleBiasSort(key: typeof biasSortKey) {
+    if (biasSortKey === key) {
+      setBiasSortDir(d => d === "desc" ? "asc" : "desc");
+    } else {
+      setBiasSortKey(key);
+      setBiasSortDir("desc");
+    }
+  }
+
+  const sortedBuckets = [...qualifiedBuckets].sort((a, b) => {
+    const av = a[biasSortKey] ?? -Infinity;
+    const bv = b[biasSortKey] ?? -Infinity;
+    return biasSortDir === "desc" ? (bv as number) - (av as number) : (av as number) - (bv as number);
   });
 
   const s = stats as any;
@@ -261,6 +307,80 @@ export default function Review() {
               </CardContent>
             </Card>
           )}
+
+          {/* Stat Type Edge Tracker */}
+          <Card className="bg-slate-900 border-slate-800">
+            <CardHeader className="pb-2 cursor-pointer select-none" onClick={() => setBiasOpen(v => !v)}>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-mono uppercase tracking-wider">Stat Type Edge</CardTitle>
+                <div className="flex items-center gap-2">
+                  {qualifiedBuckets.length > 0 && (
+                    <span className="text-[10px] font-mono text-muted-foreground">{qualifiedBuckets.length} buckets ≥ 10 picks</span>
+                  )}
+                  {biasOpen ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Your personal hit rate vs. model projection by stat type and tier. Bias correction can be enabled in Settings.</p>
+            </CardHeader>
+            {biasOpen && (
+              <CardContent>
+                {qualifiedBuckets.length === 0 ? (
+                  <div className="text-center py-6 text-xs font-mono text-muted-foreground">
+                    No buckets with ≥ 10 graded picks yet. Keep logging entries to unlock this tracker.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs font-mono">
+                      <thead>
+                        <tr className="border-b border-slate-800 text-muted-foreground text-[10px] uppercase tracking-wider">
+                          <th className="text-left py-2 pr-4">Stat Type</th>
+                          <th className="text-left py-2 pr-4">Tier</th>
+                          <th className="text-left py-2 pr-4">Sport</th>
+                          <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleBiasSort("sampleSize")}>
+                            Picks {biasSortKey === "sampleSize" ? (biasSortDir === "desc" ? "↓" : "↑") : ""}
+                          </th>
+                          <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleBiasSort("hitRate")}>
+                            Hit Rate {biasSortKey === "hitRate" ? (biasSortDir === "desc" ? "↓" : "↑") : ""}
+                          </th>
+                          <th className="text-right py-2 px-2 text-slate-400">Model P</th>
+                          <th className="text-right py-2 pl-2 cursor-pointer hover:text-foreground" onClick={() => toggleBiasSort("delta")}>
+                            Delta {biasSortKey === "delta" ? (biasSortDir === "desc" ? "↓" : "↑") : ""}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedBuckets.map((b, i) => {
+                          const deltaVal = b.delta ?? 0;
+                          const deltaColor = deltaVal > 5 ? "text-emerald-400" : deltaVal < -5 ? "text-rose-400" : "text-amber-400";
+                          const hitColor = b.hitRate == null ? "text-muted-foreground"
+                            : b.hitRate >= 0.6 ? "text-emerald-400"
+                            : b.hitRate >= 0.5 ? "text-amber-400"
+                            : "text-rose-400";
+                          return (
+                            <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
+                              <td className="py-2 pr-4 text-slate-200 font-semibold">{b.statType}</td>
+                              <td className="py-2 pr-4 text-muted-foreground capitalize">{b.tier}</td>
+                              <td className="py-2 pr-4 text-muted-foreground">{b.sport ?? "—"}</td>
+                              <td className="py-2 px-2 text-right text-muted-foreground">{b.sampleSize}</td>
+                              <td className={`py-2 px-2 text-right font-bold ${hitColor}`}>
+                                {b.hitRate != null ? `${(b.hitRate * 100).toFixed(1)}%` : "—"}
+                              </td>
+                              <td className="py-2 px-2 text-right text-muted-foreground">
+                                {b.avgModelPOver != null ? `${b.avgModelPOver.toFixed(1)}%` : "—"}
+                              </td>
+                              <td className={`py-2 pl-2 text-right font-bold font-mono ${deltaColor}`}>
+                                {b.delta != null ? `${b.delta > 0 ? "+" : ""}${b.delta.toFixed(1)}pp` : "—"}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            )}
+          </Card>
 
           {/* Emotional State Performance */}
           {s.emotionWinRates && s.emotionWinRates.length > 0 && (

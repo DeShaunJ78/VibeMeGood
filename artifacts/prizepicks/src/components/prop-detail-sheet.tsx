@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -281,6 +282,21 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
   const abortRef = useRef<AbortController | null>(null);
   const { addPick, removePick, hasPick, updateDirection } = useEntry();
   const { data: userSettings } = useUserSettings();
+
+  const _biasBase = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+  const { data: biasData } = useQuery<{ buckets: Array<{ sport: string | null; statType: string; tier: string; hitCount: number; sampleSize: number; hitRate: number | null; avgModelPOver: number | null; delta: number | null; hasEnoughData: boolean }> }>({
+    queryKey: ["stat-bias"],
+    queryFn: async () => {
+      const r = await fetch(`${_biasBase}/api/dashboard/stat-bias`);
+      if (!r.ok) throw new Error("Failed to load stat bias");
+      return r.json();
+    },
+    staleTime: 60_000,
+  });
+
+  const biasBucket = data?.ppLine?.statType && data?.ppLine?.lineType
+    ? (biasData?.buckets ?? []).find(b => b.statType === data.ppLine.statType && b.tier === data.ppLine.lineType && b.hasEnoughData) ?? null
+    : null;
 
   useEffect(() => {
     if (!data || !open) return;
@@ -1127,6 +1143,41 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                   )}
                 </div>
               )}
+
+              {/* Historical Bias */}
+              {biasBucket && (() => {
+                const bias = biasBucket;
+                const sport = data.player?.sport ?? null;
+                const tier = data.ppLine?.lineType ?? null;
+                const deltaVal = bias.delta ?? 0;
+                const deltaColor = deltaVal > 5 ? "text-emerald-400" : deltaVal < -5 ? "text-rose-400" : "text-amber-400";
+                return (
+                  <div className="px-5 py-3 border-b border-slate-800/50">
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Historical Bias</div>
+                    <div className="flex items-center gap-4 text-xs font-mono">
+                      <div>
+                        <span className="text-muted-foreground">Your hit rate</span>{" "}
+                        <span className={`font-bold ${(bias.hitRate ?? 0) >= 0.6 ? "text-emerald-400" : (bias.hitRate ?? 0) >= 0.5 ? "text-amber-400" : "text-rose-400"}`}>
+                          {bias.hitRate != null ? `${(bias.hitRate * 100).toFixed(1)}%` : "—"}
+                        </span>
+                      </div>
+                      <div className="text-slate-700">|</div>
+                      <div>
+                        <span className="text-muted-foreground">Model P̄</span>{" "}
+                        <span className="text-slate-300">{bias.avgModelPOver != null ? `${bias.avgModelPOver.toFixed(1)}%` : "—"}</span>
+                      </div>
+                      <div className="text-slate-700">|</div>
+                      <div>
+                        <span className="text-muted-foreground">Δ</span>{" "}
+                        <span className={`font-bold ${deltaColor}`}>
+                          {bias.delta != null ? `${bias.delta > 0 ? "+" : ""}${bias.delta.toFixed(1)}pp` : "—"}
+                        </span>
+                      </div>
+                      <div className="ml-auto text-[10px] text-muted-foreground">n={bias.sampleSize}{sport ? ` · ${sport}` : ""}{tier ? ` · ${tier}` : ""}</div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Line History Chart */}
               {historyChartData.length > 1 && (

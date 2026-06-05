@@ -31,6 +31,7 @@ export const userSettingsTable = pgTable("user_settings", {
   }),
   experimentalLabEnabled: boolean("experimental_lab_enabled").default(false),
   experimentalLabAcknowledged: boolean("experimental_lab_acknowledged").default(false),
+  biasCorrectionEnabled: boolean("bias_correction_enabled").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (t) => ({

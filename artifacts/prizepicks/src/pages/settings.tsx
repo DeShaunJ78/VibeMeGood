@@ -215,6 +215,20 @@ function VarianceIntelSection({ settings, onUpdate }: { settings: UserSettings; 
               </div>
             </div>
 
+            {/* Personal Bias Correction */}
+            <div className="flex items-center justify-between p-4 bg-slate-950 border border-slate-700 rounded-lg">
+              <div>
+                <div className="font-semibold text-sm">Use personal bias correction</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  Adjusts edge scores up or down (±5 pts) based on your historical hit rate per stat type. Requires ≥ 10 graded picks per bucket.
+                </div>
+              </div>
+              <Switch
+                checked={settings.biasCorrectionEnabled ?? false}
+                onCheckedChange={v => onUpdate({ biasCorrectionEnabled: v })}
+              />
+            </div>
+
             {/* Experimental Lab */}
             <div className="p-4 bg-amber-950/30 border border-amber-700/40 rounded-lg">
               <div className="flex items-start justify-between gap-3">

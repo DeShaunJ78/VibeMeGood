@@ -102,6 +102,7 @@ import type {
   SharpSyncResult,
   SlateRow,
   SlateSportCount,
+  StatBiasResponse,
   SyncResult,
   Team,
   TeamInput,
@@ -4384,6 +4385,83 @@ export function useGetReviewStats<TData = Awaited<ReturnType<typeof getReviewSta
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetReviewStatsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetStatBiasUrl = () => {
+
+
+
+
+  return `/api/dashboard/stat-bias`
+}
+
+/**
+ * @summary Personal pick hit rates aggregated by sport × stat type × tier
+ */
+export const getStatBias = async ( options?: RequestInit): Promise<StatBiasResponse> => {
+
+  return customFetch<StatBiasResponse>(getGetStatBiasUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStatBiasQueryKey = () => {
+    return [
+    `/api/dashboard/stat-bias`
+    ] as const;
+    }
+
+
+export const getGetStatBiasQueryOptions = <TData = Awaited<ReturnType<typeof getStatBias>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStatBias>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStatBiasQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStatBias>>> = ({ signal }) => getStatBias({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStatBias>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStatBiasQueryResult = NonNullable<Awaited<ReturnType<typeof getStatBias>>>
+export type GetStatBiasQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Personal pick hit rates aggregated by sport × stat type × tier
+ */
+
+export function useGetStatBias<TData = Awaited<ReturnType<typeof getStatBias>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStatBias>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStatBiasQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
