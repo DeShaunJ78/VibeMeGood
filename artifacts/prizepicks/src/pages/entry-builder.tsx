@@ -370,6 +370,14 @@ export default function EntryBuilder() {
   }, {});
   const correlatedTeams = Object.entries(teamGroups).filter(([, ps]) => ps.length >= 2);
 
+  // Detect same-game picks (SGP correlation risk)
+  const gameGroups = picks.reduce<Record<number, EntryPick[]>>((acc, p) => {
+    if (p.gameId == null) return acc;
+    acc[p.gameId] = [...(acc[p.gameId] ?? []), p];
+    return acc;
+  }, {});
+  const correlatedGames = Object.values(gameGroups).filter(ps => ps.length >= 2);
+
   const portfolioGatePass = picks.length >= 3 && totalEntries >= 30 && picks.every(p => (p.gamesUsed ?? 0) >= 5);
   const portfolioGateReason = picks.length < 3
     ? null // button hidden entirely below
@@ -961,6 +969,23 @@ export default function EntryBuilder() {
               </div>
             ) : (
               <div className="divide-y divide-slate-800">
+                {correlatedGames.length > 0 && (
+                  <div className="mx-3 mt-3 mb-1 flex items-start gap-2 bg-amber-950/40 border border-amber-700/50 rounded-lg px-3 py-2.5 text-xs font-mono text-amber-300">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400" />
+                    <div>
+                      <span className="font-bold">Same-game correlation (SGP) risk</span>
+                      {correlatedGames.map((ps, i) => {
+                        const teams = [...new Set(ps.map(p => p.teamAbbr).filter(Boolean))];
+                        const label = teams.length >= 2 ? `${teams[0]} vs ${teams[1]}` : teams[0] ?? "same game";
+                        return (
+                          <div key={i} className="text-amber-400/80 mt-0.5">
+                            {ps.length} picks from {label} — outcomes are correlated; parlay math overstates independence
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {correlatedTeams.length > 0 && (
                   <div className="mx-3 mt-3 mb-1 flex items-start gap-2 bg-amber-950/40 border border-amber-700/50 rounded-lg px-3 py-2.5 text-xs font-mono text-amber-300">
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400" />

@@ -15,6 +15,7 @@ export interface EntryPick {
   pOver: number | null;
   edgeScore: number | null;
   actionTag: string | null;
+  gameId?: number | null;
   // Extended fields for portfolio optimizer
   sport?: string;
   mean?: number;
