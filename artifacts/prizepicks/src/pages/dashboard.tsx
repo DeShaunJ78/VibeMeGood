@@ -19,6 +19,16 @@ import {
 } from "lucide-react";
 import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge } from "@/components/ui/badges";
 
+function relativeTime(isoStr: string): string {
+  const diff = Date.now() - new Date(isoStr).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
 function StatCard({
   label, value, icon: Icon, iconClass, subLabel, onClick,
 }: {
@@ -242,12 +252,21 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <h1 className="text-2xl font-bold tracking-tight">Command Center</h1>
-        <div className="text-xs font-mono text-muted-foreground flex items-center gap-2" data-testid="status-live">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+        <div className="flex items-center gap-3">
+          {/* Mobile-only compact PP freshness pill */}
+          <span className={`md:hidden font-mono text-[10px] flex items-center gap-1 ${
+            ppNeverSynced ? "text-rose-500/70" : ppStale ? "text-amber-400/80" : "text-slate-500"
+          }`}>
+            <Clock className="w-2.5 h-2.5 shrink-0" />
+            {ppNeverSynced ? "PP · not synced" : `PP · ${relativeTime(boardFreshnessAt!)}`}
           </span>
-          LIVE DATA
+          <div className="text-xs font-mono text-muted-foreground flex items-center gap-2" data-testid="status-live">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            LIVE DATA
+          </div>
         </div>
       </div>
 
@@ -264,9 +283,9 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* PP lines freshness warning */}
+      {/* PP lines freshness warning — desktop only; mobile gets the compact header pill */}
       {(ppNeverSynced || ppStale) && (
-        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-mono ${
+        <div className={`hidden md:flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-mono ${
           ppNeverSynced
             ? "border-rose-800/50 bg-rose-900/10 text-rose-400/80"
             : "border-amber-700/40 bg-amber-900/10 text-amber-400/80"
