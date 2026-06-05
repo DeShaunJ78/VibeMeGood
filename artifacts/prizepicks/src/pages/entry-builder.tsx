@@ -121,37 +121,43 @@ function computeKellyResult(
   flexPayouts: Record<string, number>,
 ): KellyResult | null {
   if (picks.length < 2) return null;
-  const missingPicks = picks.filter(p => p.pOver == null).map(p => abbreviateName(p.playerName));
+  const missingPicks = picks.filter(p => legPHit(p) == null).map(p => abbreviateName(p.playerName));
   const hasAllData = missingPicks.length === 0;
-  const probsFilled = picks.map(p => legPHit(p) ?? 0.5);
+  // Only use picks that have actual probability data — never impute
+  const knownProbs = picks.map(p => legPHit(p)).filter((v): v is number => v != null);
+  if (knownProbs.length === 0) return null;
 
   if (playstyle === "power") {
     if (multiplier <= 1) return null;
-    const pWin = probsFilled.reduce((acc, p) => acc * p, 1);
+    const pWin = knownProbs.reduce((acc, p) => acc * p, 1);
     const b = multiplier - 1;
     const fullKelly = (pWin * multiplier - 1) / b;
     return { fullKelly, halfKelly: fullKelly / 2, pWin, effectiveMult: multiplier, hasAllData, missingPicks };
   }
 
-  // Flex: DP across all outcome tiers, compute effective net odds
-  const n = picks.length;
+  // Flex: DP across all outcome tiers using only the picks with known probability.
+  // The DP dimension is the count of known-prob legs (partial if some missing).
   const flexKeys = Object.keys(flexPayouts);
   if (flexKeys.length === 0) return null;
-  let dp = new Array(n + 1).fill(0) as number[];
+  const m = knownProbs.length;         // legs used in DP (≤ picks.length)
+  const nTotal = picks.length;          // total legs (for payout key lookup)
+  let dp = new Array(m + 1).fill(0) as number[];
   dp[0] = 1;
-  for (let i = 0; i < n; i++) {
-    const p = probsFilled[i];
-    const next = new Array(n + 1).fill(0) as number[];
+  for (let i = 0; i < m; i++) {
+    const p = knownProbs[i];
+    const next = new Array(m + 1).fill(0) as number[];
     for (let k = 0; k <= i; k++) {
-      next[k] += dp[k] * (1 - p);
+      next[k]     += dp[k] * (1 - p);
       next[k + 1] += dp[k] * p;
     }
     dp = next;
   }
+  // Map DP outcomes onto full-entry payout keys (scale k proportionally when partial)
   let expectedGross = 0;
   let pWin = 0;
-  for (let k = 0; k <= n; k++) {
-    const mult = flexPayouts[`${k}/${n}`] ?? 0;
+  for (let k = 0; k <= m; k++) {
+    const scaledK = m < nTotal ? Math.round(k * nTotal / m) : k;
+    const mult = flexPayouts[`${scaledK}/${nTotal}`] ?? 0;
     if (mult > 0) { expectedGross += dp[k] * mult; pWin += dp[k]; }
   }
   if (pWin <= 0) return null;
@@ -452,8 +458,11 @@ export default function EntryBuilder() {
 
   const kellyResult = useMemo(() => {
     if (n < 2 || multiplierUnknown) return null;
-    return computeKellyResult(picks, playstyle, multiplier, flexPayouts);
-  }, [picks, playstyle, multiplier, flexPayouts, n, multiplierUnknown]);
+    // When a manual multiplier is entered in Flex mode, treat it as a single-payout
+    // scenario (same math as Power) since flexPayouts is empty in that case.
+    const effectiveStyle: "power" | "flex" = (playstyle === "flex" && usesManual) ? "power" : playstyle;
+    return computeKellyResult(picks, effectiveStyle, multiplier, flexPayouts);
+  }, [picks, playstyle, multiplier, flexPayouts, n, multiplierUnknown, usesManual]);
 
   const evPct       = activeEV?.evPct ?? flexEstimatedEvPct ?? powerEstimatedEvPct;
   // Indicator thresholds: green >5%, amber -0.5% to 5% (covers break-even), red <-0.5%
@@ -1111,7 +1120,7 @@ export default function EntryBuilder() {
                         ] as { label: string; fraction: number; desc: string; rec?: boolean }[]).map(({ label, fraction, desc, rec }) => {
                           const pct = Math.max(0, fraction) * 100;
                           const dollars = Math.max(0, fraction) * bankrollNum;
-                          const color = pct > 5 ? "text-emerald-400" : pct > 0.5 ? "text-amber-400" : "text-rose-400";
+                          const color = pct > 2 ? "text-emerald-400" : pct > 0 ? "text-amber-400" : "text-rose-400";
                           return (
                             <div key={label} className={`flex items-center gap-3 rounded px-3 py-2 ${rec ? "bg-emerald-950/30 border border-emerald-700/30" : "bg-slate-800/40"}`}>
                               <div className="flex-1 min-w-0">
@@ -1132,7 +1141,7 @@ export default function EntryBuilder() {
                       <div className="text-[10px] font-mono text-slate-600 space-y-0.5 pt-1 border-t border-slate-800">
                         <div>P(win) {(kellyResult.pWin * 100).toFixed(1)}% · eff. mult {kellyResult.effectiveMult.toFixed(2)}× · bankroll ${bankrollNum.toFixed(0)}</div>
                         {!kellyResult.hasAllData && (
-                          <div className="text-amber-500/60">⚠ Missing pOver for {kellyResult.missingPicks.join(", ")} — using 50% fallback</div>
+                          <div className="text-amber-500/60">⚠ {kellyResult.missingPicks.join(", ")} excluded (no model data) — partial Kelly estimate</div>
                         )}
                         <div>
                           Adjust in{" "}
