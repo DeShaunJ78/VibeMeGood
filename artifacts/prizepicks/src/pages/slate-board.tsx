@@ -1440,6 +1440,23 @@ export default function SlateBoard() {
         {tab === "player" && (
           <>
 
+            {/* Mobile sport-filter pills — scrolls horizontally so pills never wrap */}
+            <div className="md:hidden flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+              {(["all", "NBA", "NFL", "MLB", "NHL", "WNBA"] as const).map(s => (
+                <button
+                  key={s}
+                  onClick={() => { setSport(s); setActivePreset(null); }}
+                  className={`shrink-0 px-2.5 py-0.5 rounded font-mono text-[11px] border transition-colors ${
+                    sport === s
+                      ? "bg-primary/20 text-primary border-primary/40"
+                      : "border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500"
+                  }`}
+                >
+                  {s === "all" ? "All" : s}
+                </button>
+              ))}
+            </div>
+
             {/* Quick-filter preset toolbar — only once unlocked (no locked-state noise) */}
             {presetsUnlocked && (
             <div className="flex overflow-x-auto items-center gap-1.5 py-0.5 md:flex-wrap scrollbar-none">
