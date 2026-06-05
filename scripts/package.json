@@ -10,6 +10,7 @@
     "seed-matchup-history": "tsx ./src/seed-matchup-history.ts",
     "seed-entries": "tsx ./src/seed-entries.ts",
     "data-quality": "tsx ./src/data-quality-check.ts",
+    "migrate-clv-deduplicate": "tsx ./src/migrate-clv-deduplicate.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

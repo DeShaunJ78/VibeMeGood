@@ -728,6 +728,15 @@ router.patch("/entries/:entryId/picks/:pickId", async (req, res): Promise<void> 
             closingLine: String(closingLine),
             clv:         String(clv),
             direction:   pick.direction,
+          }).onConflictDoUpdate({
+            target: clvRecordsTable.entryPickId,
+            set: {
+              ppLineId:    pick.ppLineId,
+              lockedLine:  String(lockedLine),
+              closingLine: String(closingLine),
+              clv:         String(clv),
+              direction:   pick.direction,
+            },
           });
 
           await tx.update(entryPicksTable)
