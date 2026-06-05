@@ -297,30 +297,31 @@ async function seed() {
   console.log(`Inserted ${entries.length} entries`);
 
   // ---- Entry Picks ----
-  // CLV convention: clv = lineValue - closingLine (for "more" direction)
-  //   Positive CLV (green)  → closing line dropped  (you locked a harder bar, market agreed player scores less)
-  //   Negative CLV (red)    → closing line rose      (market moved line higher, you got value at original lock)
-  //   Zero / null CLV (grey)→ no movement or DNP/pending
+  // CLV convention (matches backend: entries.ts line ~726):
+  //   clv = closingLine - lineValue  (for "more" direction)
+  //   Positive CLV (green)  → closing line rose    (market agreed player scores more, you beat the close)
+  //   Negative CLV (red)    → closing line dropped (market moved against you)
+  //   Zero / null (grey)    → no movement or DNP/pending
   await db.insert(entryPicksTable).values([
-    // Entry 0 — 3-pick Power WIN: one favorable, one flat, one unfavorable
-    { entryId: entries[0].id, playerId: playersByName["Nikola Jokic"].id,            statType: "Points",    direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.2", projectionGap: "1.7",  result: "hit",  closingLine: "28.0", clv: "1.5"  },
+    // Entry 0 — 3-pick Power WIN: favorable (+1.5), flat (0.0), unfavorable (-1.0)
+    { entryId: entries[0].id, playerId: playersByName["Nikola Jokic"].id,            statType: "Points",    direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.2", projectionGap: "1.7",  result: "hit",  closingLine: "31.0", clv: "1.5"  },
     { entryId: entries[0].id, playerId: playersByName["Jayson Tatum"].id,            statType: "Rebounds",  direction: "more", lineValue: "8.5",  lineType: "standard", yourProjection: "9.2",  projectionGap: "0.7",  result: "hit",  closingLine: "8.5",  clv: "0.0"  },
-    { entryId: entries[0].id, playerId: playersByName["Giannis Antetokounmpo"].id,   statType: "Points",    direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9",  result: "hit",  closingLine: "31.5", clv: "-1.0" },
+    { entryId: entries[0].id, playerId: playersByName["Giannis Antetokounmpo"].id,   statType: "Points",    direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9",  result: "hit",  closingLine: "29.5", clv: "-1.0" },
 
-    // Entry 1 — 4-pick Flex LOSS: two favorable, one DNP (null), one unfavorable
-    { entryId: entries[1].id, playerId: playersByName["Jayson Tatum"].id,            statType: "Points",    direction: "more", lineValue: "27.5", lineType: "standard", yourProjection: "29.8", projectionGap: "2.3",  result: "hit",  closingLine: "26.0", clv: "1.5"  },
-    { entryId: entries[1].id, playerId: playersByName["Kevin Durant"].id,            statType: "Points",    direction: "more", lineValue: "25.5", lineType: "standard", yourProjection: "27.8", projectionGap: "2.3",  result: "hit",  closingLine: "24.5", clv: "1.0"  },
+    // Entry 1 — 4-pick Flex LOSS: favorable (+1.5), favorable (+1.0), DNP (null), unfavorable (-1.5)
+    { entryId: entries[1].id, playerId: playersByName["Jayson Tatum"].id,            statType: "Points",    direction: "more", lineValue: "27.5", lineType: "standard", yourProjection: "29.8", projectionGap: "2.3",  result: "hit",  closingLine: "29.0", clv: "1.5"  },
+    { entryId: entries[1].id, playerId: playersByName["Kevin Durant"].id,            statType: "Points",    direction: "more", lineValue: "25.5", lineType: "standard", yourProjection: "27.8", projectionGap: "2.3",  result: "hit",  closingLine: "26.5", clv: "1.0"  },
     { entryId: entries[1].id, playerId: playersByName["Jimmy Butler"].id,            statType: "Points",    direction: "more", lineValue: "20.5", lineType: "goblin",   yourProjection: "17.3", projectionGap: "-3.2", result: "dnp",  closingLine: null,   clv: null   },
-    { entryId: entries[1].id, playerId: playersByName["Devin Booker"].id,            statType: "Points",    direction: "more", lineValue: "24.5", lineType: "standard", yourProjection: "22.1", projectionGap: "-2.4", result: "miss", closingLine: "26.0", clv: "-1.5" },
+    { entryId: entries[1].id, playerId: playersByName["Devin Booker"].id,            statType: "Points",    direction: "more", lineValue: "24.5", lineType: "standard", yourProjection: "22.1", projectionGap: "-2.4", result: "miss", closingLine: "23.0", clv: "-1.5" },
 
-    // Entry 2 — 2-pick Flex LOSS: one large favorable, one unfavorable
-    { entryId: entries[2].id, playerId: playersByName["Stephen Curry"].id,           statType: "3-PT Made", direction: "more", lineValue: "4.5",  lineType: "demon",    yourProjection: "5.2",  projectionGap: "0.7",  result: "miss", closingLine: "3.5",  clv: "1.0"  },
-    { entryId: entries[2].id, playerId: playersByName["LeBron James"].id,            statType: "Assists",   direction: "more", lineValue: "7.5",  lineType: "standard", yourProjection: "8.4",  projectionGap: "0.9",  result: "miss", closingLine: "8.0",  clv: "-0.5" },
+    // Entry 2 — 2-pick Flex LOSS: favorable (+1.0), unfavorable (-0.5)
+    { entryId: entries[2].id, playerId: playersByName["Stephen Curry"].id,           statType: "3-PT Made", direction: "more", lineValue: "4.5",  lineType: "demon",    yourProjection: "5.2",  projectionGap: "0.7",  result: "miss", closingLine: "5.5",  clv: "1.0"  },
+    { entryId: entries[2].id, playerId: playersByName["LeBron James"].id,            statType: "Assists",   direction: "more", lineValue: "7.5",  lineType: "standard", yourProjection: "8.4",  projectionGap: "0.9",  result: "miss", closingLine: "7.0",  clv: "-0.5" },
 
-    // Entry 3 — 3-pick Power WIN: big favorable, flat, large unfavorable
-    { entryId: entries[3].id, playerId: playersByName["Giannis Antetokounmpo"].id,   statType: "Points",    direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9",  result: "hit",  closingLine: "28.5", clv: "2.0"  },
+    // Entry 3 — 3-pick Power WIN: large favorable (+2.0), flat (0.0), large unfavorable (-1.5)
+    { entryId: entries[3].id, playerId: playersByName["Giannis Antetokounmpo"].id,   statType: "Points",    direction: "more", lineValue: "30.5", lineType: "standard", yourProjection: "33.4", projectionGap: "2.9",  result: "hit",  closingLine: "32.5", clv: "2.0"  },
     { entryId: entries[3].id, playerId: playersByName["Donovan Mitchell"].id,        statType: "Points",    direction: "more", lineValue: "26.5", lineType: "standard", yourProjection: "28.5", projectionGap: "2.0",  result: "hit",  closingLine: "26.5", clv: "0.0"  },
-    { entryId: entries[3].id, playerId: playersByName["Nikola Jokic"].id,            statType: "Assists",   direction: "more", lineValue: "9.5",  lineType: "demon",    yourProjection: "8.9",  projectionGap: "-0.6", result: "hit",  closingLine: "11.0", clv: "-1.5" },
+    { entryId: entries[3].id, playerId: playersByName["Nikola Jokic"].id,            statType: "Assists",   direction: "more", lineValue: "9.5",  lineType: "demon",    yourProjection: "8.9",  projectionGap: "-0.6", result: "hit",  closingLine: "8.0",  clv: "-1.5" },
 
     // Entry 4 — 3-pick Power PENDING: no closing line yet
     { entryId: entries[4].id, playerId: playersByName["Nikola Jokic"].id,            statType: "Points",    direction: "more", lineValue: "29.5", lineType: "standard", yourProjection: "31.2", projectionGap: "1.7",  result: "pending" },
