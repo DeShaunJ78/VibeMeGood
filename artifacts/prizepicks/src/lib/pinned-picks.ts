@@ -23,6 +23,7 @@ export function readPinnedPicks(): PinnedPick[] {
 export function writePinnedPicks(picks: PinnedPick[]): void {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(picks));
+    window.dispatchEvent(new Event("pinned-picks-changed"));
   } catch {}
 }
 
@@ -40,5 +41,6 @@ export function removePinnedPick(ppLineId: number): void {
 export function clearPinnedPicks(): void {
   try {
     localStorage.removeItem(LS_KEY);
+    window.dispatchEvent(new Event("pinned-picks-changed"));
   } catch {}
 }

@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import { useState, useEffect } from "react";
 import {
   Activity,
   LayoutDashboard,
@@ -37,6 +38,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useEntry } from "@/lib/entry-context";
 import { useUserSettings } from "@/hooks/use-user-settings";
+import { readPinnedPicks } from "@/lib/pinned-picks";
 import { useGetDataHealth, getGetDataHealthQueryKey } from "@workspace/api-client-react";
 
 const NAV_ITEMS = [
@@ -81,6 +83,17 @@ export function AppSidebar() {
   const closeOnMobile = () => setOpenMobile(false);
   const { picks } = useEntry();
   const { data: userSettings } = useUserSettings();
+
+  const [pinnedCount, setPinnedCount] = useState(() => readPinnedPicks().length);
+  useEffect(() => {
+    const sync = () => setPinnedCount(readPinnedPicks().length);
+    window.addEventListener("storage", sync);
+    window.addEventListener("pinned-picks-changed", sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("pinned-picks-changed", sync);
+    };
+  }, []);
 
   // Poll data health every 5 min to detect stale PP lines
   const { data: healthData } = useGetDataHealth({
@@ -166,6 +179,7 @@ export function AppSidebar() {
               {NAV_ITEMS.map((item) => {
                 const isActive = location === item.url;
                 const isEntryBuilder = item.url === "/entry-builder";
+                const isLineupFactory = item.url === "/lineup-factory";
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
@@ -183,6 +197,11 @@ export function AppSidebar() {
                         {isEntryBuilder && picks.length > 0 && (
                           <span className="ml-auto bg-primary text-primary-foreground text-[10px] font-bold font-mono rounded-full w-4 h-4 flex items-center justify-center shrink-0">
                             {picks.length}
+                          </span>
+                        )}
+                        {isLineupFactory && pinnedCount > 0 && (
+                          <span className="ml-auto bg-violet-600 text-white text-[10px] font-bold font-mono rounded-full w-4 h-4 flex items-center justify-center shrink-0">
+                            {pinnedCount}
                           </span>
                         )}
                       </Link>
