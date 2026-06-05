@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { execFileSync } from "child_process";
+import fs from "fs";
 import { db } from "@workspace/db";
 import { dataPullLogsTable, alertsTable, syncRunsTable, playersTable, injuriesTable, ppLinesTable, gamesTable, playerGameLogsTable, probabilityCalibrationTable } from "@workspace/db/schema";
 import { eq, and, isNull, or, gte, lte, sql } from "drizzle-orm";
@@ -519,6 +521,29 @@ router.get("/data-readiness", async (_req, res) => {
   } catch (err) {
     logger.error({ err }, "data-readiness check failed");
     res.status(500).json({ gameLogCount: 0, playersWithLogs: 0, calibrationBuckets: 0, isDataReady: false, isCalibrationReady: false });
+  }
+});
+
+// GET /sync/extension-download — streams the chrome-extension folder as a zip
+router.get("/sync/extension-download", (req, res) => {
+  const extDir = "/home/runner/workspace/chrome-extension";
+  const tmpZip = "/tmp/vmg-extension.zip";
+  try {
+    try { fs.unlinkSync(tmpZip); } catch { /* no stale file */ }
+    execFileSync("python3", ["-c", [
+      "import zipfile, os",
+      `ext = ${JSON.stringify(extDir)}`,
+      `zp  = ${JSON.stringify(tmpZip)}`,
+      "with zipfile.ZipFile(zp, 'w', zipfile.ZIP_DEFLATED) as zf:",
+      "    for f in os.listdir(ext):",
+      "        fp = os.path.join(ext, f)",
+      "        if os.path.isfile(fp):",
+      "            zf.write(fp, os.path.join('chrome-extension', f))",
+    ].join("\n")]);
+    res.download(tmpZip, "vmg-extension.zip");
+  } catch (err) {
+    req.log.error({ err }, "extension zip failed");
+    res.status(500).json({ error: "Failed to create extension zip" });
   }
 });
 

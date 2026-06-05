@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
-import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical, Lock, Zap, DollarSign } from "lucide-react";
+import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical, Lock, Zap, DollarSign, Download } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useUserSettings, useUpdateUserSettings, type UserSettings } from "@/hooks/use-user-settings";
 
@@ -970,6 +970,26 @@ export default function Settings() {
             <div className="space-y-3">
               <div className="rounded border border-rose-500/30 bg-rose-500/5 p-3 text-[11px] text-rose-300 font-mono">
                 PrizePicks blocked the direct fetch (CORS restriction). Use one of the methods below instead.
+              </div>
+
+              {/* Chrome Extension download */}
+              <div className="rounded border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
+                <p className="font-mono text-xs font-bold text-emerald-300">Chrome on laptop — auto-sync extension</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Installs a Chrome extension that syncs PrizePicks automatically on a schedule (default every 15 min) — no clicking required. Requires a <span className="text-slate-300">prizepicks.com</span> tab open in Chrome.
+                </p>
+                <a
+                  href="/api/sync/extension-download"
+                  download="vmg-extension.zip"
+                  className="inline-flex items-center gap-1.5 rounded bg-emerald-700 px-3 py-1.5 font-mono text-xs font-bold text-white no-underline hover:bg-emerald-600"
+                >
+                  <Download className="w-3 h-3" /> Download Extension (.zip)
+                </a>
+                <ol className="text-[10px] text-muted-foreground space-y-0.5 list-none mt-1">
+                  <li>1. Download and unzip the file</li>
+                  <li>2. Go to <span className="text-slate-300 font-mono">chrome://extensions</span> → enable <span className="text-slate-300">Developer mode</span> → <span className="text-slate-300">Load unpacked</span> → select the unzipped folder</li>
+                  <li>3. Click the ⚡ icon in Chrome toolbar → paste this page&apos;s URL as the Workstation URL → Save</li>
+                </ol>
               </div>
 
               {/* Bookmarklet — works on desktop + iOS Safari */}
