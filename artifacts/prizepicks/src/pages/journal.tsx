@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2, Pencil, RotateCcw, AlertTriangle, Download } from "lucide-react";
+import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2, Pencil, RotateCcw, AlertTriangle, Download, Bot } from "lucide-react";
 import { format } from "date-fns";
 import { flexExactPayout } from "@workspace/analytics";
 import { CsvColumnPickerDialog, type CsvColGroup } from "@/lib/csv-export";
@@ -287,6 +287,15 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
                 title="Gap at time of entry — data quality unknown"
               >
                 {Number(pick.projectionGap) > 0 ? "+" : ""}{Number(pick.projectionGap).toFixed(1)} edge
+              </span>
+            )}
+            {/* Auto-graded badge */}
+            {pick.gradedBy === "auto" && (
+              <span
+                className="border border-sky-700/50 bg-sky-900/30 text-sky-400 text-[10px] font-bold font-mono px-1.5 py-0.5 rounded shrink-0 flex items-center gap-1"
+                title="Result set automatically by the nightly grading run"
+              >
+                <Bot className="w-2.5 h-2.5" />AUTO
               </span>
             )}
             {/* CLV badge — shown whenever closing line is recorded, regardless of result */}
@@ -950,7 +959,8 @@ export default function Journal() {
   const [dateTo, setDateTo]     = useState("");
   const [result, setResult]     = useState("");
   const [sport, setSport]       = useState("");
-  const [newOpen, setNewOpen]         = useState(false);
+  const [newOpen, setNewOpen]                 = useState(false);
+  const [showAutoGradedOnly, setShowAutoGradedOnly] = useState(false);
   const [csvPickerOpen, setCsvPickerOpen] = useState(false);
   const [sortCol, setSortCol]   = useState<string>("date");
   const [sortDir, setSortDir]   = useState<SortDir>("desc");
@@ -1018,17 +1028,32 @@ export default function Journal() {
     });
   }, [rawList, sortCol, sortDir]);
 
-  const settled = list.filter((e: any) => e.result !== "pending");
+  // Auto-graded counts (computed before showAutoGradedOnly filter, over full list)
+  const autoGradedPickCount = useMemo(() =>
+    list.reduce((n: number, e: any) => n + (e.picks ?? []).filter((p: any) => p.gradedBy === "auto").length, 0),
+    [list],
+  );
+  const autoGradedEntryIds = useMemo(() =>
+    new Set<number>(list.filter((e: any) => (e.picks ?? []).some((p: any) => p.gradedBy === "auto")).map((e: any) => e.id)),
+    [list],
+  );
+
+  const displayList = useMemo(() =>
+    showAutoGradedOnly ? list.filter((e: any) => autoGradedEntryIds.has(e.id)) : list,
+    [list, showAutoGradedOnly, autoGradedEntryIds],
+  );
+
+  const settled = displayList.filter((e: any) => e.result !== "pending");
   const pnl = settled.reduce((sum: number, e: any) => {
     const p = Number(e.actualPayout ?? 0);
     const s = Number(e.stake);
     return sum + (e.result === "win" || e.result === "partial" ? p - s : -s);
   }, 0);
-  const wins    = list.filter((e: any) => e.result === "win").length;
-  const losses  = list.filter((e: any) => e.result === "loss").length;
-  const pending = list.filter((e: any) => e.result === "pending").length;
+  const wins    = displayList.filter((e: any) => e.result === "win").length;
+  const losses  = displayList.filter((e: any) => e.result === "loss").length;
+  const pending = displayList.filter((e: any) => e.result === "pending").length;
 
-  const activeFilterCount = [dateFrom, dateTo, result, sport].filter(Boolean).length;
+  const activeFilterCount = [dateFrom, dateTo, result, sport].filter(Boolean).length + (showAutoGradedOnly ? 1 : 0);
 
   function clearFilters() {
     setDateFrom("");
@@ -1036,6 +1061,7 @@ export default function Journal() {
     setResult("");
     setSport("");
     setSearch("");
+    setShowAutoGradedOnly(false);
   }
 
   function handleExportCsv(cols?: Set<CsvColGroup>) {
@@ -1099,6 +1125,31 @@ export default function Journal() {
           </Button>
         </div>
       </div>
+
+      {/* ── Auto-graded banner ── */}
+      {autoGradedPickCount > 0 && (
+        <div className="flex items-center gap-2 shrink-0 px-3 py-2 rounded-md border border-sky-800/50 bg-sky-950/40 text-sky-300 font-mono text-xs">
+          <Bot className="w-3.5 h-3.5 shrink-0 text-sky-400" />
+          <span>
+            <span className="font-bold">{autoGradedPickCount}</span>
+            {" "}pick{autoGradedPickCount !== 1 ? "s" : ""} auto-graded
+            {" "}across{" "}
+            <span className="font-bold">{autoGradedEntryIds.size}</span>
+            {" "}entr{autoGradedEntryIds.size !== 1 ? "ies" : "y"}
+            {" "}— verify results are correct
+          </span>
+          <button
+            onClick={() => setShowAutoGradedOnly(v => !v)}
+            className={`ml-auto text-[10px] font-bold uppercase px-2 py-0.5 rounded border transition-colors ${
+              showAutoGradedOnly
+                ? "bg-sky-700/50 border-sky-600/60 text-sky-200"
+                : "border-sky-700/50 text-sky-400 hover:bg-sky-900/40"
+            }`}
+          >
+            {showAutoGradedOnly ? "✓ Filtered" : "Review"}
+          </button>
+        </div>
+      )}
 
       {/* ── Filter bar ── */}
       <div className="flex items-center gap-2 shrink-0 flex-wrap">
@@ -1198,10 +1249,10 @@ export default function Journal() {
           Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-14 bg-slate-900 rounded-lg" />
           ))
-        ) : list.length === 0 ? (
+        ) : displayList.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-2 text-muted-foreground font-mono text-sm">
             <span>No entries found.</span>
-            {hasParams && (
+            {(hasParams || showAutoGradedOnly) && (
               <button
                 onClick={clearFilters}
                 className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2"
@@ -1211,7 +1262,7 @@ export default function Journal() {
             )}
           </div>
         ) : (
-          list.map((entry: any) => <EntryRow key={entry.id} entry={entry} />)
+          displayList.map((entry: any) => <EntryRow key={entry.id} entry={entry} />)
 
         )}
       </div>

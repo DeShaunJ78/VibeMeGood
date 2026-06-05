@@ -152,7 +152,7 @@ export async function gradePicksJob(): Promise<number> {
 
     await db
       .update(entryPicksTable)
-      .set({ result })
+      .set({ result, gradedBy: "auto" })
       .where(eq(entryPicksTable.id, pick.pickId));
     graded++;
   }
