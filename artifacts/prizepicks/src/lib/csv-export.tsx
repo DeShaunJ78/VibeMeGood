@@ -56,9 +56,10 @@ export function saveCsvCols(cols: Set<CsvColGroup>): void {
 }
 
 const CSV_PRESETS: { label: string; title: string; groups: CsvColGroup[] }[] = [
-  { label: "All Columns",     title: "All column groups",              groups: ["meta", "picks", "financials", "projections"] },
-  { label: "Quick Review",    title: "Date · Player · Result · P&L",  groups: ["meta", "picks", "financials"] },
-  { label: "Financials Only", title: "Stake · Payout · P&L",          groups: ["financials"] },
+  { label: "All Columns",     title: "All column groups",                    groups: ["meta", "picks", "financials", "projections"] },
+  { label: "Quick Review",    title: "Date · Player · Result · P&L",        groups: ["meta", "picks", "financials"] },
+  { label: "Financials Only", title: "Stake · Payout · P&L",                groups: ["financials"] },
+  { label: "Model Check",     title: "Player · Projection · P(Over) · CLV", groups: ["picks", "projections"] },
 ];
 
 export function CsvColumnPickerDialog({
