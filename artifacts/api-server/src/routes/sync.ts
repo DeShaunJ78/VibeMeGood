@@ -113,6 +113,23 @@ router.post("/sync/historical-stats", async (req, res) => {
             err instanceof Error ? err.message : "Auto-chain failed");
         });
     }
+    // Auto-chain calibration after any game log backfill
+    logger.info("Auto-triggering calibration after historical-stats backfill");
+    broadcastSyncStatus("calibration", "running", "Auto-started after historical-stats sync");
+    import("../scripts/calibration-job").then(({ calibrationJob }) =>
+      calibrationJob.runHistoricalCalibration(5000)
+        .then(r => {
+          logger.info(r, "Calibration auto-chain complete (historical-stats)");
+          broadcastSyncStatus("calibration", "success", "Calibration complete (auto)");
+        })
+        .catch(err => {
+          logger.warn({ err }, "Calibration auto-chain failed (non-critical)");
+          broadcastSyncStatus("calibration", "error",
+            err instanceof Error ? err.message : "Auto-chain failed");
+        })
+    ).catch(err => {
+      logger.warn({ err }, "Calibration import failed");
+    });
   } catch (e) {
     logger.error({ err: e }, "Historical backfill failed");
     broadcastSyncStatus("historical-stats", "error", e instanceof Error ? e.message : "Unknown error");
@@ -208,6 +225,23 @@ router.post("/sync/game-logs", async (req, res) => {
     const result = await backfillHistoricalStats({ nba: true, mlb: true, nhl: true, nfl: false });
     logger.info(result, "Incremental game log sync done");
     broadcastSyncStatus("game-logs", "success", `${result.total} records`);
+    // Auto-chain calibration after game log sync
+    logger.info("Auto-triggering calibration after game-logs sync");
+    broadcastSyncStatus("calibration", "running", "Auto-started after game-logs sync");
+    import("../scripts/calibration-job").then(({ calibrationJob }) =>
+      calibrationJob.runHistoricalCalibration(5000)
+        .then(r => {
+          logger.info(r, "Calibration auto-chain complete (game-logs)");
+          broadcastSyncStatus("calibration", "success", "Calibration complete (auto)");
+        })
+        .catch(err => {
+          logger.warn({ err }, "Calibration auto-chain failed (non-critical)");
+          broadcastSyncStatus("calibration", "error",
+            err instanceof Error ? err.message : "Auto-chain failed");
+        })
+    ).catch(err => {
+      logger.warn({ err }, "Calibration import failed");
+    });
   } catch (e) {
     logger.error({ err: e }, "Game log sync failed");
     broadcastSyncStatus("game-logs", "error", e instanceof Error ? e.message : "Unknown error");
