@@ -132,12 +132,13 @@ async function checkDataFreshness(): Promise<CheckResult[]> {
 
 async function checkDatabaseHealth(): Promise<CheckResult[]> {
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [ppCount, projCount, extCount, entryCount, calCount, gameLogCount, paceCount, paceLatest, sharpCount, nflAdvCount, nflAdvLatest, clvCoverage, gamesCount] = await Promise.all([
+  const [ppCount, projCount, extCount, entryCount, calCount, calLatest, gameLogCount, paceCount, paceLatest, sharpCount, nflAdvCount, nflAdvLatest, clvCoverage, gamesCount] = await Promise.all([
     db.select({ n: count() }).from(ppLinesTable).where(eq(ppLinesTable.isActive, true)),
     db.select({ n: sql<number>`count(distinct player_id)` }).from(ourProjectionsTable),
     db.select({ n: sql<number>`count(distinct pp_line_id)` }).from(externalLinesTable).where(isNotNull(externalLinesTable.noVigOverProb)),
     db.select({ n: count() }).from(entriesTable),
     db.select({ n: count() }).from(probabilityCalibrationTable),
+    db.select({ t: max(probabilityCalibrationTable.lastUpdated) }).from(probabilityCalibrationTable),
     db.select({ n: count() }).from(playerGameLogsTable),
     db.select({ n: count() }).from(teamPaceRatingsTable),
     db.select({ t: max(teamPaceRatingsTable.computedAt) }).from(teamPaceRatingsTable),
@@ -159,6 +160,9 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
   const ext = Number(extCount[0]?.n ?? 0);
   const entries = Number(entryCount[0]?.n ?? 0);
   const cal = Number(calCount[0]?.n ?? 0);
+  const calTs = calLatest[0]?.t ?? null;
+  const calAgeDays = calTs ? (Date.now() - calTs.getTime()) / (1000 * 60 * 60 * 24) : Infinity;
+  const fmtCalAge = calAgeDays === Infinity ? "never" : calAgeDays < 1 ? "today" : calAgeDays < 2 ? "1d ago" : `${Math.round(calAgeDays)}d ago`;
   const gameLogs = Number(gameLogCount[0]?.n ?? 0);
   const pace = Number(paceCount[0]?.n ?? 0);
   const sharp = Number(sharpCount[0]?.n ?? 0);
@@ -249,10 +253,14 @@ async function checkDatabaseHealth(): Promise<CheckResult[]> {
     },
     {
       name: "Calibration Records",
-      status: cal > 0 ? "green" : "amber",
-      detail: cal === 0 ? "No records yet — populates as picks settle" : `${cal} calibration records`,
-      lastUpdated: null,
-      fixAction: null,
+      status: cal === 0 ? "amber" : calAgeDays > 7 ? "amber" : "green",
+      detail: cal === 0
+        ? "No records yet — run calibration after backfilling history"
+        : calTs
+          ? `${cal.toLocaleString()} records · updated ${fmtCalAge}`
+          : `${cal.toLocaleString()} calibration records`,
+      lastUpdated: calTs ? calTs.toISOString() : null,
+      fixAction: cal === 0 ? "calibration" : calAgeDays > 7 ? "calibration" : null,
     },
     {
       name: "Historical Game Logs",
