@@ -1028,14 +1028,22 @@ export default function Journal() {
     });
   }, [rawList, sortCol, sortDir]);
 
-  // Auto-graded counts (computed before showAutoGradedOnly filter, over full list)
+  // Auto-graded counts — scoped to picks graded today (gradedAt date === today)
+  // Legacy picks without gradedAt are excluded from the banner but still show the badge.
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const autoGradedPickCount = useMemo(() =>
-    list.reduce((n: number, e: any) => n + (e.picks ?? []).filter((p: any) => p.gradedBy === "auto").length, 0),
-    [list],
+    list.reduce((n: number, e: any) => n + (e.picks ?? []).filter((p: any) => {
+      if (p.gradedBy !== "auto") return false;
+      if (!p.gradedAt) return false;
+      return String(p.gradedAt).slice(0, 10) === todayStr;
+    }).length, 0),
+    [list, todayStr],
   );
   const autoGradedEntryIds = useMemo(() =>
-    new Set<number>(list.filter((e: any) => (e.picks ?? []).some((p: any) => p.gradedBy === "auto")).map((e: any) => e.id)),
-    [list],
+    new Set<number>(list.filter((e: any) =>
+      (e.picks ?? []).some((p: any) => p.gradedBy === "auto" && p.gradedAt && String(p.gradedAt).slice(0, 10) === todayStr)
+    ).map((e: any) => e.id)),
+    [list, todayStr],
   );
 
   const displayList = useMemo(() =>

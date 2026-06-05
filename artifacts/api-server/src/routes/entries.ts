@@ -695,7 +695,7 @@ router.patch("/entries/:entryId/picks/:pickId", async (req, res): Promise<void> 
 
     await db.transaction(async (tx) => {
       const [pick] = await tx.update(entryPicksTable)
-        .set(req.body as Record<string, unknown>)
+        .set({ result: parsed.data.result, gradedBy: "manual", gradedAt: new Date() })
         .where(and(
           eq(entryPicksTable.id, pickId),
           eq(entryPicksTable.entryId, entryId),

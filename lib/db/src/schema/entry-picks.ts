@@ -19,6 +19,7 @@ export const entryPicksTable = pgTable("entry_picks", {
   projectionGap: numeric("projection_gap"),
   result: text("result").notNull().default("pending"), // pending | hit | miss | dnp | push
   gradedBy: text("graded_by"), // "auto" | "manual" | null (null = not yet graded / legacy)
+  gradedAt: timestamp("graded_at"), // when the pick was last graded (auto or manual)
   closingLine: numeric("closing_line"),
   clv: numeric("clv"),
   // Edge + tier snapshot — frozen at log time so Journal/Review analysis
