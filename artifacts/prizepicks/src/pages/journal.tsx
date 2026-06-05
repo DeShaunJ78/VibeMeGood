@@ -12,11 +12,138 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2, Pencil, RotateCcw, AlertTriangle, Download } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2, Pencil, RotateCcw, AlertTriangle, Download, Settings2 } from "lucide-react";
 import { format } from "date-fns";
 import { flexExactPayout } from "@workspace/analytics";
 
 const SPORTS = ["NFL", "NBA", "MLB", "NHL", "WNBA", "MMA", "PGA", "NASCAR", "SOCCER"];
+
+// ─── CSV column-group definitions ─────────────────────────────────────────────
+type CsvColGroup = "meta" | "picks" | "financials" | "projections";
+
+const CSV_GROUPS: { id: CsvColGroup; label: string; desc: string; columns: string[] }[] = [
+  {
+    id: "meta",
+    label: "Entry Metadata",
+    desc: "date, result, type, playstyle, notes",
+    columns: ["date", "entry_result", "entry_type", "playstyle", "notes"],
+  },
+  {
+    id: "picks",
+    label: "Pick Detail",
+    desc: "sport, player, stat type, line, direction, pick result",
+    columns: ["sport", "player", "stat_type", "line_value", "direction", "pick_result"],
+  },
+  {
+    id: "financials",
+    label: "Financials",
+    desc: "stake, payout, P&L",
+    columns: ["stake", "actual_payout", "pnl"],
+  },
+  {
+    id: "projections",
+    label: "Projections",
+    desc: "your projection, P(over) %",
+    columns: ["projection", "pover_pct"],
+  },
+];
+
+const CSV_COLS_KEY = "journal_csv_cols";
+const ALL_GROUPS: CsvColGroup[] = ["meta", "picks", "financials", "projections"];
+
+function loadCsvCols(): Set<CsvColGroup> {
+  try {
+    const raw = localStorage.getItem(CSV_COLS_KEY);
+    if (!raw) return new Set(ALL_GROUPS);
+    const parsed = JSON.parse(raw) as string[];
+    const valid = parsed.filter((g): g is CsvColGroup => ALL_GROUPS.includes(g as CsvColGroup));
+    return valid.length > 0 ? new Set(valid) : new Set(ALL_GROUPS);
+  } catch {
+    return new Set(ALL_GROUPS);
+  }
+}
+
+function saveCsvCols(cols: Set<CsvColGroup>): void {
+  try {
+    localStorage.setItem(CSV_COLS_KEY, JSON.stringify([...cols]));
+  } catch {}
+}
+
+// ─── Column picker dialog ──────────────────────────────────────────────────────
+function CsvColumnPickerDialog({
+  open, onClose, onExport,
+}: { open: boolean; onClose: () => void; onExport: (cols: Set<CsvColGroup>) => void }) {
+  const [selected, setSelected] = useState<Set<CsvColGroup>>(() => loadCsvCols());
+
+  function toggleGroup(id: CsvColGroup) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        if (next.size === 1) return prev; // must keep at least one
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function handleExport() {
+    saveCsvCols(selected);
+    onExport(selected);
+    onClose();
+  }
+
+  const totalCols = CSV_GROUPS.filter(g => selected.has(g.id)).reduce((n, g) => n + g.columns.length, 0);
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="bg-slate-950 border-slate-800 max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="font-mono text-sm flex items-center gap-2">
+            <Settings2 className="w-4 h-4 text-primary" />
+            CSV Column Groups
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-muted-foreground font-mono -mt-1">
+          Choose which column groups to include. Selection is saved for next time.
+        </p>
+        <div className="space-y-3 mt-1">
+          {CSV_GROUPS.map(g => (
+            <div key={g.id} className="flex items-start gap-3 p-2.5 rounded-lg border border-slate-800 hover:border-slate-700 transition-colors">
+              <Checkbox
+                id={`col-${g.id}`}
+                checked={selected.has(g.id)}
+                onCheckedChange={() => toggleGroup(g.id)}
+                className="mt-0.5 shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <Label htmlFor={`col-${g.id}`} className="font-mono text-xs font-semibold cursor-pointer text-foreground">
+                  {g.label}
+                </Label>
+                <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{g.desc}</p>
+              </div>
+              <span className="text-[9px] font-mono text-slate-600 shrink-0 mt-0.5">{g.columns.length} cols</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-between mt-1 pt-3 border-t border-slate-800">
+          <span className="text-[10px] font-mono text-muted-foreground">{totalCols} columns selected</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onClose} className="font-mono text-xs h-7 border-slate-700">
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleExport} className="font-mono text-xs h-7 gap-1.5">
+              <Download className="w-3 h-3" /> Download CSV
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const RESULT_OPTIONS = ["win", "loss", "partial", "pending", "refund"];
 
@@ -890,7 +1017,8 @@ export default function Journal() {
   const [dateTo, setDateTo]     = useState("");
   const [result, setResult]     = useState("");
   const [sport, setSport]       = useState("");
-  const [newOpen, setNewOpen]   = useState(false);
+  const [newOpen, setNewOpen]         = useState(false);
+  const [csvPickerOpen, setCsvPickerOpen] = useState(false);
   const [sortCol, setSortCol]   = useState<string>("date");
   const [sortDir, setSortDir]   = useState<SortDir>("desc");
   const qc = useQueryClient();
@@ -977,13 +1105,14 @@ export default function Journal() {
     setSearch("");
   }
 
-  function handleExportCsv() {
+  function handleExportCsv(cols?: Set<CsvColGroup>) {
     const qs = new URLSearchParams();
     if (search)   qs.set("search", search);
     if (dateFrom) qs.set("dateFrom", dateFrom);
     if (dateTo)   qs.set("dateTo", dateTo);
     if (result)   qs.set("result", result);
     if (sport)    qs.set("sport", sport);
+    if (cols && cols.size < 4) qs.set("cols", [...cols].join(","));
     const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
     const url = `${base}/api/entries/export.csv?${qs.toString()}`;
     const a = document.createElement("a");
@@ -1023,11 +1152,11 @@ export default function Journal() {
           </div>
           <Button
             variant="outline"
-            onClick={handleExportCsv}
+            onClick={() => setCsvPickerOpen(true)}
             title="Export visible entries to CSV"
-            className="font-mono text-xs h-8 px-3 border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300"
+            className="font-mono text-xs h-8 px-3 border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 gap-1.5"
           >
-            <Download className="w-3.5 h-3.5 mr-1" /> CSV
+            <Download className="w-3.5 h-3.5" /> CSV
           </Button>
           <Button
             onClick={() => setNewOpen(true)}
@@ -1153,6 +1282,12 @@ export default function Journal() {
 
         )}
       </div>
+
+      <CsvColumnPickerDialog
+        open={csvPickerOpen}
+        onClose={() => setCsvPickerOpen(false)}
+        onExport={cols => handleExportCsv(cols)}
+      />
 
       <NewEntryModal
         open={newOpen}

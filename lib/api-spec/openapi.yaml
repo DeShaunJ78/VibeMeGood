@@ -572,6 +572,10 @@ paths:
         - { name: dateTo, in: query, schema: { type: string, format: date } }
         - { name: sport, in: query, schema: { type: string } }
         - { name: search, in: query, schema: { type: string } }
+        - name: cols
+          in: query
+          description: "Comma-separated column groups to include: meta,picks,financials,projections. Omit for all."
+          schema: { type: string }
       responses:
         "200":
           description: CSV file download

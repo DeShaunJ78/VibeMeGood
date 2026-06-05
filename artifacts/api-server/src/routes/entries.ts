@@ -446,9 +446,55 @@ function csvRow(cells: unknown[]): string {
   return cells.map(csvEsc).join(",") + "\r\n";
 }
 
+// ── Column-group definitions ─────────────────────────────────────────────────
+type CsvColGroup = "meta" | "picks" | "financials" | "projections";
+const ALL_GROUPS: CsvColGroup[] = ["meta", "picks", "financials", "projections"];
+
+interface CsvColCtx {
+  entry: typeof entriesTable.$inferSelect;
+  pick: typeof entryPicksTable.$inferSelect;
+  playerName: string;
+  pickSport: string;
+  stake: number;
+  actualPayout: number;
+  pnl: number | null;
+  pOver: string | null;
+}
+
+const CSV_COLS: { header: string; group: CsvColGroup; value: (c: CsvColCtx) => unknown }[] = [
+  // meta
+  { header: "date",          group: "meta",        value: c => c.entry.entryDate },
+  { header: "entry_result",  group: "meta",        value: c => c.entry.result ?? "pending" },
+  { header: "entry_type",    group: "meta",        value: c => c.entry.entryType },
+  { header: "playstyle",     group: "meta",        value: c => c.entry.entryType },
+  { header: "notes",         group: "meta",        value: c => c.entry.notes ?? "" },
+  // picks
+  { header: "sport",         group: "picks",       value: c => c.pickSport },
+  { header: "player",        group: "picks",       value: c => c.playerName },
+  { header: "stat_type",     group: "picks",       value: c => c.pick.statType },
+  { header: "line_value",    group: "picks",       value: c => c.pick.lineValue },
+  { header: "direction",     group: "picks",       value: c => c.pick.direction },
+  { header: "pick_result",   group: "picks",       value: c => c.pick.result ?? "pending" },
+  // financials
+  { header: "stake",         group: "financials",  value: c => c.stake.toFixed(2) },
+  { header: "actual_payout", group: "financials",  value: c => c.entry.result !== "pending" ? c.actualPayout.toFixed(2) : "" },
+  { header: "pnl",           group: "financials",  value: c => c.pnl != null ? c.pnl.toFixed(2) : "" },
+  // projections
+  { header: "projection",    group: "projections", value: c => c.pick.yourProjection ?? "" },
+  { header: "pover_pct",     group: "projections", value: c => c.pOver ?? "" },
+];
+
 router.get("/entries/export.csv", async (req, res): Promise<void> => {
   try {
-    const { result: resultFilter, entryType, since, dateFrom, dateTo, sport, search } = req.query as Record<string, string>;
+    const { result: resultFilter, entryType, since, dateFrom, dateTo, sport, search, cols } = req.query as Record<string, string>;
+
+    // ── 0. Resolve active column groups ─────────────────────────────────────
+    const activeGroups: Set<CsvColGroup> = cols
+      ? new Set(cols.split(",").map(s => s.trim()).filter((s): s is CsvColGroup => ALL_GROUPS.includes(s as CsvColGroup)))
+      : new Set(ALL_GROUPS);
+    if (activeGroups.size === 0) activeGroups.add("meta"); // always at least one group
+    const activeCols = CSV_COLS.filter(c => activeGroups.has(c.group));
+    const headerRow  = activeCols.map(c => c.header);
 
     // ── 1. Filter entries (same logic as GET /entries) ──────────────────────
     const conditions: SQL[] = [];
@@ -468,7 +514,7 @@ router.get("/entries/export.csv", async (req, res): Promise<void> => {
       if (sportEntryIds.length === 0) {
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
         res.setHeader("Content-Disposition", `attachment; filename="journal-export.csv"`);
-        res.end(csvRow(["date","sport","player","stat_type","line_value","direction","projection","pover_pct","pick_result","entry_result","stake","actual_payout","pnl","entry_type","playstyle","notes"]));
+        res.end(csvRow(headerRow));
         return;
       }
       conditions.push(inArray(entriesTable.id, sportEntryIds));
@@ -485,11 +531,11 @@ router.get("/entries/export.csv", async (req, res): Promise<void> => {
     if (filtered.length === 0) {
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="journal-export.csv"`);
-      res.end(csvRow(["date","sport","player","stat_type","line_value","direction","projection","pover_pct","pick_result","entry_result","stake","actual_payout","pnl","entry_type","playstyle","notes"]));
+      res.end(csvRow(headerRow));
       return;
     }
 
-    // ── 2. Batch-fetch picks, players, and prop scores ───────────────────────
+    // ── 2. Batch-fetch picks, players, and projections ───────────────────────
     const entryIds = filtered.map(e => e.id);
     const allPicks = await db.select().from(entryPicksTable).where(inArray(entryPicksTable.entryId, entryIds));
 
@@ -500,8 +546,7 @@ router.get("/entries/export.csv", async (req, res): Promise<void> => {
       : [];
     const playerMap = new Map(allPlayers.map(p => [p.id, p]));
 
-    // pOver is stored on our_projections (per player+statType), not prop_scores
-    const projRows = playerIds.length
+    const projRows = playerIds.length && activeGroups.has("projections")
       ? await db
           .select({ playerId: ourProjectionsTable.playerId, statType: ourProjectionsTable.statType, pOver: ourProjectionsTable.pOver })
           .from(ourProjectionsTable)
@@ -515,18 +560,15 @@ router.get("/entries/export.csv", async (req, res): Promise<void> => {
       picksByEntry.get(p.entryId)!.push(p);
     }
 
-    // ── 3. Build the entry map for fast lookup ───────────────────────────────
-    const entryMap = new Map(filtered.map(e => [e.id, e]));
-
-    // ── 4. Stream CSV ────────────────────────────────────────────────────────
+    // ── 3. Stream CSV ────────────────────────────────────────────────────────
     const date = new Date().toISOString().split("T")[0];
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="journal-export-${date}.csv"`);
-    res.write(csvRow(["date","sport","player","stat_type","line_value","direction","projection","pover_pct","pick_result","entry_result","stake","actual_payout","pnl","entry_type","playstyle","notes"]));
+    res.write(csvRow(headerRow));
 
     for (const entry of filtered) {
       const picks = picksByEntry.get(entry.id) ?? [];
-      const stake       = Number(entry.stake ?? 0);
+      const stake        = Number(entry.stake ?? 0);
       const actualPayout = Number(entry.actualPayout ?? 0);
       const pnl =
         entry.result === "win"     ? actualPayout - stake :
@@ -534,31 +576,14 @@ router.get("/entries/export.csv", async (req, res): Promise<void> => {
         entry.result === "loss"    ? -stake : null;
 
       for (const pick of picks) {
-        const player = pick.playerId != null ? playerMap.get(pick.playerId) : null;
+        const player     = pick.playerId != null ? playerMap.get(pick.playerId) : null;
         const playerName = player?.fullName ?? pick.playerName ?? "";
         const pickSport  = player?.sport ?? "";
-        const pOver = pick.playerId != null
-          ? pOverMap.get(`${pick.playerId}|${pick.statType}`)
-          : null;
+        const rawPOver   = pick.playerId != null ? pOverMap.get(`${pick.playerId}|${pick.statType}`) : null;
+        const pOver      = rawPOver != null ? Number(rawPOver).toFixed(1) : null;
 
-        res.write(csvRow([
-          entry.entryDate,
-          pickSport,
-          playerName,
-          pick.statType,
-          pick.lineValue,
-          pick.direction,
-          pick.yourProjection ?? "",
-          pOver != null ? Number(pOver).toFixed(1) : "",
-          pick.result ?? "pending",
-          entry.result ?? "pending",
-          stake.toFixed(2),
-          entry.result !== "pending" ? actualPayout.toFixed(2) : "",
-          pnl != null ? pnl.toFixed(2) : "",
-          entry.entryType,
-          entry.entryType, // playstyle alias
-          entry.notes ?? "",
-        ]));
+        const ctx: CsvColCtx = { entry, pick, playerName, pickSport, stake, actualPayout, pnl, pOver };
+        res.write(csvRow(activeCols.map(c => c.value(ctx))));
       }
     }
     res.end();
