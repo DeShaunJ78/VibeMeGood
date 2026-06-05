@@ -235,10 +235,17 @@ async function buildAnalystContext(): Promise<string> {
   return blocks.join("\n");
 }
 
-// Lightweight ping — confirms the server is live and returns a fresh timestamp.
-// Used by the "Refresh context" button on the frontend without storing any DB rows.
-router.post("/anthropic/context-refresh", (_req, res) => {
-  res.json({ contextBuiltAt: new Date().toISOString() });
+// Context-refresh probe — rebuilds the full analyst context snapshot and returns
+// its build timestamp. No DB writes; used by the frontend Refresh button so users
+// can confirm the server has fresh data without sending a visible chat message.
+router.post("/anthropic/context-refresh", async (_req, res) => {
+  try {
+    await buildAnalystContext(); // warm the DB queries; result discarded
+    res.json({ contextBuiltAt: new Date().toISOString() });
+  } catch (err) {
+    (_req as any).log?.error(err);
+    res.status(500).json({ error: "Context refresh failed" });
+  }
 });
 
 router.get("/anthropic/conversations", async (req, res) => {

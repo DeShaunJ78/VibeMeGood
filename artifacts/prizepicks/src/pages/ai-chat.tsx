@@ -114,6 +114,13 @@ export default function AiChat() {
     }).catch(() => setLoadingConvs(false));
   }, []);
 
+  // Tick every 60 s so the staleness colour flips amber without needing user interaction.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -134,6 +141,7 @@ export default function AiChat() {
     setConversations(prev => [conv, ...prev]);
     setActiveId(conv.id);
     setMessages([]);
+    setContextBuiltAt(null); // clear freshness stamp for the new blank conversation
     setShowSidebar(false); // on mobile: switch to chat view
   }
 
