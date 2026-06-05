@@ -1,0 +1,83 @@
+Queue
+Show how many picks were auto-graded and which ones need manual review
+
+
+Match picks to game logs even when stat type names don't align exactly
+
+
+Auto-grade picks on a schedule so new results are picked up overnight
+
+
+Show bias delta in the Lineup Optimizer so it factors into pick selection
+
+
+Highlight rows on the Slate Board where your bias is strong enough to flip the action tag
+
+
+Show your personal player-level bias delta inside the Prop Detail Sheet
+
+
+Filter the By Player bias view to only show players on today's slate
+
+
+Seed entries with varied line movements so CLV history shows real range
+
+
+Show a warning when CLV coverage is too low to trust the average
+
+
+Show CLV coverage trend over time so you can see if line tracking is improving
+
+
+Show which lineups contain each locked pick at a glance
+
+
+Let sport filter auto-focus when locked picks are all the same sport
+
+
+Show pinned-picks count badge on the Slate Board tab so users know how many are queued
+
+
+Show a quick summary badge on each saved run — win rate estimate, total stake, picks
+
+
+Move saved lineups to the server so they survive clearing browser storage
+
+
+Let users compare two saved lineup runs side by side
+
+
+Remember your last CSV preset so the dialog reopens with it highlighted
+
+
+Add a CLV & Projections preset to the CSV column picker
+
+
+Add date range and sport filters to the Review Dashboard CSV export
+
+
+Let the CSV export include CLV and Kelly sizing columns
+
+
+Let the per-game cap go higher than 3 for parlays spanning many games
+
+
+Show a tooltip explaining why picks from the same game were blocked
+
+
+Store gameId on pinned picks so same-game detection works without the full slate load
+
+
+Also flag same-game correlation inside the Entry Builder cart
+
+
+Remember the optimizer's variance mode settings between sessions
+
+
+Seed recent entries with Kelly data so adherence badges appear immediately
+
+
+Show a trendline on the Kelly Adherence chart to spot long-run direction
+
+
+Chain full entry history into the ma
