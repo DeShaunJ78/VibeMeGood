@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VibeMeGood Sync</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 300px;
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid #21262d;
+      background: #161b22;
+    }
+    .header-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      color: #f0f6fc;
+    }
+    .header-sub {
+      font-size: 10px;
+      color: #8b949e;
+      margin-top: 1px;
+    }
+    .logo {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #059669, #10b981);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .section {
+      padding: 12px 14px;
+      border-bottom: 1px solid #21262d;
+    }
+
+    /* Status card */
+    .status-card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-dot.green  { background: #10b981; box-shadow: 0 0 4px #10b98166; }
+    .status-dot.red    { background: #f87171; }
+    .status-dot.yellow { background: #fbbf24; }
+    .status-dot.gray   { background: #6b7280; }
+    .status-dot.pulse  { background: #818cf8; animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    .status-text {
+      flex: 1;
+      color: #8b949e;
+      font-size: 11px;
+    }
+    .status-text strong { color: #e6edf3; }
+    .status-count {
+      font-size: 11px;
+      color: #10b981;
+      font-weight: 700;
+    }
+    .status-error {
+      margin-top: 6px;
+      padding: 6px 8px;
+      background: #1c0a0a;
+      border: 1px solid #7f1d1d;
+      border-radius: 4px;
+      color: #fca5a5;
+      font-size: 10px;
+      line-height: 1.4;
+    }
+    .status-next {
+      margin-top: 6px;
+      font-size: 10px;
+      color: #6b7280;
+    }
+
+    /* Sync button */
+    .btn-sync {
+      width: 100%;
+      padding: 8px;
+      background: #059669;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-sync:hover:not(:disabled) { background: #047857; }
+    .btn-sync:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
+
+    /* Settings */
+    .settings-label {
+      display: block;
+      font-size: 10px;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+    .settings-input {
+      width: 100%;
+      padding: 7px 10px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 5px;
+      color: #e6edf3;
+      font-family: inherit;
+      font-size: 11px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .settings-input:focus { border-color: #388bfd; }
+    .settings-input::placeholder { color: #484f58; }
+
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .settings-select {
+      padding: 7px 10px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 5px;
+      color: #e6edf3;
+      font-family: inherit;
+      font-size: 11px;
+      outline: none;
+      cursor: pointer;
+      flex: 1;
+    }
+
+    /* Toggle */
+    .toggle-wrap { display: flex; align-items: center; gap: 8px; }
+    .toggle-wrap span { font-size: 11px; color: #8b949e; }
+    .toggle {
+      position: relative;
+      width: 34px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: #374151;
+      border-radius: 18px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .toggle-slider::before {
+      content: "";
+      position: absolute;
+      left: 2px;
+      top: 2px;
+      width: 14px;
+      height: 14px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .toggle input:checked ~ .toggle-slider { background: #059669; }
+    .toggle input:checked ~ .toggle-slider::before { transform: translateX(16px); }
+
+    /* Save button */
+    .btn-save {
+      margin-top: 10px;
+      width: 100%;
+      padding: 7px;
+      background: transparent;
+      border: 1px solid #30363d;
+      border-radius: 5px;
+      color: #8b949e;
+      font-family: inherit;
+      font-size: 11px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-save:hover { border-color: #8b949e; color: #e6edf3; }
+    .btn-save.saved { border-color: #10b981; color: #10b981; }
+
+    .setup-hint {
+      margin-top: 6px;
+      font-size: 10px;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+    .setup-hint a { color: #388bfd; text-decoration: none; }
+    .setup-hint a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">⚡</div>
+    <div>
+      <div class="header-title">VibeMeGood Sync</div>
+      <div class="header-sub">PrizePicks → Workstation</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="status-card">
+      <div class="status-row">
+        <div class="status-dot gray" id="statusDot"></div>
+        <div class="status-text" id="statusText">Loading…</div>
+        <div class="status-count" id="statusCount"></div>
+      </div>
+      <div id="statusError" class="status-error" style="display:none"></div>
+      <div id="statusNext" class="status-next"></div>
+    </div>
+    <button class="btn-sync" id="syncBtn">⚡ Sync Now</button>
+  </div>
+
+  <div class="section">
+    <label class="settings-label">Workstation URL</label>
+    <input
+      class="settings-input"
+      id="urlInput"
+      type="url"
+      placeholder="https://your-app.replit.app"
+      spellcheck="false"
+      autocomplete="off"
+    >
+    <div class="setup-hint" id="urlHint" style="display:none">
+      Copy the URL from your browser's address bar while on the VibeMeGood app.
+    </div>
+
+    <div class="settings-row">
+      <div style="flex:1">
+        <label class="settings-label" style="display:block;margin-bottom:4px">Auto-sync every</label>
+        <select class="settings-select" id="intervalSelect">
+          <option value="10">10 min</option>
+          <option value="15" selected>15 min</option>
+          <option value="30">30 min</option>
+          <option value="60">1 hour</option>
+          <option value="0">Manual only</option>
+        </select>
+      </div>
+      <div style="padding-top:16px">
+        <label class="toggle">
+          <input type="checkbox" id="enabledToggle" checked>
+          <div class="toggle-slider"></div>
+        </label>
+      </div>
+    </div>
+
+    <button class="btn-save" id="saveBtn">Save Settings</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
