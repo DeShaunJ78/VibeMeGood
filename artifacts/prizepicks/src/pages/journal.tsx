@@ -71,6 +71,13 @@ function saveCsvCols(cols: Set<CsvColGroup>): void {
   } catch {}
 }
 
+// ─── CSV column presets ────────────────────────────────────────────────────────
+const CSV_PRESETS: { label: string; title: string; groups: CsvColGroup[] }[] = [
+  { label: "All Columns",    title: "All column groups",                    groups: ["meta", "picks", "financials", "projections"] },
+  { label: "Quick Review",   title: "Date · Player · Result · P&L",        groups: ["meta", "picks", "financials"] },
+  { label: "Financials Only", title: "Stake · Payout · P&L",               groups: ["financials"] },
+];
+
 // ─── Column picker dialog ──────────────────────────────────────────────────────
 function CsvColumnPickerDialog({
   open, onClose, onExport,
@@ -88,6 +95,14 @@ function CsvColumnPickerDialog({
       }
       return next;
     });
+  }
+
+  function applyPreset(groups: CsvColGroup[]) {
+    setSelected(new Set(groups));
+  }
+
+  function isPresetActive(groups: CsvColGroup[]): boolean {
+    return groups.length === selected.size && groups.every(g => selected.has(g));
   }
 
   function handleExport() {
@@ -110,6 +125,22 @@ function CsvColumnPickerDialog({
         <p className="text-xs text-muted-foreground font-mono -mt-1">
           Choose which column groups to include. Selection is saved for next time.
         </p>
+        <div className="flex gap-1.5 flex-wrap">
+          {CSV_PRESETS.map(preset => (
+            <button
+              key={preset.label}
+              title={preset.title}
+              onClick={() => applyPreset(preset.groups)}
+              className={`font-mono text-[10px] px-2 py-1 rounded border transition-colors ${
+                isPresetActive(preset.groups)
+                  ? "border-primary/60 bg-primary/10 text-primary"
+                  : "border-slate-700 bg-slate-900 text-slate-400 hover:border-slate-600 hover:text-slate-300"
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
         <div className="space-y-3 mt-1">
           {CSV_GROUPS.map(g => (
             <div key={g.id} className="flex items-start gap-3 p-2.5 rounded-lg border border-slate-800 hover:border-slate-700 transition-colors">
