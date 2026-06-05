@@ -347,9 +347,19 @@ export default function EntryBuilder() {
     return (flexExpectedReturn(n, avgP) - 1) * 100;
   })();
 
+  // For Power entries with goblin/demon legs (multiplierUnknown), use the standard
+  // Power multiplier as an estimate so EV isn't blank while the user fills in the real one.
+  const powerEstimatedEvPct = (() => {
+    if (!multiplierUnknown || playstyle !== "power" || n < 2 || fixedMult <= 0) return null;
+    const probs = picks.map(p => legPHit(p));
+    if (probs.some(p => p === null)) return null;
+    return pickemEV(probs as number[], fixedMult) * 100;
+  })();
+
   // When no stake entered yet, evPct is still meaningful (stake-independent ratio)
   const evIsEstimate = (playstyle === "flex" && stakeNum <= 0 && evResultFlex != null)
-    || flexEstimatedEvPct !== null;
+    || flexEstimatedEvPct !== null
+    || powerEstimatedEvPct !== null;
 
   // ── Pick'em Math (Enhancement 1 + 3) ──────────────────────────────────────
   const entryTypeKey = `${n}-pick-${playstyle}`;
@@ -379,7 +389,7 @@ export default function EntryBuilder() {
   const goblinCount = picks.filter(p => p.lineType === "goblin").length;
   const demonCount  = picks.filter(p => p.lineType === "demon").length;
 
-  const evPct       = activeEV?.evPct ?? flexEstimatedEvPct;
+  const evPct       = activeEV?.evPct ?? flexEstimatedEvPct ?? powerEstimatedEvPct;
   // Indicator thresholds: green >5%, amber -0.5% to 5% (covers break-even), red <-0.5%
   const evDotColor  = evPct == null ? "bg-slate-700" :
     evPct > 5    ? "bg-emerald-500" :

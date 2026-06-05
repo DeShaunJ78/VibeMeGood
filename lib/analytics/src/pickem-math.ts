@@ -57,6 +57,15 @@ export const ENTRY_TYPES: Record<string, { multiplier: number; breakEven: number
 };
 
 /**
+ * Return the exact payout multiplier for a Flex entry given the effective
+ * pick count and exact hit count (e.g. 4 hits out of 5 effective → 4×).
+ * Returns null when the combination is not in the payout table (e.g. 0 hits).
+ */
+export function flexExactPayout(totalPicks: number, hits: number): number | null {
+  return FLEX_PAYOUTS[totalPicks]?.[hits] ?? null;
+}
+
+/**
  * Return the break-even per-leg hit rate for a given entry type key.
  * Returns 0.5 (coin flip) if the key is not found.
  */

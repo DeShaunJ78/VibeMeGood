@@ -554,7 +554,9 @@ export default function SlateBoard() {
     try { return localStorage.getItem("slate-action-tag") ?? "all"; } catch { return "all"; }
   });
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
-  const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [activePreset, setActivePreset] = useState<string | null>(() => {
+    try { return localStorage.getItem("vmg_active_preset"); } catch { return null; }
+  });
   const [presetRevision, setPresetRevision] = useState(0);
 
   const activeFilterCount = [sport !== "all" && sport, lineTypeFilter !== "all" && lineTypeFilter, minEdge, actionTagFilter !== "all" && actionTagFilter].filter(Boolean).length;
@@ -706,6 +708,12 @@ export default function SlateBoard() {
   useEffect(() => {
     try { localStorage.setItem("slate-action-tag", actionTagFilter); } catch {}
   }, [actionTagFilter]);
+  useEffect(() => {
+    try {
+      if (activePreset) localStorage.setItem("vmg_active_preset", activePreset);
+      else localStorage.removeItem("vmg_active_preset");
+    } catch {}
+  }, [activePreset]);
 
   // When the sport changes the available windows change too — reset to "upcoming"
   // so the view is never empty (wrong window selected for new sport).
@@ -1538,6 +1546,35 @@ export default function SlateBoard() {
                   ✕ clear
                 </button>
               )}
+              {presetsUnlocked && (() => {
+                try {
+                  const saved = JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>;
+                  const hasAnyPin = DEFAULT_PRESETS.some(p => saved[p.label]?.sport && saved[p.label].sport !== "all");
+                  if (!hasAnyPin) return null;
+                  return (
+                    <button
+                      onClick={() => {
+                        try {
+                          const s = JSON.parse(localStorage.getItem(PRESET_LS_KEY) ?? "{}") as Record<string, Partial<Preset>>;
+                          DEFAULT_PRESETS.forEach(p => {
+                            if (s[p.label]) {
+                              const { sport: _sp, ...rest } = s[p.label];
+                              if (Object.keys(rest).length) s[p.label] = rest;
+                              else delete s[p.label];
+                            }
+                          });
+                          localStorage.setItem(PRESET_LS_KEY, JSON.stringify(s));
+                        } catch {}
+                        setPresetRevision(r => r + 1);
+                      }}
+                      className="shrink-0 text-[10px] font-mono text-slate-500 hover:text-rose-400 px-1 border border-slate-800 rounded transition-colors"
+                      title="Clear all sport pins from presets"
+                    >
+                      🗑 pins
+                    </button>
+                  );
+                } catch { return null; }
+              })()}
             </div>
             )}
 
@@ -1545,7 +1582,7 @@ export default function SlateBoard() {
                 chronologically. "Upcoming" (default) hides finished games. Picking a
                 specific time slot shows only props from that game window. */}
             {windowGroups.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap py-0.5">
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 flex-nowrap md:flex-wrap">
                 <Clock className="w-3 h-3 text-slate-600 shrink-0" />
                 <span className="text-[10px] font-mono text-slate-600 uppercase tracking-wider shrink-0">Slate:</span>
 

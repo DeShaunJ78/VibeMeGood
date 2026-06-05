@@ -5,5 +5,6 @@ export {
   pickemEV,
   flexExpectedReturn,
   detectPayoutShift,
+  flexExactPayout,
 } from "./pickem-math";
 export type { EntryLeg } from "./pickem-math";

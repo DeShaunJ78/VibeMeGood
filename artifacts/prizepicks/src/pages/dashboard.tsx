@@ -6,6 +6,7 @@ import {
   useListAlerts, getListAlertsQueryKey,
   useMarkAlertRead, useMarkAllAlertsRead, useClearReadAlerts,
   useClearAllAlerts, useDeleteAlert,
+  useGetDataHealth,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
 import {
   AlertTriangle, Activity, Eye, Target, TrendingUp, Cpu, ShieldOff, BarChart2,
-  BellOff, CheckCheck, Trash2, X, ChevronRight,
+  BellOff, CheckCheck, Trash2, X, ChevronRight, Clock,
 } from "lucide-react";
 import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge } from "@/components/ui/badges";
 
@@ -226,6 +227,14 @@ export default function Dashboard() {
     staleTime: 5 * 60_000,
   });
 
+  const { data: dataHealth } = useGetDataHealth();
+  const boardFreshnessAt = dataHealth?.boardFreshnessAt ?? null;
+  const boardAgeHours = boardFreshnessAt
+    ? (Date.now() - new Date(boardFreshnessAt).getTime()) / 3_600_000
+    : null;
+  const ppNeverSynced = !boardFreshnessAt;
+  const ppStale = !ppNeverSynced && boardAgeHours != null && boardAgeHours > 2;
+
   const topProjProps: any[] = (data as any)?.topProjProps ?? [];
 
   return (
@@ -252,6 +261,20 @@ export default function Dashboard() {
             {!readiness.isCalibrationReady ? `, and calibration has only ${readiness.calibrationBuckets} buckets` : ""}).
             {" "}Go to <strong>Settings → Step 3 Backfill History</strong> to populate the model.
           </div>
+        </div>
+      )}
+
+      {/* PP lines freshness warning */}
+      {(ppNeverSynced || ppStale) && (
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-mono ${
+          ppNeverSynced
+            ? "border-rose-800/50 bg-rose-900/10 text-rose-400/80"
+            : "border-amber-700/40 bg-amber-900/10 text-amber-400/80"
+        }`}>
+          <Clock size={12} className="shrink-0" />
+          {ppNeverSynced
+            ? "PP lines not imported yet — use the Chrome extension or bookmarklet to sync today's slate."
+            : `PP lines last imported ${Math.round(boardAgeHours!)}h ago — consider re-syncing before making picks.`}
         </div>
       )}
 

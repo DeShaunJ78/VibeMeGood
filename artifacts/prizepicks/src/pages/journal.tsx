@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Search, Plus, ChevronDown, ChevronRight, Zap, Clock, CheckCircle, Filter, X, Trash2, Pencil, RotateCcw } from "lucide-react";
 import { format } from "date-fns";
+import { flexExactPayout } from "@workspace/analytics";
 
 const SPORTS = ["NFL", "NBA", "MLB", "NHL", "WNBA", "MMA", "PGA", "NASCAR", "SOCCER"];
 
@@ -110,14 +111,7 @@ function MarkResultPanel({ entry, onDone }: { entry: any; onDone: () => void }) 
     const hits = entry.picks.filter((p: any) => p.result === "hit").length;
     const dnps = entry.picks.filter((p: any) => p.result === "dnp").length;
     const effective = n - dnps;
-    const FLEX_M: Record<string, number> = {
-      "2/2": 3,
-      "3/3": 5, "2/3": 1.25,
-      "4/4": 10, "3/4": 2.5,
-      "5/5": 20, "4/5": 4, "3/5": 1,
-      "6/6": 40, "5/6": 6, "4/6": 1.5, "3/6": 1,
-    };
-    const mult = FLEX_M[`${hits}/${effective}`];
+    const mult = flexExactPayout(effective, hits);
     if (!mult) return null;
     return Number(entry.stake) * mult;
   })();
