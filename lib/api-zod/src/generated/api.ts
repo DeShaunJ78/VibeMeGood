@@ -1843,7 +1843,7 @@ export const GenerateLineupFactoryBody = zod.object({
   "picksPerEntry": zod.number().min(generateLineupFactoryBodyPicksPerEntryMin).max(generateLineupFactoryBodyPicksPerEntryMax),
   "numEntries": zod.number().min(1).max(generateLineupFactoryBodyNumEntriesMax),
   "varianceProfile": zod.enum(['conservative', 'balanced', 'aggressive', 'chaos', 'custom']),
-  "optimizationObjective": zod.enum(['max_ev', 'max_profit_prob', 'min_drawdown', 'balanced_growth', 'high_ceiling']),
+  "optimizationObjective": zod.enum(['max_ev', 'max_profit_prob', 'min_drawdown', 'balanced_growth', 'high_ceiling', 'gpp_mode']),
   "maxPlayerExposure": zod.number(),
   "maxPickExposure": zod.number(),
   "maxTeamExposure": zod.number(),
@@ -1860,7 +1860,12 @@ export const GenerateLineupFactoryBody = zod.object({
   "sport": zod.string().optional(),
   "monteCarloIterations": zod.number().min(generateLineupFactoryBodyMonteCarloIterationsMin).max(generateLineupFactoryBodyMonteCarloIterationsMax).optional(),
   "requiredLineIds": zod.array(zod.number()).optional().describe('ppLineIds that must appear in every generated lineup'),
-  "biasWeight": zod.number().min(generateLineupFactoryBodyBiasWeightMin).max(generateLineupFactoryBodyBiasWeightMax).optional().describe('Weight applied to personal bias delta when scoring props (0=off, 1=full weight). Nudges composite score by biasWeight × biasDelta so picks where the user historically outperforms the model rank higher.')
+  "biasWeight": zod.number().min(generateLineupFactoryBodyBiasWeightMin).max(generateLineupFactoryBodyBiasWeightMax).optional().describe('Weight applied to personal bias delta when scoring props (0=off, 1=full weight). Nudges composite score by biasWeight × biasDelta so picks where the user historically outperforms the model rank higher.'),
+  "gppNarrativeFilters": zod.object({
+  "minGameTotal": zod.number().optional().describe('Only include props from games with implied total above this threshold (e.g. 220 for NBA)'),
+  "pacePreference": zod.enum(['fast', 'neutral', 'any']).optional().describe('fast=only include props from fast-pace matchups; neutral=exclude slow; any=no filter'),
+  "sharpAlignmentOnly": zod.boolean().optional().describe('When true, exclude props where the latest sharp signal opposes the pick direction')
+}).optional().describe('Optional GPP narrative context filters. Only applied when optimizationObjective is gpp_mode.')
 })
 
 export const GenerateLineupFactoryResponse = zod.object({
@@ -1934,7 +1939,12 @@ export const GenerateLineupFactoryResponse = zod.object({
   "bookCount": zod.number(),
   "noPlayReason": zod.string().nullish(),
   "reasonCodes": zod.array(zod.string()),
-  "compositeScore": zod.number()
+  "compositeScore": zod.number(),
+  "ownershipEst": zod.number().nullish().describe('Estimated ownership % (0–100), derived from score tier and calibrated pOver'),
+  "leverageScore": zod.number().nullish().describe('GPP leverage = ceiling-weighted EV \/ ownership_est; higher = contrarian upside'),
+  "paceTier": zod.string().nullish().describe('fast \/ normal \/ slow — derived from the projection pace factor'),
+  "sharpSignal": zod.string().nullish().describe('Latest sharp signal for this line: sharp_for \/ sharp_against \/ neutral'),
+  "gameTotal": zod.number().nullish().describe('Implied game total from game_environment')
 })),
   "eligiblePropCount": zod.number(),
   "filteredPropCount": zod.number(),

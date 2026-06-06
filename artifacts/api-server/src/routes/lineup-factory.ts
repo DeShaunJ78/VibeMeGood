@@ -3,9 +3,9 @@ import { db } from "@workspace/db";
 import {
   ppLinesTable, playersTable, propScoresTable, ourProjectionsTable,
   varianceScoresTable, externalLinesTable, syncRunsTable,
-  entryPicksTable, entriesTable,
+  entryPicksTable, entriesTable, gameEnvironmentTable, lineMoveEventsTable,
 } from "@workspace/db/schema";
-import { eq, and, inArray, desc } from "drizzle-orm";
+import { eq, and, inArray, desc, isNotNull } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { pOverLine } from "../lib/projection/normal-dist";
 import { effectivePayoutMultiplier } from "../lib/payout/multiplier";
@@ -47,6 +47,11 @@ const configSchema = z.object({
   monteCarloIterations: z.number().int().min(1000).max(50000).optional(),
   requiredLineIds: z.array(z.number().int()).optional(),
   biasWeight: z.number().min(0).max(1).optional(),
+  gppNarrativeFilters: z.object({
+    minGameTotal: z.number().optional(),
+    pacePreference: z.enum(["fast", "neutral", "any"]).optional(),
+    sharpAlignmentOnly: z.boolean().optional(),
+  }).optional(),
 });
 
 type FactoryConfig = z.infer<typeof configSchema>;
@@ -77,6 +82,13 @@ type ScoredProp = {
   noPlayReason: string | null;
   reasonCodes: string[];
   compositeScore: number;
+  // GPP fields
+  ceilingRating: number | null;
+  ownershipEst: number | null;
+  leverageScore: number | null;
+  paceTier: string | null;
+  sharpSignal: string | null;
+  gameTotal: number | null;
 };
 
 type GeneratedLineup = {
@@ -161,6 +173,12 @@ function calcCompositeScore(prop: ScoredProp, objective: string): number {
     case "min_drawdown":    return prob * 100 - (volatilityRating === "high" ? 15 : volatilityRating === "medium" ? 5 : 0);
     case "balanced_growth": return ev * 0.5 + prob * 50;
     case "high_ceiling":    return ev * (lineType === "demon" ? 1.5 : 1.0);
+    case "gpp_mode": {
+      // GPP: reward ceiling and edge, penalise high ownership (contrarian picks score higher)
+      const ceiling = prop.ceilingRating ?? 50;
+      const own = Math.max(1, prop.ownershipEst ?? 20);
+      return (ceiling / 10 + Math.max(0, edge * 0.1) + Math.max(0, ev * 0.5)) / own * 10;
+    }
     default:                return ev;
   }
 }
@@ -257,6 +275,30 @@ router.post("/lineup-factory/generate", async (req, res) => {
       if (!el.ppLineId) continue;
       if (!extByLineId.has(el.ppLineId)) extByLineId.set(el.ppLineId, []);
       extByLineId.get(el.ppLineId)!.push(el);
+    }
+
+    // ── 2b. Bulk query game environment (for GPP game totals) ─────────────
+    const gameIds = [...new Set(rows.map(r => r.line.gameId).filter((id): id is number => id !== null))];
+    const allGameEnvs = gameIds.length
+      ? await db.select().from(gameEnvironmentTable).where(inArray(gameEnvironmentTable.gameId, gameIds))
+      : [];
+    const gameTotalById = new Map<number, number>();
+    for (const ge of allGameEnvs) {
+      if (ge.gameId && ge.gameTotal) gameTotalById.set(ge.gameId, parseFloat(ge.gameTotal.toString()));
+    }
+
+    // ── 2c. Bulk query latest sharp signals (for GPP sharp filter) ────────
+    const allSharpEvents = ppLineIds.length
+      ? await db.select()
+          .from(lineMoveEventsTable)
+          .where(and(inArray(lineMoveEventsTable.ppLineId, ppLineIds), isNotNull(lineMoveEventsTable.sharpSignal)))
+          .orderBy(desc(lineMoveEventsTable.capturedAt))
+      : [];
+    const latestSharpByLine = new Map<number, string>();
+    for (const ev of allSharpEvents) {
+      if (ev.ppLineId && !latestSharpByLine.has(ev.ppLineId) && ev.sharpSignal) {
+        latestSharpByLine.set(ev.ppLineId, ev.sharpSignal);
+      }
     }
 
     // ── 3. Market data freshness ───────────────────────────────────────────
@@ -402,6 +444,30 @@ router.post("/lineup-factory/generate", async (req, res) => {
       if (row.variance?.blowoutRisk && parseFloat(row.variance.blowoutRisk.toString()) > 0.7)
         reasonCodes.push("high_blowout_risk");
 
+      // ── GPP enrichment ──────────────────────────────────────────────────
+      // Ownership estimate: base from score tier, adjusted ±10pp by pOver vs tier median
+      const actionTag = row.score?.actionTag ?? null;
+      const tierBases: Record<string, number> = { PLAY: 35, ACTION: 20, WATCH: 10, PASS: 5, "NO-PLAY": 3 };
+      const tierMedianPOver: Record<string, number> = { PLAY: 65, ACTION: 55, WATCH: 50, PASS: 45, "NO-PLAY": 40 };
+      const tierBase = actionTag && tierBases[actionTag] ? tierBases[actionTag] : 15;
+      const tierMedian = actionTag && tierMedianPOver[actionTag] ? tierMedianPOver[actionTag] : 50;
+      const pOverPct = pOver !== null ? pOver * 100 : tierMedian;
+      const ownershipAdj = Math.max(-10, Math.min(10, (pOverPct - tierMedian) * 0.3));
+      const ownershipEst = Math.round(Math.max(1, Math.min(60, tierBase + ownershipAdj)) * 10) / 10;
+
+      // Pace tier: derived from projection pace factor
+      const paceFactor = row.proj?.paceFactor ? parseFloat(row.proj.paceFactor.toString()) : null;
+      const paceTier = paceFactor == null ? null : paceFactor > 1.05 ? "fast" : paceFactor < 0.95 ? "slow" : "normal";
+
+      // Game total from pre-fetched game environment
+      const gameTotal = row.line.gameId ? (gameTotalById.get(row.line.gameId) ?? null) : null;
+
+      // Sharp signal from pre-fetched line move events
+      const sharpSignal = latestSharpByLine.get(row.line.id) ?? null;
+
+      // Ceiling rating for GPP composite score
+      const ceilingRating = row.variance?.ceilingRating ?? null;
+
       allScoredProps.push({
         ppLineId:          row.line.id,
         playerId:          row.player.id,
@@ -428,12 +494,22 @@ router.post("/lineup-factory/generate", async (req, res) => {
         noPlayReason,
         reasonCodes,
         compositeScore:    0, // set below
+        ceilingRating,
+        ownershipEst,
+        leverageScore:     null, // set after composite scores pass
+        paceTier,
+        sharpSignal,
+        gameTotal,
       });
     }
 
-    // Assign composite scores
+    // Assign composite scores and GPP leverage scores
     for (const sp of allScoredProps) {
       sp.compositeScore = Math.round(calcCompositeScore(sp, cfg.optimizationObjective) * 100) / 100;
+      // Leverage = ceiling-weighted hit probability / ownership (GPP metric)
+      const own = Math.max(1, sp.ownershipEst ?? 20);
+      const ceil = sp.ceilingRating ?? 50;
+      sp.leverageScore = Math.round(ceil * sp.hitProbability * 100 / own * 10) / 10;
     }
 
     // ── Bias adjustment ────────────────────────────────────────────────────
@@ -500,6 +576,19 @@ router.post("/lineup-factory/generate", async (req, res) => {
       if (cfg.minProbabilityThreshold && p.hitProbability < cfg.minProbabilityThreshold) return false;
       if (cfg.minEdgeThreshold !== undefined && (p.edgeScore ?? -Infinity) < cfg.minEdgeThreshold) return false;
       if (p.lineType === "demon" && !cfg.demonUnderAllowed && p.direction === "less") return false;
+
+      // ── GPP narrative filters (only applied when gppNarrativeFilters is set) ──
+      if (cfg.gppNarrativeFilters) {
+        const { minGameTotal, pacePreference, sharpAlignmentOnly } = cfg.gppNarrativeFilters;
+        // Game total threshold — only props from high-scoring games
+        if (minGameTotal !== undefined && p.gameTotal !== null && p.gameTotal < minGameTotal) return false;
+        // Pace preference — use paceTier from projection paceFactor
+        if (pacePreference === "fast" && p.paceTier !== "fast") return false;
+        if (pacePreference === "neutral" && p.paceTier === "slow") return false;
+        // Sharp alignment — exclude picks where sharp signal opposes the pick (MORE picks with sharp_against)
+        if (sharpAlignmentOnly && p.sharpSignal === "sharp_against") return false;
+      }
+
       return true;
     });
 

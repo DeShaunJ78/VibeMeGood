@@ -2401,7 +2401,7 @@ components:
         picksPerEntry: { type: integer, minimum: 2, maximum: 6 }
         numEntries: { type: integer, minimum: 1, maximum: 25 }
         varianceProfile: { type: string, enum: [conservative, balanced, aggressive, chaos, custom] }
-        optimizationObjective: { type: string, enum: [max_ev, max_profit_prob, min_drawdown, balanced_growth, high_ceiling] }
+        optimizationObjective: { type: string, enum: [max_ev, max_profit_prob, min_drawdown, balanced_growth, high_ceiling, gpp_mode] }
         maxPlayerExposure: { type: number }
         maxPickExposure: { type: number }
         maxTeamExposure: { type: number }
@@ -2419,6 +2419,13 @@ components:
         monteCarloIterations: { type: integer, minimum: 1000, maximum: 50000 }
         requiredLineIds: { type: array, items: { type: integer }, description: "ppLineIds that must appear in every generated lineup" }
         biasWeight: { type: number, minimum: 0, maximum: 1, description: "Weight applied to personal bias delta when scoring props (0=off, 1=full weight). Nudges composite score by biasWeight × biasDelta so picks where the user historically outperforms the model rank higher." }
+        gppNarrativeFilters:
+          type: object
+          description: "Optional GPP narrative context filters. Only applied when optimizationObjective is gpp_mode."
+          properties:
+            minGameTotal: { type: number, description: "Only include props from games with implied total above this threshold (e.g. 220 for NBA)" }
+            pacePreference: { type: string, enum: [fast, neutral, any], description: "fast=only include props from fast-pace matchups; neutral=exclude slow; any=no filter" }
+            sharpAlignmentOnly: { type: boolean, description: "When true, exclude props where the latest sharp signal opposes the pick direction" }
       required: [format, picksPerEntry, numEntries, varianceProfile, optimizationObjective, maxPlayerExposure, maxPickExposure, maxTeamExposure, maxGameExposure, maxPairwiseOverlap, stakePerEntry, allowGtdPlayers, allowSingleBookData, allowStaleMarketData, demonUnderAllowed]
 
     FactoryScoredProp:
@@ -2449,6 +2456,11 @@ components:
         noPlayReason: { type: ["string", "null"] }
         reasonCodes: { type: array, items: { type: string } }
         compositeScore: { type: number }
+        ownershipEst: { type: ["number", "null"], description: "Estimated ownership % (0–100), derived from score tier and calibrated pOver" }
+        leverageScore: { type: ["number", "null"], description: "GPP leverage = ceiling-weighted EV / ownership_est; higher = contrarian upside" }
+        paceTier: { type: ["string", "null"], description: "fast / normal / slow — derived from the projection pace factor" }
+        sharpSignal: { type: ["string", "null"], description: "Latest sharp signal for this line: sharp_for / sharp_against / neutral" }
+        gameTotal: { type: ["number", "null"], description: "Implied game total from game_environment" }
       required: [ppLineId, playerId, playerName, team, sport, statType, direction, lineType, ppLine, hitProbability, probabilitySource, confidence, expectedValue, bookCount, marketDataStatus, reasonCodes, compositeScore]
 
     FactoryLineupPick:

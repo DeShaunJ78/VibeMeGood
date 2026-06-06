@@ -986,7 +986,32 @@ export const LineupFactoryConfigOptimizationObjective = {
   min_drawdown: 'min_drawdown',
   balanced_growth: 'balanced_growth',
   high_ceiling: 'high_ceiling',
+  gpp_mode: 'gpp_mode',
 } as const;
+
+/**
+ * fast=only include props from fast-pace matchups; neutral=exclude slow; any=no filter
+ */
+export type LineupFactoryConfigGppNarrativeFiltersPacePreference = typeof LineupFactoryConfigGppNarrativeFiltersPacePreference[keyof typeof LineupFactoryConfigGppNarrativeFiltersPacePreference];
+
+
+export const LineupFactoryConfigGppNarrativeFiltersPacePreference = {
+  fast: 'fast',
+  neutral: 'neutral',
+  any: 'any',
+} as const;
+
+/**
+ * Optional GPP narrative context filters. Only applied when optimizationObjective is gpp_mode.
+ */
+export type LineupFactoryConfigGppNarrativeFilters = {
+  /** Only include props from games with implied total above this threshold (e.g. 220 for NBA) */
+  minGameTotal?: number;
+  /** fast=only include props from fast-pace matchups; neutral=exclude slow; any=no filter */
+  pacePreference?: LineupFactoryConfigGppNarrativeFiltersPacePreference;
+  /** When true, exclude props where the latest sharp signal opposes the pick direction */
+  sharpAlignmentOnly?: boolean;
+};
 
 export interface LineupFactoryConfig {
   format: LineupFactoryConfigFormat;
@@ -1029,6 +1054,8 @@ export interface LineupFactoryConfig {
      * @maximum 1
      */
   biasWeight?: number;
+  /** Optional GPP narrative context filters. Only applied when optimizationObjective is gpp_mode. */
+  gppNarrativeFilters?: LineupFactoryConfigGppNarrativeFilters;
 }
 
 export type FactoryScoredPropDirection = typeof FactoryScoredPropDirection[keyof typeof FactoryScoredPropDirection];
@@ -1072,6 +1099,31 @@ export interface FactoryScoredProp {
   noPlayReason?: string | null;
   reasonCodes: string[];
   compositeScore: number;
+  /**
+     * Estimated ownership % (0–100), derived from score tier and calibrated pOver
+     * @nullable
+     */
+  ownershipEst?: number | null;
+  /**
+     * GPP leverage = ceiling-weighted EV / ownership_est; higher = contrarian upside
+     * @nullable
+     */
+  leverageScore?: number | null;
+  /**
+     * fast / normal / slow — derived from the projection pace factor
+     * @nullable
+     */
+  paceTier?: string | null;
+  /**
+     * Latest sharp signal for this line: sharp_for / sharp_against / neutral
+     * @nullable
+     */
+  sharpSignal?: string | null;
+  /**
+     * Implied game total from game_environment
+     * @nullable
+     */
+  gameTotal?: number | null;
 }
 
 export interface FactoryLineupPick {

@@ -33,13 +33,16 @@ import {
 import {
   Factory, Zap, TrendingUp, DollarSign, AlertTriangle,
   ChevronRight, BarChart2, RefreshCw, CheckCircle2, Info, Pin, X, Lock, LockOpen,
-  History, Pencil, Check, Trash2, Clock, ArrowLeftRight,
+  History, Pencil, Check, Trash2, Clock, ArrowLeftRight, Trophy,
 } from "lucide-react";
+import {
+  type LineupFactoryConfigGppNarrativeFilters,
+} from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 
 // ─── Persistence helpers ───────────────────────────────────────────────────────
 const CFG_KEY      = "lf_cfg";
-const CFG_VER      = 2;
+const CFG_VER      = 3;
 const RESULT_KEY   = "lf_last_result";
 const RESULT_TTL   = 24 * 60 * 60 * 1000;
 const REQUIRED_KEY = "lf_required_pinned_ids";
@@ -143,6 +146,7 @@ const OBJECTIVE_LABELS: Record<string, string> = {
   min_drawdown:    "Min Drawdown",
   balanced_growth: "Balanced Growth",
   high_ceiling:    "High Ceiling",
+  gpp_mode:        "GPP — Tournament Mode",
 };
 const EXPOSURE_OPTIONS = [
   { label: "20%", value: 0.20 }, { label: "30%", value: 0.30 },
@@ -305,7 +309,10 @@ function ConfigPanel({
           </div>
           <div>
             <Label className="text-xs text-muted-foreground mb-1.5 block">Optimization Objective</Label>
-            <Select value={cfg.optimizationObjective} onValueChange={v => set("optimizationObjective", v as LineupFactoryConfig["optimizationObjective"])}>
+            <Select value={cfg.optimizationObjective} onValueChange={v => {
+              const obj = v as LineupFactoryConfig["optimizationObjective"];
+              onChange({ ...cfg, optimizationObjective: obj, gppNarrativeFilters: obj === "gpp_mode" ? (cfg.gppNarrativeFilters ?? {}) : undefined });
+            }}>
               <SelectTrigger className="h-7 text-xs bg-slate-800 border-slate-700 w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -315,7 +322,67 @@ function ConfigPanel({
                 ))}
               </SelectContent>
             </Select>
+            {/* GPP quick-preset */}
+            {cfg.optimizationObjective !== "gpp_mode" && (
+              <button
+                onClick={() => onChange({
+                  ...cfg,
+                  optimizationObjective: "gpp_mode",
+                  varianceProfile: "aggressive",
+                  maxPlayerExposure: 0.30,
+                  maxPickExposure: 0.30,
+                  gppNarrativeFilters: {},
+                })}
+                className="mt-1.5 flex items-center gap-1.5 text-[10px] font-mono text-amber-400/70 hover:text-amber-400 transition-colors"
+              >
+                <Trophy className="w-2.5 h-2.5" />
+                GPP Preset (low-owned, ceiling-first)
+              </button>
+            )}
           </div>
+          {/* GPP Narrative Filters — shown only when gpp_mode is selected */}
+          {cfg.optimizationObjective === "gpp_mode" && (
+            <div className="rounded border border-amber-800/40 bg-amber-950/20 px-3 py-3 space-y-3">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <Trophy className="w-3 h-3 text-amber-400" />
+                <span className="text-[10px] uppercase tracking-wider font-mono text-amber-400 font-semibold">GPP Narrative Filters</span>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">Pace preference</Label>
+                <ToggleGroup
+                  value={(cfg.gppNarrativeFilters?.pacePreference ?? "any") as string}
+                  onChange={v => onChange({ ...cfg, gppNarrativeFilters: { ...cfg.gppNarrativeFilters, pacePreference: v === "any" ? undefined : v as LineupFactoryConfigGppNarrativeFilters["pacePreference"] } })}
+                  options={[
+                    { label: "Any",     value: "any" },
+                    { label: "Fast",    value: "fast" },
+                    { label: "Neutral", value: "neutral" },
+                    { label: "Slow",    value: "slow" },
+                  ]}
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">Min game total</Label>
+                <input
+                  type="number"
+                  placeholder="None"
+                  step="0.5"
+                  min="0"
+                  value={cfg.gppNarrativeFilters?.minGameTotal ?? ""}
+                  onChange={e => onChange({ ...cfg, gppNarrativeFilters: { ...cfg.gppNarrativeFilters, minGameTotal: e.target.value ? Number(e.target.value) : undefined } })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-amber-600"
+                />
+                <p className="text-[10px] text-muted-foreground mt-0.5">Only include props from games above this total (e.g. 220 for NBA)</p>
+              </div>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">Sharp alignment only</Label>
+                <Switch
+                  checked={cfg.gppNarrativeFilters?.sharpAlignmentOnly ?? false}
+                  onCheckedChange={v => onChange({ ...cfg, gppNarrativeFilters: { ...cfg.gppNarrativeFilters, sharpAlignmentOnly: v } })}
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">Excludes picks where sharp money moved against your direction.</p>
+            </div>
+          )}
           <div>
             <Label className="text-xs text-muted-foreground mb-1.5 block">Simulation Iterations</Label>
             <ToggleGroup
@@ -510,16 +577,25 @@ function ConfidenceDot({ c }: { c: string }) {
 }
 
 // ─── Single lineup card ───────────────────────────────────────────────────────
-function LineupCard({ lineup, index, onLoad }: { lineup: GeneratedLineup; index: number; onLoad: (lu: GeneratedLineup) => void }) {
+function LineupCard({ lineup, index, onLoad, isGppMode }: { lineup: GeneratedLineup; index: number; onLoad: (lu: GeneratedLineup) => void; isGppMode?: boolean }) {
   const evColor = lineup.ev >= 0 ? "text-emerald-400" : "text-red-400";
-  const corrBg = lineup.correlationAdjusted ? "border-amber-700/40" : "border-slate-800";
+  const corrBg = lineup.correlationAdjusted
+    ? "border-amber-700/40"
+    : isGppMode
+      ? "border-amber-800/30"
+      : "border-slate-800";
 
   return (
-    <Card className={cn("bg-slate-900/60", corrBg)}>
+    <Card className={cn("bg-slate-900/60", corrBg, isGppMode && "bg-amber-950/10")}>
       <CardHeader className="pb-2 pt-3 px-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono font-bold text-muted-foreground">#{index + 1}</span>
+            {isGppMode && (
+              <Badge className="text-[8px] px-1.5 py-0 bg-amber-900/50 text-amber-300 border-amber-700/50 font-mono">
+                <Trophy className="w-2 h-2 mr-0.5 inline" />GPP
+              </Badge>
+            )}
             <Badge variant="outline" className={cn("font-mono text-xs", evColor)}>
               EV {sign(lineup.ev)}
             </Badge>
@@ -571,11 +647,26 @@ function LineupCard({ lineup, index, onLoad }: { lineup: GeneratedLineup; index:
   );
 }
 
+// ─── GPP badges ──────────────────────────────────────────────────────────────
+function PaceBadge({ tier }: { tier: string | null | undefined }) {
+  if (!tier) return null;
+  if (tier === "fast")   return <span className="text-[8px] font-mono px-1 py-px rounded bg-emerald-900/50 text-emerald-400 border border-emerald-800/40">⚡fast</span>;
+  if (tier === "slow")   return <span className="text-[8px] font-mono px-1 py-px rounded bg-slate-800 text-slate-400 border border-slate-700">🐢slow</span>;
+  return null;
+}
+function SharpBadge({ signal }: { signal: string | null | undefined }) {
+  if (!signal) return null;
+  if (signal === "sharp_for")     return <span className="text-[8px] font-mono px-1 py-px rounded bg-blue-900/50 text-blue-300 border border-blue-800/40">♦ sharp</span>;
+  if (signal === "sharp_against") return <span className="text-[8px] font-mono px-1 py-px rounded bg-red-900/50 text-red-400 border border-red-800/40">✖ fade</span>;
+  return null;
+}
+
 // ─── Scored props table ───────────────────────────────────────────────────────
-function ScoredPropsTable({ props, pinnedIds, biasWeight }: {
+function ScoredPropsTable({ props, pinnedIds, biasWeight, isGppMode }: {
   props: FactoryScoredProp[];
   pinnedIds: Set<number>;
   biasWeight: number;
+  isGppMode?: boolean;
 }) {
   const [filter, setFilter] = useState<"all" | "eligible" | "excluded">("all");
 
@@ -622,10 +713,15 @@ function ScoredPropsTable({ props, pinnedIds, biasWeight }: {
     return true;
   });
 
-  // When biasWeight > 0 re-sort by bias-adjusted composite score
+  // When biasWeight > 0 or isGppMode, re-sort appropriately
   const sorted = useMemo(() => {
     const pinned = filtered.filter(p => pinnedIds.has(p.ppLineId));
     const rest   = filtered.filter(p => !pinnedIds.has(p.ppLineId));
+    if (isGppMode) {
+      // GPP: sort by leverage score descending (ceiling/ownership)
+      const byLev = (a: FactoryScoredProp, b: FactoryScoredProp) => (b.leverageScore ?? 0) - (a.leverageScore ?? 0);
+      return [...pinned.slice().sort(byLev), ...rest.slice().sort(byLev)];
+    }
     if (biasWeight === 0) return [...pinned, ...rest];
     const adj = (p: FactoryScoredProp) => {
       const bd = biasDeltaMap.get(`${p.sport}|${p.statType}|${p.lineType}`)
@@ -640,7 +736,7 @@ function ScoredPropsTable({ props, pinnedIds, biasWeight }: {
       ...rest.slice().sort((a, b) => adj(b) - adj(a)),
     ];
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, pinnedIds, biasWeight, biasDeltaMap]);
+  }, [filtered, pinnedIds, biasWeight, biasDeltaMap, isGppMode]);
 
   const displayed = sorted.slice(0, 100);
   const biasActive = biasWeight > 0;
@@ -673,10 +769,20 @@ function ScoredPropsTable({ props, pinnedIds, biasWeight }: {
               <TableHead className="text-xs text-muted-foreground">Source</TableHead>
               <TableHead className="text-xs text-muted-foreground">EV</TableHead>
               <TableHead className="text-xs text-muted-foreground">Edge</TableHead>
-              <TableHead className="text-xs text-muted-foreground">
-                {biasActive ? <span className="text-amber-400">Bias ↕</span> : "Bias"}
-              </TableHead>
-              <TableHead className="text-xs text-muted-foreground">Vol</TableHead>
+              {isGppMode ? (
+                <>
+                  <TableHead className="text-xs text-amber-400">Own%</TableHead>
+                  <TableHead className="text-xs text-amber-400">Leverage ↕</TableHead>
+                  <TableHead className="text-xs text-muted-foreground">Context</TableHead>
+                </>
+              ) : (
+                <>
+                  <TableHead className="text-xs text-muted-foreground">
+                    {biasActive ? <span className="text-amber-400">Bias ↕</span> : "Bias"}
+                  </TableHead>
+                  <TableHead className="text-xs text-muted-foreground">Vol</TableHead>
+                </>
+              )}
               <TableHead className="text-xs text-muted-foreground">Flags</TableHead>
             </TableRow>
           </TableHeader>
@@ -727,26 +833,58 @@ function ScoredPropsTable({ props, pinnedIds, biasWeight }: {
                 <TableCell className="py-1.5 text-xs font-mono text-muted-foreground">
                   {p.edgeScore != null ? p.edgeScore.toFixed(1) : "—"}
                 </TableCell>
-                <TableCell className="py-1.5 text-xs font-mono">
-                  {(() => {
-                    const bd = getBias(p);
-                    if (bd == null) return <span className="text-muted-foreground/40">—</span>;
-                    return (
-                      <span
-                        className={bd >= 0 ? "text-emerald-400" : "text-rose-400"}
-                        title={`Personal bias: ${bd >= 0 ? "+" : ""}${bd.toFixed(1)}pp on ${p.sport} ${p.statType} (${p.lineType})`}
-                      >
-                        {bd >= 0 ? "+" : ""}{bd.toFixed(1)}
+                {isGppMode ? (
+                  <>
+                    <TableCell className="py-1.5 text-xs font-mono">
+                      <span className={cn(
+                        (p.ownershipEst ?? 20) <= 10 ? "text-emerald-400" :
+                        (p.ownershipEst ?? 20) <= 20 ? "text-foreground" : "text-amber-400",
+                      )} title="Estimated ownership %">
+                        {p.ownershipEst != null ? `${p.ownershipEst.toFixed(1)}%` : "—"}
                       </span>
-                    );
-                  })()}
-                </TableCell>
-                <TableCell className="py-1.5 text-xs">
-                  {p.volatilityRating === "high"   && <span className="text-red-400">↑</span>}
-                  {p.volatilityRating === "medium" && <span className="text-amber-400">~</span>}
-                  {p.volatilityRating === "low"    && <span className="text-emerald-400">↓</span>}
-                  {!p.volatilityRating             && <span className="text-muted-foreground">—</span>}
-                </TableCell>
+                    </TableCell>
+                    <TableCell className="py-1.5 text-xs font-mono">
+                      <span className={cn(
+                        (p.leverageScore ?? 0) >= 200 ? "text-amber-300 font-bold" :
+                        (p.leverageScore ?? 0) >= 100 ? "text-amber-400" : "text-muted-foreground",
+                      )}>
+                        {p.leverageScore != null ? p.leverageScore.toFixed(0) : "—"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-1.5">
+                      <div className="flex gap-1 flex-wrap items-center">
+                        <PaceBadge tier={p.paceTier} />
+                        <SharpBadge signal={p.sharpSignal} />
+                        {p.gameTotal != null && (
+                          <span className="text-[8px] font-mono text-muted-foreground">tot:{p.gameTotal}</span>
+                        )}
+                      </div>
+                    </TableCell>
+                  </>
+                ) : (
+                  <>
+                    <TableCell className="py-1.5 text-xs font-mono">
+                      {(() => {
+                        const bd = getBias(p);
+                        if (bd == null) return <span className="text-muted-foreground/40">—</span>;
+                        return (
+                          <span
+                            className={bd >= 0 ? "text-emerald-400" : "text-rose-400"}
+                            title={`Personal bias: ${bd >= 0 ? "+" : ""}${bd.toFixed(1)}pp on ${p.sport} ${p.statType} (${p.lineType})`}
+                          >
+                            {bd >= 0 ? "+" : ""}{bd.toFixed(1)}
+                          </span>
+                        );
+                      })()}
+                    </TableCell>
+                    <TableCell className="py-1.5 text-xs">
+                      {p.volatilityRating === "high"   && <span className="text-red-400">↑</span>}
+                      {p.volatilityRating === "medium" && <span className="text-amber-400">~</span>}
+                      {p.volatilityRating === "low"    && <span className="text-emerald-400">↓</span>}
+                      {!p.volatilityRating             && <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                  </>
+                )}
                 <TableCell className="py-1.5">
                   <div className="flex gap-1 flex-wrap">
                     {p.noPlayReason && (
@@ -1573,7 +1711,7 @@ export default function LineupFactory() {
                   ) : (
                     <div className="grid gap-3">
                       {result.lineups.map((lu, i) => (
-                        <LineupCard key={lu.id} lineup={lu} index={i} onLoad={handleLoadLineup} />
+                        <LineupCard key={lu.id} lineup={lu} index={i} onLoad={handleLoadLineup} isGppMode={cfg.optimizationObjective === "gpp_mode"} />
                       ))}
                     </div>
                   )}
@@ -1581,7 +1719,7 @@ export default function LineupFactory() {
 
                 {/* Scored props */}
                 <TabsContent value="props" className="mt-4">
-                  <ScoredPropsTable props={result.scoredProps} pinnedIds={pinnedIds} biasWeight={cfg.biasWeight ?? 0} />
+                  <ScoredPropsTable props={result.scoredProps} pinnedIds={pinnedIds} biasWeight={cfg.biasWeight ?? 0} isGppMode={cfg.optimizationObjective === "gpp_mode"} />
                 </TabsContent>
 
                 {/* Exposure */}
