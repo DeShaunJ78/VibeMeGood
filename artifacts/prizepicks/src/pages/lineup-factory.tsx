@@ -356,7 +356,6 @@ function ConfigPanel({
                     { label: "Any",     value: "any" },
                     { label: "Fast",    value: "fast" },
                     { label: "Neutral", value: "neutral" },
-                    { label: "Slow",    value: "slow" },
                   ]}
                 />
               </div>
@@ -577,13 +576,27 @@ function ConfidenceDot({ c }: { c: string }) {
 }
 
 // ─── Single lineup card ───────────────────────────────────────────────────────
-function LineupCard({ lineup, index, onLoad, isGppMode }: { lineup: GeneratedLineup; index: number; onLoad: (lu: GeneratedLineup) => void; isGppMode?: boolean }) {
+function LineupCard({ lineup, index, onLoad, isGppMode, propsMap }: {
+  lineup: GeneratedLineup;
+  index: number;
+  onLoad: (lu: GeneratedLineup) => void;
+  isGppMode?: boolean;
+  propsMap?: Map<number, FactoryScoredProp>;
+}) {
   const evColor = lineup.ev >= 0 ? "text-emerald-400" : "text-red-400";
   const corrBg = lineup.correlationAdjusted
     ? "border-amber-700/40"
     : isGppMode
       ? "border-amber-800/30"
       : "border-slate-800";
+
+  // For GPP: compute avg leverage across picks
+  const avgLeverage = isGppMode && propsMap
+    ? (() => {
+        const scores = lineup.picks.map(p => propsMap.get(p.ppLineId)?.leverageScore ?? null).filter((v): v is number => v !== null);
+        return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+      })()
+    : null;
 
   return (
     <Card className={cn("bg-slate-900/60", corrBg, isGppMode && "bg-amber-950/10")}>
@@ -594,6 +607,11 @@ function LineupCard({ lineup, index, onLoad, isGppMode }: { lineup: GeneratedLin
             {isGppMode && (
               <Badge className="text-[8px] px-1.5 py-0 bg-amber-900/50 text-amber-300 border-amber-700/50 font-mono">
                 <Trophy className="w-2 h-2 mr-0.5 inline" />GPP
+              </Badge>
+            )}
+            {isGppMode && avgLeverage !== null && (
+              <Badge variant="outline" className="font-mono text-xs text-amber-400 border-amber-800/50">
+                lev {avgLeverage.toFixed(0)}
               </Badge>
             )}
             <Badge variant="outline" className={cn("font-mono text-xs", evColor)}>
@@ -619,7 +637,9 @@ function LineupCard({ lineup, index, onLoad, isGppMode }: { lineup: GeneratedLin
         </div>
       </CardHeader>
       <CardContent className="px-4 pb-3 space-y-1">
-        {lineup.picks.map((pick, pi) => (
+        {lineup.picks.map((pick, pi) => {
+          const sp = propsMap?.get(pick.ppLineId);
+          return (
           <div key={pi} className="flex items-center gap-2 text-xs py-0.5">
             <PlayerAvatar name={pick.playerName} imageUrl={pick.imageUrl ?? null} size="xs" />
             <span className="font-medium truncate flex-1 min-w-0">{pick.playerName}</span>
@@ -628,6 +648,11 @@ function LineupCard({ lineup, index, onLoad, isGppMode }: { lineup: GeneratedLin
             <span className={cn("font-mono text-xs shrink-0 uppercase", pick.direction === "more" ? "text-emerald-400" : "text-red-400")}>
               {pick.direction === "more" ? "▲" : "▼"} {pct(pick.hitProbability)}
             </span>
+            {isGppMode && sp && (
+              <span className="font-mono text-[10px] shrink-0 text-amber-400/80" title={`Own ${sp.ownershipEst?.toFixed(1)}% / Lev ${sp.leverageScore?.toFixed(0)}`}>
+                {sp.ownershipEst != null ? `${sp.ownershipEst.toFixed(0)}%own` : ""}
+              </span>
+            )}
             {pick.lineType !== "standard" && pick.payoutMultiplier != null && pick.payoutMultiplier !== 1 && (
               <span className={cn("font-mono text-[10px] shrink-0", pick.payoutMultiplier > 1 ? "text-rose-400" : "text-emerald-400")}>
                 ×{pick.payoutMultiplier.toFixed(2)}
@@ -635,7 +660,8 @@ function LineupCard({ lineup, index, onLoad, isGppMode }: { lineup: GeneratedLin
             )}
             <LineTypeBadge t={pick.lineType} />
           </div>
-        ))}
+          );
+        })}
         {lineup.correlationNote && (
           <div className="flex items-start gap-1.5 mt-2 text-[10px] text-amber-400/80">
             <Info className="h-3 w-3 shrink-0 mt-0.5" />
@@ -1496,6 +1522,17 @@ export default function LineupFactory() {
 
   const pinnedIds = new Set(pinnedPicks.map(p => p.ppLineId));
 
+  // Derive isGppMode from the entry whose result is displayed (not current editor state)
+  // so historical runs are labelled correctly when a saved entry is selected.
+  const displayedObjective = activeEntry?.cfg.optimizationObjective ?? cfg.optimizationObjective;
+  const isGppMode = displayedObjective === "gpp_mode";
+
+  // Build ppLineId → FactoryScoredProp map for LineupCard leverage lookup
+  const scoredPropsMap = useMemo(
+    () => new Map((result?.scoredProps ?? []).map(p => [p.ppLineId, p])),
+    [result?.scoredProps],
+  );
+
   function handleGenerate() {
     const requiredLineIds = [...requiredPinnedIds].filter(id => pinnedPicks.some(p => p.ppLineId === id));
     generate.mutate({ data: { ...cfg, requiredLineIds: requiredLineIds.length > 0 ? requiredLineIds : undefined } });
@@ -1711,7 +1748,7 @@ export default function LineupFactory() {
                   ) : (
                     <div className="grid gap-3">
                       {result.lineups.map((lu, i) => (
-                        <LineupCard key={lu.id} lineup={lu} index={i} onLoad={handleLoadLineup} isGppMode={cfg.optimizationObjective === "gpp_mode"} />
+                        <LineupCard key={lu.id} lineup={lu} index={i} onLoad={handleLoadLineup} isGppMode={isGppMode} propsMap={scoredPropsMap} />
                       ))}
                     </div>
                   )}
@@ -1719,7 +1756,7 @@ export default function LineupFactory() {
 
                 {/* Scored props */}
                 <TabsContent value="props" className="mt-4">
-                  <ScoredPropsTable props={result.scoredProps} pinnedIds={pinnedIds} biasWeight={cfg.biasWeight ?? 0} isGppMode={cfg.optimizationObjective === "gpp_mode"} />
+                  <ScoredPropsTable props={result.scoredProps} pinnedIds={pinnedIds} biasWeight={cfg.biasWeight ?? 0} isGppMode={isGppMode} />
                 </TabsContent>
 
                 {/* Exposure */}

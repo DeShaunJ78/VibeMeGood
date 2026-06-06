@@ -29,7 +29,7 @@ const configSchema = z.object({
   picksPerEntry: z.number().int().min(2).max(6),
   numEntries: z.number().int().min(1).max(25),
   varianceProfile: z.enum(["conservative", "balanced", "aggressive", "chaos", "custom"]),
-  optimizationObjective: z.enum(["max_ev", "max_profit_prob", "min_drawdown", "balanced_growth", "high_ceiling"]),
+  optimizationObjective: z.enum(["max_ev", "max_profit_prob", "min_drawdown", "balanced_growth", "high_ceiling", "gpp_mode"]),
   maxPlayerExposure: z.number().min(0).max(1),
   maxPickExposure: z.number().min(0).max(1),
   maxTeamExposure: z.number().min(0).max(1),
