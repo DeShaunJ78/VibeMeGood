@@ -30,3 +30,4 @@
 - [Data-readiness thresholds](data-readiness-thresholds.md) — isDataReady = playersWithLogs≥100; isCalibrationReady = calibrationBuckets≥50; exposed at GET /api/data-readiness; shown as amber banner on Dashboard + Slate.
 - [Rescore vs Sync Odds](rescore-vs-sync-odds.md) — POST /api/sync/rescore-props runs only recalcPropScores() (free, no API call); POST /api/sync/external-odds fetches live lines (costs Odds API credits). Never conflate the two.
 - [Roster auto-population](roster-auto-population.md) — backfill was silently dropping 95%+ of boxscore data; fix: pre-fetch all 30 NBA/32 NHL/MLB rosters and upsert unknown players before boxscore pass; TRUNCATE calibration + re-run calibration job after first full run.
+- [GPP mode design](gpp-mode-design.md) — composite score, leverage formula, direction-aware sharp signal mapping, narrative filter gate, pace season dedup, ownership source, and backtest entry tagging.

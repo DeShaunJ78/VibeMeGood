@@ -179,7 +179,10 @@ function calcCompositeScore(prop: ScoredProp, objective: string): number {
       // GPP: ceiling × (1/ownership) × edge  — rewards high-ceiling low-owned props with edge
       const ceiling = prop.ceilingRating ?? 50;
       const own = Math.max(1, prop.ownershipEst ?? 20);
-      const safeEdge = Math.max(0.1, edge);  // avoid zero — every eligible prop has some edge
+      // Floor edge at 0.1 intentionally: GPP mode is ceiling-first, not edge-first.
+      // Negative-edge props can still offer contrarian leverage value; the floor
+      // prevents division-by-near-zero distortion without completely excluding them.
+      const safeEdge = Math.max(0.1, edge);
       return (ceiling / own) * safeEdge;
     }
     default:                return ev;
@@ -308,8 +311,9 @@ router.post("/lineup-factory/generate", async (req, res) => {
         // Fetch pace ratings keyed by (teamAbbr, sport) — sport-constrained to avoid cross-sport collisions
         const teamAbbrSportPairs = allTeams.map(t => `${t.abbr}:${t.sport}`);
         const paceRows = await db.select({
-          teamAbbr: teamPaceRatingsTable.teamAbbr,
-          sport:     teamPaceRatingsTable.sport,
+          teamAbbr:   teamPaceRatingsTable.teamAbbr,
+          sport:      teamPaceRatingsTable.sport,
+          season:     teamPaceRatingsTable.season,
           paceRating: teamPaceRatingsTable.paceRating,
         }).from(teamPaceRatingsTable)
           .where(
@@ -317,11 +321,15 @@ router.post("/lineup-factory/generate", async (req, res) => {
               inArray(teamPaceRatingsTable.teamAbbr, allAbbrs),
               inArray(teamPaceRatingsTable.sport, [...new Set(allTeams.map(t => t.sport))]),
             ),
-          );
-        // Key by "abbr:sport" to avoid cross-sport collisions
+          )
+          .orderBy(desc(teamPaceRatingsTable.season));
+        // Deduplicate in-memory — keep only the latest season per (abbr, sport) key
         const paceByAbbrSport = new Map<string, number>();
         for (const pr of paceRows) {
-          paceByAbbrSport.set(`${pr.teamAbbr}:${pr.sport}`, parseFloat(pr.paceRating.toString()));
+          const key = `${pr.teamAbbr}:${pr.sport}`;
+          if (!paceByAbbrSport.has(key)) {  // rows ordered DESC by season, so first wins
+            paceByAbbrSport.set(key, parseFloat(pr.paceRating.toString()));
+          }
         }
         for (const t of allTeams) {
           const rating = paceByAbbrSport.get(`${t.abbr}:${t.sport}`);
@@ -690,8 +698,8 @@ router.post("/lineup-factory/generate", async (req, res) => {
       if (cfg.minEdgeThreshold !== undefined && (p.edgeScore ?? -Infinity) < cfg.minEdgeThreshold) return false;
       if (p.lineType === "demon" && !cfg.demonUnderAllowed && p.direction === "less") return false;
 
-      // ── GPP narrative filters (only applied when gppNarrativeFilters is set) ──
-      if (cfg.gppNarrativeFilters) {
+      // ── GPP narrative filters (hard-gated to gpp_mode — never applied for cash objectives) ──
+      if (cfg.optimizationObjective === "gpp_mode" && cfg.gppNarrativeFilters) {
         const { minGameTotal, pacePreference, sharpAlignmentOnly } = cfg.gppNarrativeFilters;
         // Game total threshold — exclude props from games below threshold OR with unknown total
         if (minGameTotal !== undefined && (p.gameTotal === null || p.gameTotal < minGameTotal)) return false;
