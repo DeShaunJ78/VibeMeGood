@@ -4,6 +4,7 @@ import {
   ppLinesTable, playersTable, propScoresTable, ourProjectionsTable,
   varianceScoresTable, externalLinesTable, syncRunsTable,
   entryPicksTable, entriesTable, gameEnvironmentTable, lineMoveEventsTable,
+  teamPaceRatingsTable, teamsTable,
 } from "@workspace/db/schema";
 import { eq, and, inArray, desc, isNotNull } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -174,10 +175,11 @@ function calcCompositeScore(prop: ScoredProp, objective: string): number {
     case "balanced_growth": return ev * 0.5 + prob * 50;
     case "high_ceiling":    return ev * (lineType === "demon" ? 1.5 : 1.0);
     case "gpp_mode": {
-      // GPP: reward ceiling and edge, penalise high ownership (contrarian picks score higher)
+      // GPP: ceiling × (1/ownership) × edge  — rewards high-ceiling low-owned props with edge
       const ceiling = prop.ceilingRating ?? 50;
       const own = Math.max(1, prop.ownershipEst ?? 20);
-      return (ceiling / 10 + Math.max(0, edge * 0.1) + Math.max(0, ev * 0.5)) / own * 10;
+      const safeEdge = Math.max(0.1, edge);  // avoid zero — every eligible prop has some edge
+      return (ceiling / own) * safeEdge;
     }
     default:                return ev;
   }
@@ -287,7 +289,40 @@ router.post("/lineup-factory/generate", async (req, res) => {
       if (ge.gameId && ge.gameTotal) gameTotalById.set(ge.gameId, parseFloat(ge.gameTotal.toString()));
     }
 
-    // ── 2c. Bulk query latest sharp signals (for GPP sharp filter) ────────
+    // ── 2c. Bulk query team pace ratings (keyed by teamId via teams.abbreviation) ──
+    const teamIds = [...new Set(rows.map(r => r.player.teamId).filter((id): id is number => id !== null))];
+    const paceByTeamId = new Map<number, "fast" | "normal" | "slow">();
+    if (teamIds.length) {
+      const allTeams = await db.select({ id: teamsTable.id, abbr: teamsTable.abbreviation, sport: teamsTable.sport })
+        .from(teamsTable)
+        .where(inArray(teamsTable.id, teamIds));
+      const abbrsBySport = new Map<string, { teamId: number; abbr: string }[]>();
+      for (const t of allTeams) {
+        const key = t.sport;
+        if (!abbrsBySport.has(key)) abbrsBySport.set(key, []);
+        abbrsBySport.get(key)!.push({ teamId: t.id, abbr: t.abbr });
+      }
+      const allAbbrs = allTeams.map(t => t.abbr);
+      if (allAbbrs.length) {
+        const paceRows = await db.select({
+          teamAbbr: teamPaceRatingsTable.teamAbbr,
+          paceRating: teamPaceRatingsTable.paceRating,
+        }).from(teamPaceRatingsTable)
+          .where(inArray(teamPaceRatingsTable.teamAbbr, allAbbrs));
+        const paceByAbbr = new Map<string, number>();
+        for (const pr of paceRows) {
+          paceByAbbr.set(pr.teamAbbr, parseFloat(pr.paceRating.toString()));
+        }
+        for (const t of allTeams) {
+          const rating = paceByAbbr.get(t.abbr);
+          if (rating !== undefined) {
+            paceByTeamId.set(t.id, rating > 1.02 ? "fast" : rating < 0.98 ? "slow" : "normal");
+          }
+        }
+      }
+    }
+
+    // ── 2d. Bulk query latest sharp signals (for GPP sharp filter) ────────
     const allSharpEvents = ppLineIds.length
       ? await db.select()
           .from(lineMoveEventsTable)
@@ -455,9 +490,8 @@ router.post("/lineup-factory/generate", async (req, res) => {
       const ownershipAdj = Math.max(-10, Math.min(10, (pOverPct - tierMedian) * 0.3));
       const ownershipEst = Math.round(Math.max(1, Math.min(60, tierBase + ownershipAdj)) * 10) / 10;
 
-      // Pace tier: derived from projection pace factor
-      const paceFactor = row.proj?.paceFactor ? parseFloat(row.proj.paceFactor.toString()) : null;
-      const paceTier = paceFactor == null ? null : paceFactor > 1.05 ? "fast" : paceFactor < 0.95 ? "slow" : "normal";
+      // Pace tier: from team_pace_ratings (via player teamId → teams.abbreviation → pace table)
+      const paceTier = row.player.teamId ? (paceByTeamId.get(row.player.teamId) ?? null) : null;
 
       // Game total from pre-fetched game environment
       const gameTotal = row.line.gameId ? (gameTotalById.get(row.line.gameId) ?? null) : null;
@@ -580,8 +614,8 @@ router.post("/lineup-factory/generate", async (req, res) => {
       // ── GPP narrative filters (only applied when gppNarrativeFilters is set) ──
       if (cfg.gppNarrativeFilters) {
         const { minGameTotal, pacePreference, sharpAlignmentOnly } = cfg.gppNarrativeFilters;
-        // Game total threshold — only props from high-scoring games
-        if (minGameTotal !== undefined && p.gameTotal !== null && p.gameTotal < minGameTotal) return false;
+        // Game total threshold — exclude props from games below threshold OR with unknown total
+        if (minGameTotal !== undefined && (p.gameTotal === null || p.gameTotal < minGameTotal)) return false;
         // Pace preference — use paceTier from projection paceFactor
         if (pacePreference === "fast" && p.paceTier !== "fast") return false;
         if (pacePreference === "neutral" && p.paceTier === "slow") return false;
