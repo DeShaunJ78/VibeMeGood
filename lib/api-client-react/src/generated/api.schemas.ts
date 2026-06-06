@@ -472,6 +472,8 @@ export interface EntryInput {
   submittedAt?: string | null;
   /** @nullable */
   kellySuggested?: number | null;
+  /** @nullable */
+  optimizationObjective?: string | null;
   /** Optional legs persisted atomically with the entry in a single transaction. */
   picks?: EntryPickInput[];
 }
@@ -713,6 +715,38 @@ export interface ReviewStats {
   hitRateByPickCount?: unknown;
   hitRateByEntryType?: unknown;
   statBreakdown?: ReviewStatsStatBreakdownItem[];
+}
+
+export type GppBacktestGroupHitRateByPickCountItem = {
+  pickCount: number;
+  wins: number;
+  total: number;
+  /** @nullable */
+  hitRate?: number | null;
+};
+
+export interface GppBacktestGroup {
+  label: string;
+  totalEntries: number;
+  completedEntries: number;
+  wins: number;
+  /** @nullable */
+  hitRate?: number | null;
+  /** @nullable */
+  avgPayoutMultiple?: number | null;
+  totalPnl: number;
+  tailCount: number;
+  /** @nullable */
+  tailThreshold?: number | null;
+  /** @nullable */
+  avgTailMultiple?: number | null;
+  hitRateByPickCount: GppBacktestGroupHitRateByPickCountItem[];
+}
+
+export interface GppBacktestResult {
+  gpp: GppBacktestGroup;
+  standard: GppBacktestGroup;
+  hasGppData: boolean;
 }
 
 export interface CalibrationBucket {

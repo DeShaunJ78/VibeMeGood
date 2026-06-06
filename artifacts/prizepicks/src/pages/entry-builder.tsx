@@ -242,7 +242,7 @@ export default function EntryBuilder() {
   const [portfolioResult, setPortfolioResult] = useState<PortfolioResult | null>(null);
   const [portfolioLoggedSet, setPortfolioLoggedSet] = useState<Set<number>>(new Set());
   const [kellyOpen, setKellyOpen] = useState(true);
-  const { picks, removePick, updateDirection, clearPicks } = useEntry();
+  const { picks, optimizationObjective, removePick, updateDirection, clearPicks } = useEntry();
   function togglePickSort(col: string) {
     if (pickSortCol === col) {
       setPickSortDir(d => d === "asc" ? "desc" : "asc");
@@ -620,6 +620,7 @@ export default function EntryBuilder() {
           kellySuggested: (kellyResult && kellyResult.halfKelly > 0 && bankrollNum > 0)
             ? Math.round(kellyResult.halfKelly * bankrollNum * 100) / 100
             : null,
+          optimizationObjective: optimizationObjective ?? null,
           picks: picks.map<EntryPickInput>(p => ({
             ppLineId:       p.ppLineId,
             playerId:       p.playerId,
@@ -638,7 +639,7 @@ export default function EntryBuilder() {
     } catch {
       toast({ title: "Failed to save", description: "Could not log entry.", variant: "destructive" });
     }
-  }, [createEntry, playstyle, picks, stakeNum, multiplier, powerPayout, notes, toast, clearPicks, multiplierUnknown]);
+  }, [createEntry, playstyle, picks, stakeNum, multiplier, powerPayout, notes, toast, clearPicks, multiplierUnknown, optimizationObjective]);
 
   async function handleSave() {
     if (picks.length < 2) {

@@ -1473,7 +1473,7 @@ export default function LineupFactory() {
   });
   const [compareId, setCompareId] = useState<string | null>(null);
   const generate = useGenerateLineupFactory();
-  const { addPick } = useEntry();
+  const { addPick, setOptimizationObjective } = useEntry();
 
   // Persist cfg on every change
   useEffect(() => { saveCfg(cfg); }, [cfg]);
@@ -1587,6 +1587,7 @@ export default function LineupFactory() {
   }
 
   function handleLoadLineup(lineup: GeneratedLineup) {
+    setOptimizationObjective(cfg.optimizationObjective as import("@/lib/entry-context").OptimizationObjective);
     for (const pick of lineup.picks) {
       addPick({
         ppLineId:       pick.ppLineId,

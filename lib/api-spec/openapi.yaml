@@ -981,6 +981,18 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ReviewStats" }
 
+  /dashboard/gpp-backtest:
+    get:
+      operationId: getGppBacktest
+      tags: [dashboard]
+      summary: GPP backtest — compares gpp_mode entries vs standard entries on hit rate, payout, and tail outcomes
+      responses:
+        "200":
+          description: GPP backtest results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GppBacktestResult" }
+
   /dashboard/stat-bias:
     get:
       operationId: getStatBias
@@ -1869,6 +1881,7 @@ components:
         emotionalState: { type: ["string", "null"] }
         submittedAt: { type: ["string", "null"] }
         kellySuggested: { type: ["number", "null"] }
+        optimizationObjective: { type: ["string", "null"] }
         picks:
           type: array
           description: Optional legs persisted atomically with the entry in a single transaction.
@@ -2120,6 +2133,39 @@ components:
               avgEdge:   { type: ["number", "null"] }
             required: [statType, pickCount, hitCount]
       required: [totalEntries, totalPnl]
+
+    GppBacktestGroup:
+      type: object
+      properties:
+        label:         { type: string }
+        totalEntries:  { type: integer }
+        completedEntries: { type: integer }
+        wins:          { type: integer }
+        hitRate:       { type: ["number", "null"] }
+        avgPayoutMultiple: { type: ["number", "null"] }
+        totalPnl:      { type: number }
+        tailCount:     { type: integer }
+        tailThreshold: { type: ["number", "null"] }
+        avgTailMultiple: { type: ["number", "null"] }
+        hitRateByPickCount:
+          type: array
+          items:
+            type: object
+            properties:
+              pickCount: { type: integer }
+              wins:      { type: integer }
+              total:     { type: integer }
+              hitRate:   { type: ["number", "null"] }
+            required: [pickCount, wins, total]
+      required: [label, totalEntries, completedEntries, wins, totalPnl, tailCount, hitRateByPickCount]
+
+    GppBacktestResult:
+      type: object
+      properties:
+        gpp:      { $ref: "#/components/schemas/GppBacktestGroup" }
+        standard: { $ref: "#/components/schemas/GppBacktestGroup" }
+        hasGppData: { type: boolean }
+      required: [gpp, standard, hasGppData]
 
     CalibrationBucket:
       type: object

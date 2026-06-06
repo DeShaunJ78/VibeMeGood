@@ -1,4 +1,4 @@
-import { useGetReviewStats } from "@workspace/api-client-react";
+import { useGetReviewStats, useGetGppBacktest } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -74,6 +74,8 @@ export default function Review() {
   const [playerSortKey, setPlayerSortKey] = useState<"hitRate" | "delta" | "gradedCount">("hitRate");
   const [playerSortDir, setPlayerSortDir] = useState<"desc" | "asc">("desc");
   const [slateOnly, setSlateOnly] = useState(false);
+
+  const { data: gppBacktest } = useGetGppBacktest({ query: { queryKey: ["gpp-backtest"], staleTime: 60_000 } });
 
   const { data: biasData } = useQuery<{ buckets: StatBiasBucket[] }>({
     queryKey: ["stat-bias"],
@@ -851,6 +853,139 @@ export default function Review() {
               </CardContent>
             )}
           </Card>
+
+          {/* GPP Backtest */}
+          {gppBacktest && (
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm font-mono uppercase tracking-wider">GPP Mode Backtest</CardTitle>
+                  {!gppBacktest.hasGppData && (
+                    <span className="text-[10px] font-mono text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5">No GPP entries yet</span>
+                  )}
+                </div>
+                <p className="text-[10px] font-mono text-muted-foreground mt-1">
+                  Compares GPP-mode lineups (ceiling × edge / ownership) vs standard entries — hit rate, avg payout multiple, and top-10% tail outcomes.
+                  {!gppBacktest.hasGppData && " Log entries from the Lineup Factory in GPP mode to populate this report."}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* KPI comparison row */}
+                <div className="grid grid-cols-3 gap-3">
+                  {(["hitRate", "avgPayoutMultiple", "avgTailMultiple"] as const).map(metric => {
+                    const labels: Record<string, string> = {
+                      hitRate: "Hit Rate",
+                      avgPayoutMultiple: "Avg Payout ×",
+                      avgTailMultiple: "Avg Tail ×",
+                    };
+                    const fmt = (v: number | null | undefined, isRate: boolean) =>
+                      v == null ? "—" : isRate ? `${(v * 100).toFixed(1)}%` : `${v.toFixed(2)}×`;
+                    const isRate = metric === "hitRate";
+                    const gVal = (gppBacktest.gpp as any)[metric] as number | null;
+                    const sVal = (gppBacktest.standard as any)[metric] as number | null;
+                    const better = gVal != null && sVal != null
+                      ? (isRate ? gVal > sVal : gVal > sVal)
+                      : null;
+                    return (
+                      <div key={metric} className="bg-slate-800/50 rounded-lg p-3">
+                        <div className="text-[10px] font-mono text-muted-foreground uppercase mb-2">{labels[metric]}</div>
+                        <div className="flex items-end gap-3">
+                          <div className="flex-1">
+                            <div className="text-[9px] font-mono text-violet-400 mb-0.5">GPP</div>
+                            <div className={`text-xl font-bold font-mono ${better === true ? "text-emerald-400" : better === false ? "text-rose-400" : "text-slate-400"}`}>
+                              {gppBacktest.hasGppData ? fmt(gVal, isRate) : <span className="text-slate-600 text-base">—</span>}
+                            </div>
+                            <div className="text-[9px] font-mono text-muted-foreground mt-0.5">{gppBacktest.gpp.completedEntries} settled</div>
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-[9px] font-mono text-slate-400 mb-0.5">Standard</div>
+                            <div className={`text-xl font-bold font-mono ${better === false ? "text-emerald-400" : better === true ? "text-slate-300" : "text-slate-400"}`}>
+                              {fmt(sVal, isRate)}
+                            </div>
+                            <div className="text-[9px] font-mono text-muted-foreground mt-0.5">{gppBacktest.standard.completedEntries} settled</div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Hit rate by pick count comparison */}
+                {(gppBacktest.hasGppData || gppBacktest.standard.hitRateByPickCount.length > 0) && (
+                  <div>
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase mb-2">Hit Rate by Pick Count</div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs font-mono">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-muted-foreground">
+                            <th className="text-left pb-1.5 pr-4">Picks</th>
+                            <th className="text-right pb-1.5 pr-4 text-violet-400">GPP</th>
+                            <th className="text-right pb-1.5">Standard</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[2, 3, 4, 5, 6].map(pc => {
+                            const gRow = gppBacktest.gpp.hitRateByPickCount.find(r => r.pickCount === pc);
+                            const sRow = gppBacktest.standard.hitRateByPickCount.find(r => r.pickCount === pc);
+                            if (!gRow && !sRow) return null;
+                            const gRate = gRow?.hitRate ?? null;
+                            const sRate = sRow?.hitRate ?? null;
+                            const gBetter = gRate != null && sRate != null && gRate > sRate;
+                            return (
+                              <tr key={pc} className="border-b border-slate-800/40">
+                                <td className="py-1.5 pr-4 text-slate-300">{pc}-pick</td>
+                                <td className="py-1.5 pr-4 text-right">
+                                  {gppBacktest.hasGppData && gRow ? (
+                                    <span className={gBetter ? "text-emerald-400 font-bold" : "text-slate-300"}>
+                                      {gRate != null ? `${(gRate * 100).toFixed(1)}%` : "—"}
+                                      <span className="text-muted-foreground ml-1">({gRow.wins}/{gRow.total})</span>
+                                    </span>
+                                  ) : <span className="text-slate-700">—</span>}
+                                </td>
+                                <td className="py-1.5 text-right">
+                                  {sRow ? (
+                                    <span className={!gBetter && sRate != null ? "text-slate-200" : "text-slate-400"}>
+                                      {sRate != null ? `${(sRate * 100).toFixed(1)}%` : "—"}
+                                      <span className="text-muted-foreground ml-1">({sRow.wins}/{sRow.total})</span>
+                                    </span>
+                                  ) : <span className="text-slate-700">—</span>}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* P&L summary */}
+                <div className="flex gap-4 text-xs font-mono border-t border-slate-800 pt-3">
+                  <div>
+                    <span className="text-muted-foreground">GPP P&amp;L: </span>
+                    <span className={gppBacktest.gpp.totalPnl >= 0 ? "text-emerald-400 font-bold" : "text-rose-400 font-bold"}>
+                      {gppBacktest.hasGppData ? `${gppBacktest.gpp.totalPnl >= 0 ? "+" : ""}$${gppBacktest.gpp.totalPnl.toFixed(2)}` : "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Standard P&amp;L: </span>
+                    <span className={gppBacktest.standard.totalPnl >= 0 ? "text-emerald-400 font-bold" : "text-rose-400 font-bold"}>
+                      {gppBacktest.standard.completedEntries > 0 ? `${gppBacktest.standard.totalPnl >= 0 ? "+" : ""}$${gppBacktest.standard.totalPnl.toFixed(2)}` : "—"}
+                    </span>
+                  </div>
+                  {gppBacktest.hasGppData && gppBacktest.gpp.tailCount > 0 && (
+                    <div>
+                      <span className="text-muted-foreground">GPP top-10% tail events: </span>
+                      <span className="text-violet-400 font-bold">{gppBacktest.gpp.tailCount}</span>
+                      {gppBacktest.gpp.avgTailMultiple != null && (
+                        <span className="text-muted-foreground ml-1">(avg {gppBacktest.gpp.avgTailMultiple.toFixed(2)}×)</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Emotional State Performance */}
           {s.emotionWinRates && s.emotionWinRates.length > 0 && (

@@ -830,6 +830,7 @@ export const CreateEntryBody = zod.object({
   "emotionalState": zod.string().nullish(),
   "submittedAt": zod.string().nullish(),
   "kellySuggested": zod.number().nullish(),
+  "optimizationObjective": zod.string().nullish(),
   "picks": zod.array(zod.object({
   "ppLineId": zod.number().nullish(),
   "playerId": zod.number().nullish(),
@@ -1367,6 +1368,50 @@ export const GetReviewStatsResponse = zod.object({
   "hitRate": zod.number().nullish(),
   "avgEdge": zod.number().nullish()
 })).optional()
+})
+
+
+/**
+ * @summary GPP backtest — compares gpp_mode entries vs standard entries on hit rate, payout, and tail outcomes
+ */
+export const GetGppBacktestResponse = zod.object({
+  "gpp": zod.object({
+  "label": zod.string(),
+  "totalEntries": zod.number(),
+  "completedEntries": zod.number(),
+  "wins": zod.number(),
+  "hitRate": zod.number().nullish(),
+  "avgPayoutMultiple": zod.number().nullish(),
+  "totalPnl": zod.number(),
+  "tailCount": zod.number(),
+  "tailThreshold": zod.number().nullish(),
+  "avgTailMultiple": zod.number().nullish(),
+  "hitRateByPickCount": zod.array(zod.object({
+  "pickCount": zod.number(),
+  "wins": zod.number(),
+  "total": zod.number(),
+  "hitRate": zod.number().nullish()
+}))
+}),
+  "standard": zod.object({
+  "label": zod.string(),
+  "totalEntries": zod.number(),
+  "completedEntries": zod.number(),
+  "wins": zod.number(),
+  "hitRate": zod.number().nullish(),
+  "avgPayoutMultiple": zod.number().nullish(),
+  "totalPnl": zod.number(),
+  "tailCount": zod.number(),
+  "tailThreshold": zod.number().nullish(),
+  "avgTailMultiple": zod.number().nullish(),
+  "hitRateByPickCount": zod.array(zod.object({
+  "pickCount": zod.number(),
+  "wins": zod.number(),
+  "total": zod.number(),
+  "hitRate": zod.number().nullish()
+}))
+}),
+  "hasGppData": zod.boolean()
 })
 
 

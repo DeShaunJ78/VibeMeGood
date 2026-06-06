@@ -173,6 +173,8 @@ const CreateEntrySchema = z.object({
   potentialPayout: z.number().nullable().optional(),
   // Half-Kelly dollar amount at log time, computed client-side where pick pOver + multiplier live.
   kellySuggested: z.number().positive().nullable().optional(),
+  // Lineup-factory optimization mode used when this entry was built; null for manual slips.
+  optimizationObjective: z.enum(["max_ev", "max_profit_prob", "min_drawdown", "balanced_growth", "high_ceiling", "gpp_mode"]).nullable().optional(),
 });
 
 const InlinePickSchema = z.object({

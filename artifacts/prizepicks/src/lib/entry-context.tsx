@@ -24,19 +24,31 @@ export interface EntryPick {
   gamesUsed?: number | null;
 }
 
+export type OptimizationObjective =
+  | "max_ev"
+  | "max_profit_prob"
+  | "min_drawdown"
+  | "balanced_growth"
+  | "high_ceiling"
+  | "gpp_mode"
+  | null;
+
 interface EntryContextValue {
   picks: EntryPick[];
+  optimizationObjective: OptimizationObjective;
   addPick: (pick: EntryPick) => void;
   removePick: (ppLineId: number) => void;
   updateDirection: (ppLineId: number, direction: "more" | "less") => void;
   clearPicks: () => void;
   hasPick: (ppLineId: number) => boolean;
+  setOptimizationObjective: (obj: OptimizationObjective) => void;
 }
 
 const EntryContext = createContext<EntryContextValue | null>(null);
 
 export function EntryProvider({ children }: { children: ReactNode }) {
   const [picks, setPicks] = useState<EntryPick[]>([]);
+  const [optimizationObjective, setOptimizationObjective] = useState<OptimizationObjective>(null);
 
   const addPick = useCallback((pick: EntryPick) => {
     setPicks(prev => {
@@ -54,12 +66,15 @@ export function EntryProvider({ children }: { children: ReactNode }) {
     setPicks(prev => prev.map(p => p.ppLineId === ppLineId ? { ...p, direction } : p));
   }, []);
 
-  const clearPicks = useCallback(() => setPicks([]), []);
+  const clearPicks = useCallback(() => {
+    setPicks([]);
+    setOptimizationObjective(null);
+  }, []);
 
   const hasPick = useCallback((ppLineId: number) => picks.some(p => p.ppLineId === ppLineId), [picks]);
 
   return (
-    <EntryContext.Provider value={{ picks, addPick, removePick, updateDirection, clearPicks, hasPick }}>
+    <EntryContext.Provider value={{ picks, optimizationObjective, addPick, removePick, updateDirection, clearPicks, hasPick, setOptimizationObjective }}>
       {children}
     </EntryContext.Provider>
   );

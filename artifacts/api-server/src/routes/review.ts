@@ -236,4 +236,85 @@ router.get("/dashboard/review", async (req, res) => {
   }
 });
 
+// ── GPP Backtest ─────────────────────────────────────────────────────────────
+// Compares entries tagged optimizationObjective='gpp_mode' against all others.
+// Metrics: hit rate, avg payout multiple (actualPayout/stake), tail outcomes
+// (top-10% payout multiple events), and hit-rate breakdown by pick count.
+
+function buildBacktestGroup(label: string, entries: typeof entriesTable.$inferSelect[]) {
+  const completed = entries.filter(e => e.result !== "pending");
+  const wins = completed.filter(e => e.result === "win");
+
+  const totalPnl = completed.reduce((sum, e) => {
+    return sum + Number(e.actualPayout ?? 0) - Number(e.stake ?? 0);
+  }, 0);
+
+  // Payout multiples for completed winning entries (win only has meaningful payout)
+  const multiples = completed
+    .filter(e => Number(e.stake ?? 0) > 0 && Number(e.actualPayout ?? 0) > 0)
+    .map(e => Number(e.actualPayout) / Number(e.stake));
+
+  const avgPayoutMultiple = multiples.length > 0
+    ? multiples.reduce((a, b) => a + b, 0) / multiples.length
+    : null;
+
+  // Tail: top 10% of payout multiples
+  const sorted = [...multiples].sort((a, b) => b - a);
+  const tailCut = Math.max(1, Math.ceil(sorted.length * 0.10));
+  const tailSlice = sorted.slice(0, tailCut);
+  const tailThreshold = sorted.length > 0 ? sorted[tailCut - 1] ?? null : null;
+  const avgTailMultiple = tailSlice.length > 0
+    ? tailSlice.reduce((a, b) => a + b, 0) / tailSlice.length
+    : null;
+
+  // Hit rate by pick count
+  const pcMap: Record<number, { wins: number; total: number }> = {};
+  for (const e of completed) {
+    const pc = e.pickCount;
+    if (!pcMap[pc]) pcMap[pc] = { wins: 0, total: 0 };
+    pcMap[pc].total++;
+    if (e.result === "win") pcMap[pc].wins++;
+  }
+  const hitRateByPickCount = Object.entries(pcMap)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([pickCount, d]) => ({
+      pickCount: Number(pickCount),
+      wins: d.wins,
+      total: d.total,
+      hitRate: d.total > 0 ? Math.round((d.wins / d.total) * 1000) / 1000 : null,
+    }));
+
+  return {
+    label,
+    totalEntries: entries.length,
+    completedEntries: completed.length,
+    wins: wins.length,
+    hitRate: completed.length > 0 ? Math.round((wins.length / completed.length) * 1000) / 1000 : null,
+    avgPayoutMultiple: avgPayoutMultiple != null ? Math.round(avgPayoutMultiple * 100) / 100 : null,
+    totalPnl: Math.round(totalPnl * 100) / 100,
+    tailCount: tailSlice.length,
+    tailThreshold: tailThreshold != null ? Math.round(tailThreshold * 100) / 100 : null,
+    avgTailMultiple: avgTailMultiple != null ? Math.round(avgTailMultiple * 100) / 100 : null,
+    hitRateByPickCount,
+  };
+}
+
+router.get("/dashboard/gpp-backtest", async (req, res) => {
+  try {
+    const allEntries = await db.select().from(entriesTable);
+
+    const gppEntries = allEntries.filter(e => e.optimizationObjective === "gpp_mode");
+    const standardEntries = allEntries.filter(e => e.optimizationObjective !== "gpp_mode");
+
+    res.json({
+      gpp: buildBacktestGroup("GPP Mode", gppEntries),
+      standard: buildBacktestGroup("Standard", standardEntries),
+      hasGppData: gppEntries.length > 0,
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;

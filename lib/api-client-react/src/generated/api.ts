@@ -53,6 +53,7 @@ import type {
   GetPlatformLinesByPropParams,
   GetReviewStatsParams,
   GetSlateParams,
+  GppBacktestResult,
   HealthStatus,
   HistoricalHitRates,
   Injury,
@@ -4385,6 +4386,83 @@ export function useGetReviewStats<TData = Awaited<ReturnType<typeof getReviewSta
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetReviewStatsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetGppBacktestUrl = () => {
+
+
+
+
+  return `/api/dashboard/gpp-backtest`
+}
+
+/**
+ * @summary GPP backtest — compares gpp_mode entries vs standard entries on hit rate, payout, and tail outcomes
+ */
+export const getGppBacktest = async ( options?: RequestInit): Promise<GppBacktestResult> => {
+
+  return customFetch<GppBacktestResult>(getGetGppBacktestUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGppBacktestQueryKey = () => {
+    return [
+    `/api/dashboard/gpp-backtest`
+    ] as const;
+    }
+
+
+export const getGetGppBacktestQueryOptions = <TData = Awaited<ReturnType<typeof getGppBacktest>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGppBacktest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGppBacktestQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGppBacktest>>> = ({ signal }) => getGppBacktest({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGppBacktest>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGppBacktestQueryResult = NonNullable<Awaited<ReturnType<typeof getGppBacktest>>>
+export type GetGppBacktestQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary GPP backtest — compares gpp_mode entries vs standard entries on hit rate, payout, and tail outcomes
+ */
+
+export function useGetGppBacktest<TData = Awaited<ReturnType<typeof getGppBacktest>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGppBacktest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGppBacktestQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

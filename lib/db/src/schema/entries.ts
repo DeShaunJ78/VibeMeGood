@@ -27,6 +27,10 @@ export const entriesTable = pgTable("entries", {
   // Half-Kelly dollar amount at log time — passed from client (which has
   // pick-level pOver + multiplier) and frozen here for adherence tracking.
   kellySuggested: numeric("kelly_suggested"),
+  // Lineup-factory optimization objective used when this entry was built.
+  // Null for entries logged before this field existed or via manual slip.
+  // Used by the GPP backtest to compare gpp_mode vs standard entries.
+  optimizationObjective: text("optimization_objective"),
 });
 
 export const insertEntrySchema = createInsertSchema(entriesTable).omit({ id: true });
