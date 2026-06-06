@@ -1,0 +1,19 @@
+Exclusive Alpha Ideas (Rarely Discussed)
+“Ghost Line” Projection Engine
+Build your own independent projection model that produces what the line should be, then compare it against PrizePicks’ actual posted line. When your model says a player should be at 24.5 and PP posts 21.5, that gap is your edge score. Entries should be built almost exclusively from high-gap props.
+Ownership Mirroring (PrizePicks-Specific)
+On high-visibility slates, public money floods obvious picks. Track which props are getting heavy play (via community boards, X chatter, Discord signals) and deliberately fade or underweight them in your entries. On PrizePicks, you’re not competing against other users in most formats, but for power plays / insurance plays, low-owned combos that hit carry more psychological confidence and keep your edge uncrowded.
+“Load-Bearing” Pick Identification
+In a 5-pick entry, not all picks carry equal weight. Model which single prop is the highest-variance, most pivotal leg — the one whose outcome most determines whether the entire entry hits. Optimize entries so the load-bearing pick is also your highest-confidence pick, not your riskiest.
+Injury Cascade Modeling
+When a key player is out, don’t just remove them — model the downstream effects on teammates. A star PG missing means his backup gets +18 min, his SG likely sees more off-ball touches, and the pace may slow. An optimizer that propagates injury news into adjusted projections for all affected teammates is a genuine edge.
+Environmental Decay Curves
+Build sport-specific decay curves: how much does heat/humidity reduce a pitcher’s velo in the 6th inning? How does altitude affect shooting % on a back-to-back? How much do late-night West Coast tip-offs reduce East Coast player output in the 2nd half? These micro-environment factors are almost never priced into PP lines.
+“Trap Line” Detection
+Some PrizePicks lines are intentionally set to attract public action — they look juicy but are actually sharp fades. Build a classifier that learns from historical line-vs-outcome data to flag props where the posted line has historically been a trap (public hammers Over, outcome is Under at a 60%+ rate). Avoid these entirely.
+Momentum-Adjusted Correlation Matrices
+Static correlation tables are stale. Build a rolling 30-day correlation matrix that updates in real time. Correlations between players shift — a new offensive scheme, a coaching change, or a key injury reshapes which combos are truly correlated and which just look like they should be.
+Entry Archetype Templates
+Instead of optimizing one entry at a time, predefine 4-5 entry archetypes (e.g., “contrarian heavy hitter,” “safe 3-pick ladder,” “correlated stack bomb”) and let the optimizer fill each template slot with the best-qualified props from the day’s slate. This speeds up decision-making and keeps your portfolio of entries strategically diversified.
+---
+Given your Personal Shark / PropEdge architecture, the Ghost Line engine and Load-Bearing Pick identification are the two most plug-in-ready for what you’re building. Want me to spec out the logic for either of those?
