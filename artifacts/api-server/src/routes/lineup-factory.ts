@@ -338,10 +338,10 @@ router.post("/lineup-factory/generate", async (req, res) => {
           .where(and(inArray(lineMoveEventsTable.ppLineId, ppLineIds), isNotNull(lineMoveEventsTable.sharpSignal)))
           .orderBy(desc(lineMoveEventsTable.capturedAt))
       : [];
-    const latestSharpByLine = new Map<number, string>();
+    const latestSharpByLine = new Map<number, { signal: string; moveDirection: string | null }>();
     for (const ev of allSharpEvents) {
       if (ev.ppLineId && !latestSharpByLine.has(ev.ppLineId) && ev.sharpSignal) {
-        latestSharpByLine.set(ev.ppLineId, ev.sharpSignal);
+        latestSharpByLine.set(ev.ppLineId, { signal: ev.sharpSignal, moveDirection: ev.moveDirection ?? null });
       }
     }
 
@@ -505,8 +505,24 @@ router.post("/lineup-factory/generate", async (req, res) => {
       // Game total from pre-fetched game environment
       const gameTotal = row.line.gameId ? (gameTotalById.get(row.line.gameId) ?? null) : null;
 
-      // Sharp signal from pre-fetched line move events
-      const sharpSignal = latestSharpByLine.get(row.line.id) ?? null;
+      // Sharp signal — direction-aware: map (stored signal, moveDirection, pickDirection) → sharp_for/sharp_against/public/neutral
+      // Line moves UP = books raised the line = sharp money was betting the OVER (more)
+      // Line moves DOWN = books lowered the line = sharp money was betting the UNDER (less)
+      const rawSharp = latestSharpByLine.get(row.line.id) ?? null;
+      let sharpSignal: string | null = null;
+      if (rawSharp) {
+        if (rawSharp.signal === "sharp" && rawSharp.moveDirection) {
+          const sharpOnOver = rawSharp.moveDirection === "up";  // line moved up → sharp bet over
+          const pickIsOver  = direction === "more";
+          sharpSignal = sharpOnOver === pickIsOver ? "sharp_for" : "sharp_against";
+        } else if (rawSharp.signal === "sharp") {
+          sharpSignal = "sharp_for";  // no direction data → assume aligned (conservative)
+        } else if (rawSharp.signal === "public") {
+          sharpSignal = "public";
+        } else {
+          sharpSignal = "neutral";
+        }
+      }
 
       // Ceiling rating for GPP composite score
       const ceilingRating = row.variance?.ceilingRating ?? null;
@@ -549,10 +565,11 @@ router.post("/lineup-factory/generate", async (req, res) => {
     // Assign composite scores and GPP leverage scores
     for (const sp of allScoredProps) {
       sp.compositeScore = Math.round(calcCompositeScore(sp, cfg.optimizationObjective) * 100) / 100;
-      // Leverage = ceiling-weighted hit probability / ownership (GPP metric)
+      // Leverage = ceiling EV / ownership — how much ceiling-adjusted value per unit of ownership taken on
+      // ceiling EV = (ceilingRating / 100) * expectedValue; divide by ownershipEst to get per-ownership value
       const own = Math.max(1, sp.ownershipEst ?? 20);
       const ceil = sp.ceilingRating ?? 50;
-      sp.leverageScore = Math.round(ceil * sp.hitProbability * 100 / own * 10) / 10;
+      sp.leverageScore = Math.round((ceil / 100) * sp.expectedValue / (own / 100) * 10) / 10;
     }
 
     // ── Bias adjustment ────────────────────────────────────────────────────
@@ -628,9 +645,8 @@ router.post("/lineup-factory/generate", async (req, res) => {
         // Pace preference — use paceTier from projection paceFactor
         if (pacePreference === "fast" && p.paceTier !== "fast") return false;
         if (pacePreference === "neutral" && p.paceTier === "slow") return false;
-        // Sharp alignment — exclude props where signal is "public" (chalk = high-owned; bad for GPP)
-        // "sharp" = sharp money behind this line move (good); "neutral" = no strong signal (ok); "public" = fade
-        if (sharpAlignmentOnly && p.sharpSignal === "public") return false;
+        // Sharp alignment — exclude props where sharp money opposes the pick direction
+        if (sharpAlignmentOnly && p.sharpSignal === "sharp_against") return false;
       }
 
       return true;
