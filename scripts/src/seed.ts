@@ -8,7 +8,7 @@ import {
   teamsTable, playersTable, gamesTable, ppLinesTable, ppLineHistoryTable,
   externalLinesTable, projectionsTable, injuriesTable, lineupConfirmationsTable,
   propScoresTable, entriesTable, entryPicksTable, watchlistItemsTable,
-  alertsTable, payoutConfigTable
+  alertsTable, payoutConfigTable, gameEnvironmentTable, lineMoveEventsTable
 } from "@workspace/db/schema";
 import { sql } from "drizzle-orm";
 
@@ -18,7 +18,8 @@ async function seed() {
   await db.execute(sql`TRUNCATE TABLE
     alerts, watchlist_items, entry_picks, entries, prop_scores,
     lineup_confirmations, injuries, projections, external_lines,
-    pp_line_history, pp_lines, games, players, teams, payout_config
+    pp_line_history, line_move_events, pp_lines, game_environment,
+    games, players, teams, payout_config
     RESTART IDENTITY CASCADE`);
 
   // ---- Teams ----
@@ -99,6 +100,25 @@ async function seed() {
   const nflGame2 = games[5]; // DAL vs SF
   console.log(`Inserted ${games.length} games`);
 
+  // ---- Game Environment (pace + totals for GPP filters) ----
+  // impliedPace: NBA ~96-106 possessions/48 min; NFL total carries game pace signal
+  // environmentScore: composite 0-100 (higher = better GPP environment)
+  await db.insert(gameEnvironmentTable).values([
+    // BOS vs MIA — tight defensive game, moderate pace
+    { gameId: games[0].id, gameTotal: "215.5", impliedPace: "98.2", environmentScore: 62, notes: "BOS defense suppresses MIA pace; moderate GPP environment" },
+    // DEN vs PHX — up-tempo, high-scoring — best GPP slate
+    { gameId: games[1].id, gameTotal: "220.0", impliedPace: "104.7", environmentScore: 85, notes: "DEN-PHX historically fast pace; high total favors overs across the board" },
+    // MIL vs CLE — physical, slower pace
+    { gameId: games[2].id, gameTotal: "218.5", impliedPace: "100.1", environmentScore: 70, notes: "Giannis volume offsets slower tempo; solid mid-tier GPP game" },
+    // GSW vs LAL — fastest-paced NBA game today; high ownership expected
+    { gameId: games[3].id, gameTotal: "226.0", impliedPace: "106.3", environmentScore: 92, notes: "GSW-LAL is the marquee pace game; highest total on slate — elite GPP environment" },
+    // KC vs BUF — high-scoring shootout, top NFL GPP game
+    { gameId: nflGame1.id, gameTotal: "52.5", impliedPace: "67.4", environmentScore: 88, notes: "KC-BUF classic shootout script; 52.5 total is among highest of NFL season" },
+    // DAL vs SF — defensive, low total
+    { gameId: nflGame2.id, gameTotal: "48.0", impliedPace: "61.8", environmentScore: 48, notes: "SF defense holds DAL offense in check; lower GPP ceiling" },
+  ]);
+  console.log("Inserted 6 game_environment rows");
+
   // ---- PP Lines: Player Picks ----
   const openedAt = new Date(Date.now() - 3600000 * 4);
   const playerLineDefs = [
@@ -159,6 +179,78 @@ async function seed() {
   const lines = await db.insert(ppLinesTable).values([...playerLineDefs, ...teamLineDefs]).returning();
   const playerLines = lines.filter(l => l.pickCategory === "player");
   console.log(`Inserted ${lines.length} pp_lines (${playerLines.length} player, ${lines.length - playerLines.length} team picks)`);
+
+  // ---- Line Move Events (sharp signal data for GPP filters) ----
+  // sharpSignal: "sharp" (sharp money on over), "fade" (sharp money on under/against), "neutral"
+  // sharpConfidence: "high", "medium", "low"
+  // moveDirection: "up" (line moved up = books adjusting for over action), "down"
+  const lineByPlayerStat = (name: string, stat: string) =>
+    playerLines.find(l => l.playerId === playersByName[name].id && l.statType === stat);
+
+  const tatum3pt = lineByPlayerStat("Jayson Tatum", "Points");       // games[0] — BOS-MIA
+  const tatumReb = lineByPlayerStat("Jayson Tatum", "Rebounds");
+  const jokicPts = lineByPlayerStat("Nikola Jokic", "Points");       // games[1] — DEN-PHX
+  const jokicAst = lineByPlayerStat("Nikola Jokic", "Assists");
+  const giannisP = lineByPlayerStat("Giannis Antetokounmpo", "Points"); // games[2]
+  const curryPts = lineByPlayerStat("Stephen Curry", "Points");      // games[3] — GSW-LAL
+  const curry3pt = lineByPlayerStat("Stephen Curry", "3-PT Made");
+  const lbj      = lineByPlayerStat("LeBron James", "Points");
+  const mahomes  = lineByPlayerStat("Patrick Mahomes", "Pass Yards"); // nflGame1
+  const kelce    = lineByPlayerStat("Travis Kelce", "Receiving Yards");
+  const cmc      = lineByPlayerStat("Christian McCaffrey", "Rush Yards"); // nflGame2
+
+  const lineMoveRows = [
+    // Tatum Points — sharp hammer on over, line steamed up
+    ...(tatum3pt ? [
+      { ppLineId: tatum3pt.id, bookName: "Pinnacle", prevLine: "26.5", newLine: "27.0", moveSize: "0.5", moveDirection: "up", sequenceNumber: 1, capturedAt: new Date(Date.now() - 3600000 * 3.5), sharpSignal: "sharp", sharpConfidence: "high", sharpExplanation: "Reverse line movement — public on under but line rising; sharp over action detected at Pinnacle" },
+      { ppLineId: tatum3pt.id, bookName: "Pinnacle", prevLine: "27.0", newLine: "27.5", moveSize: "0.5", moveDirection: "up", sequenceNumber: 2, capturedAt: new Date(Date.now() - 3600000 * 2), sharpSignal: "sharp", sharpConfidence: "high", sharpExplanation: "Second consecutive up-move with low public over%; sharp steam confirmed" },
+    ] : []),
+    // Tatum Rebounds — neutral / no strong signal
+    ...(tatumReb ? [
+      { ppLineId: tatumReb.id, bookName: "DraftKings", prevLine: "8.5", newLine: "8.5", moveSize: "0.0", moveDirection: "up", sequenceNumber: 1, capturedAt: new Date(Date.now() - 3600000 * 2), sharpSignal: "neutral", sharpConfidence: "low", sharpExplanation: "Line stable; no sharp positioning detected" },
+    ] : []),
+    // Jokic Points — sharp action on over, biggest signal on slate
+    ...(jokicPts ? [
+      { ppLineId: jokicPts.id, bookName: "Pinnacle", prevLine: "28.5", newLine: "29.0", moveSize: "0.5", moveDirection: "up", sequenceNumber: 1, capturedAt: new Date(Date.now() - 3600000 * 4), sharpSignal: "sharp", sharpConfidence: "high", sharpExplanation: "Sharp over hammer at open; 72% of money on under but line rises — classic sharp vs public split" },
+      { ppLineId: jokicPts.id, bookName: "Pinnacle", prevLine: "29.0", newLine: "29.5", moveSize: "0.5", moveDirection: "up", sequenceNumber: 2, capturedAt: new Date(Date.now() - 3600000 * 2.5), sharpSignal: "sharp", sharpConfidence: "high", sharpExplanation: "Continued steam; books pricing in Jokic triple-double equity" },
+    ] : []),
+    // Jokic Assists — fade signal (sharp fading the over)
+    ...(jokicAst ? [
+      { ppLineId: jokicAst.id, bookName: "Pinnacle", prevLine: "10.0", newLine: "9.5", moveSize: "0.5", moveDirection: "down", sequenceNumber: 1, capturedAt: new Date(Date.now() - 3600000 * 3), sharpSignal: "fade", sharpConfidence: "medium", sharpExplanation: "Line dropped despite public over%; sharp under action on assists — PHX defensive scheme adjustment" },
+    ] : []),
+    // Giannis Points — sharp alignment on over
+    ...(giannisP ? [
+      { ppLineId: giannisP.id, bookName: "Pinnacle", prevLine: "29.5", newLine: "30.5", moveSize: "1.0", moveDirection: "up", sequenceNumber: 1, capturedAt: new Date(Date.now() - 3600000 * 3), sharpSignal: "sharp", sharpConfidence: "high", sharpExplanation: "Full-point steam at open; sharp syndicates loading Giannis over vs CLE weak interior" },
+    ] : []),
+    // Curry Points — neutral opening, no sharp lean
+    ...(curryPts ? [
+      { ppLineId: curryPts.id, bookName: "DraftKings", prevLine: "26.5", newLine: "26.5", moveSize: "0.0", moveDirection: "up", sequenceNumber: 1, capturedAt: new Date(Date.now() - 3600000 * 2), sharpSignal: "neutral", sharpConfidence: "low", sharpExplanation: "No significant movement; recreational and sharp money balanced on Curry points" },
+    ] : []),
+    // Curry 3-PT Made — sharp fade (under)
+    ...(curry3pt ? [
+      { ppLineId: curry3pt.id, bookName: "Pinnacle", prevLine: "5.0", newLine: "4.5", moveSize: "0.5", moveDirection: "down", sequenceNumber: 1, capturedAt: new Date(Date.now() - 3600000 * 2.5), sharpSignal: "fade", sharpConfidence: "medium", sharpExplanation: "Line drop despite high public over%; sharp money fading Curry 3s — LAL defense + early foul trouble risk" },
+    ] : []),
+    // LeBron Points — sharp over
+    ...(lbj ? [
+      { ppLineId: lbj.id, bookName: "Pinnacle", prevLine: "22.5", newLine: "23.5", moveSize: "1.0", moveDirection: "up", sequenceNumber: 1, capturedAt: new Date(Date.now() - 3600000 * 3.5), sharpSignal: "sharp", sharpConfidence: "medium", sharpExplanation: "Large opening move; sharp action on LeBron over in a high-total game expected to go deep" },
+    ] : []),
+    // Mahomes Pass Yards — sharp over in high-total game
+    ...(mahomes ? [
+      { ppLineId: mahomes.id, bookName: "Pinnacle", prevLine: "280.5", newLine: "285.5", moveSize: "5.0", moveDirection: "up", sequenceNumber: 1, capturedAt: new Date(Date.now() - 3600000 * 4), sharpSignal: "sharp", sharpConfidence: "high", sharpExplanation: "5-yard steam on Mahomes yards; KC-BUF pace model projects 60+ offensive snaps each" },
+      { ppLineId: mahomes.id, bookName: "Pinnacle", prevLine: "285.5", newLine: "285.5", moveSize: "0.0", moveDirection: "up", sequenceNumber: 2, capturedAt: new Date(Date.now() - 3600000 * 1.5), sharpSignal: "sharp", sharpConfidence: "medium", sharpExplanation: "Line held after initial steam; books comfortable at 285.5, sharp still favor over" },
+    ] : []),
+    // Kelce Receiving Yards — neutral
+    ...(kelce ? [
+      { ppLineId: kelce.id, bookName: "DraftKings", prevLine: "72.5", newLine: "72.5", moveSize: "0.0", moveDirection: "up", sequenceNumber: 1, capturedAt: new Date(Date.now() - 3600000 * 2), sharpSignal: "neutral", sharpConfidence: "low", sharpExplanation: "Stable line; injury uncertainty (BUF CB matchup TBD) keeping books and sharps cautious" },
+    ] : []),
+    // CMC Rush Yards — sharp fade on over (ankle concern)
+    ...(cmc ? [
+      { ppLineId: cmc.id, bookName: "Pinnacle", prevLine: "92.5", newLine: "89.5", moveSize: "3.0", moveDirection: "down", sequenceNumber: 1, capturedAt: new Date(Date.now() - 3600000 * 3), sharpSignal: "fade", sharpConfidence: "high", sharpExplanation: "Line dropped 3 yards on limited practice report; sharp money fading CMC rush yards given ankle GTD status" },
+    ] : []),
+  ];
+
+  await db.insert(lineMoveEventsTable).values(lineMoveRows);
+  console.log(`Inserted ${lineMoveRows.length} line_move_events rows`);
 
   // ---- Line History ----
   const historyDefs = playerLines.flatMap(line => {
