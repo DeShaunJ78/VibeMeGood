@@ -1009,7 +1009,7 @@ export type LineupFactoryConfigGppNarrativeFilters = {
   minGameTotal?: number;
   /** fast=only include props from fast-pace matchups; neutral=exclude slow; any=no filter */
   pacePreference?: LineupFactoryConfigGppNarrativeFiltersPacePreference;
-  /** When true, exclude props where the latest sharp signal opposes the pick direction */
+  /** When true, exclude props backed only by public money (sharpSignal=public); keeps sharp or neutral props */
   sharpAlignmentOnly?: boolean;
 };
 
@@ -1115,7 +1115,7 @@ export interface FactoryScoredProp {
      */
   paceTier?: string | null;
   /**
-     * Latest sharp signal for this line: sharp_for / sharp_against / neutral
+     * Latest sharp signal for this line: sharp / public / neutral (matches stored line_move_events values)
      * @nullable
      */
   sharpSignal?: string | null;

@@ -304,17 +304,26 @@ router.post("/lineup-factory/generate", async (req, res) => {
       }
       const allAbbrs = allTeams.map(t => t.abbr);
       if (allAbbrs.length) {
+        // Fetch pace ratings keyed by (teamAbbr, sport) — sport-constrained to avoid cross-sport collisions
+        const teamAbbrSportPairs = allTeams.map(t => `${t.abbr}:${t.sport}`);
         const paceRows = await db.select({
           teamAbbr: teamPaceRatingsTable.teamAbbr,
+          sport:     teamPaceRatingsTable.sport,
           paceRating: teamPaceRatingsTable.paceRating,
         }).from(teamPaceRatingsTable)
-          .where(inArray(teamPaceRatingsTable.teamAbbr, allAbbrs));
-        const paceByAbbr = new Map<string, number>();
+          .where(
+            and(
+              inArray(teamPaceRatingsTable.teamAbbr, allAbbrs),
+              inArray(teamPaceRatingsTable.sport, [...new Set(allTeams.map(t => t.sport))]),
+            ),
+          );
+        // Key by "abbr:sport" to avoid cross-sport collisions
+        const paceByAbbrSport = new Map<string, number>();
         for (const pr of paceRows) {
-          paceByAbbr.set(pr.teamAbbr, parseFloat(pr.paceRating.toString()));
+          paceByAbbrSport.set(`${pr.teamAbbr}:${pr.sport}`, parseFloat(pr.paceRating.toString()));
         }
         for (const t of allTeams) {
-          const rating = paceByAbbr.get(t.abbr);
+          const rating = paceByAbbrSport.get(`${t.abbr}:${t.sport}`);
           if (rating !== undefined) {
             paceByTeamId.set(t.id, rating > 1.02 ? "fast" : rating < 0.98 ? "slow" : "normal");
           }
@@ -619,8 +628,9 @@ router.post("/lineup-factory/generate", async (req, res) => {
         // Pace preference — use paceTier from projection paceFactor
         if (pacePreference === "fast" && p.paceTier !== "fast") return false;
         if (pacePreference === "neutral" && p.paceTier === "slow") return false;
-        // Sharp alignment — exclude picks where sharp signal opposes the pick (MORE picks with sharp_against)
-        if (sharpAlignmentOnly && p.sharpSignal === "sharp_against") return false;
+        // Sharp alignment — exclude props where signal is "public" (chalk = high-owned; bad for GPP)
+        // "sharp" = sharp money behind this line move (good); "neutral" = no strong signal (ok); "public" = fade
+        if (sharpAlignmentOnly && p.sharpSignal === "public") return false;
       }
 
       return true;
