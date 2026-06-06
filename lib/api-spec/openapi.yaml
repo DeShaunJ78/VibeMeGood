@@ -2425,7 +2425,7 @@ components:
           properties:
             minGameTotal: { type: number, description: "Only include props from games with implied total above this threshold (e.g. 220 for NBA)" }
             pacePreference: { type: string, enum: [fast, neutral, any], description: "fast=only include props from fast-pace matchups; neutral=exclude slow; any=no filter" }
-            sharpAlignmentOnly: { type: boolean, description: "When true, exclude props backed only by public money (sharpSignal=public); keeps sharp or neutral props" }
+            sharpAlignmentOnly: { type: boolean, description: "When true, exclude props where sharp money opposes the pick direction (sharpSignal=sharp_against)" }
       required: [format, picksPerEntry, numEntries, varianceProfile, optimizationObjective, maxPlayerExposure, maxPickExposure, maxTeamExposure, maxGameExposure, maxPairwiseOverlap, stakePerEntry, allowGtdPlayers, allowSingleBookData, allowStaleMarketData, demonUnderAllowed]
 
     FactoryScoredProp:
@@ -2459,7 +2459,7 @@ components:
         ownershipEst: { type: ["number", "null"], description: "Estimated ownership % (0–100), derived from score tier and calibrated pOver" }
         leverageScore: { type: ["number", "null"], description: "GPP leverage = ceiling-weighted EV / ownership_est; higher = contrarian upside" }
         paceTier: { type: ["string", "null"], description: "fast / normal / slow — derived from the projection pace factor" }
-        sharpSignal: { type: ["string", "null"], description: "Latest sharp signal for this line: sharp / public / neutral (matches stored line_move_events values)" }
+        sharpSignal: { type: ["string", "null"], description: "Direction-aware sharp signal: sharp_for (sharp money agrees with pick direction) / sharp_against (opposes) / public (public chalk) / neutral" }
         gameTotal: { type: ["number", "null"], description: "Implied game total from game_environment" }
       required: [ppLineId, playerId, playerName, team, sport, statType, direction, lineType, ppLine, hitProbability, probabilitySource, confidence, expectedValue, bookCount, marketDataStatus, reasonCodes, compositeScore]
 

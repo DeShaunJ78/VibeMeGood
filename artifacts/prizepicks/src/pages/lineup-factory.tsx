@@ -682,8 +682,9 @@ function PaceBadge({ tier }: { tier: string | null | undefined }) {
 }
 function SharpBadge({ signal }: { signal: string | null | undefined }) {
   if (!signal) return null;
-  if (signal === "sharp")  return <span className="text-[8px] font-mono px-1 py-px rounded bg-blue-900/50 text-blue-300 border border-blue-800/40">♦ sharp</span>;
-  if (signal === "public") return <span className="text-[8px] font-mono px-1 py-px rounded bg-amber-900/50 text-amber-400 border border-amber-800/40">👥 public</span>;
+  if (signal === "sharp_for")     return <span className="text-[8px] font-mono px-1 py-px rounded bg-blue-900/50 text-blue-300 border border-blue-800/40">♦ sharp↑</span>;
+  if (signal === "sharp_against") return <span className="text-[8px] font-mono px-1 py-px rounded bg-red-900/50 text-red-400 border border-red-800/40">✖ sharp↓</span>;
+  if (signal === "public")        return <span className="text-[8px] font-mono px-1 py-px rounded bg-amber-900/50 text-amber-400 border border-amber-800/40">👥 public</span>;
   return null;
 }
 

@@ -1864,7 +1864,7 @@ export const GenerateLineupFactoryBody = zod.object({
   "gppNarrativeFilters": zod.object({
   "minGameTotal": zod.number().optional().describe('Only include props from games with implied total above this threshold (e.g. 220 for NBA)'),
   "pacePreference": zod.enum(['fast', 'neutral', 'any']).optional().describe('fast=only include props from fast-pace matchups; neutral=exclude slow; any=no filter'),
-  "sharpAlignmentOnly": zod.boolean().optional().describe('When true, exclude props backed only by public money (sharpSignal=public); keeps sharp or neutral props')
+  "sharpAlignmentOnly": zod.boolean().optional().describe('When true, exclude props where sharp money opposes the pick direction (sharpSignal=sharp_against)')
 }).optional().describe('Optional GPP narrative context filters. Only applied when optimizationObjective is gpp_mode.')
 })
 
@@ -1943,7 +1943,7 @@ export const GenerateLineupFactoryResponse = zod.object({
   "ownershipEst": zod.number().nullish().describe('Estimated ownership % (0–100), derived from score tier and calibrated pOver'),
   "leverageScore": zod.number().nullish().describe('GPP leverage = ceiling-weighted EV \/ ownership_est; higher = contrarian upside'),
   "paceTier": zod.string().nullish().describe('fast \/ normal \/ slow — derived from the projection pace factor'),
-  "sharpSignal": zod.string().nullish().describe('Latest sharp signal for this line: sharp \/ public \/ neutral (matches stored line_move_events values)'),
+  "sharpSignal": zod.string().nullish().describe('Direction-aware sharp signal: sharp_for (sharp money agrees with pick direction) \/ sharp_against (opposes) \/ public (public chalk) \/ neutral'),
   "gameTotal": zod.number().nullish().describe('Implied game total from game_environment')
 })),
   "eligiblePropCount": zod.number(),
