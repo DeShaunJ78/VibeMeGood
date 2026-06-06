@@ -4,7 +4,7 @@ import {
   ppLinesTable, playersTable, propScoresTable, ourProjectionsTable,
   varianceScoresTable, externalLinesTable, syncRunsTable,
   entryPicksTable, entriesTable, gameEnvironmentTable, lineMoveEventsTable,
-  teamPaceRatingsTable, teamsTable,
+  teamPaceRatingsTable, teamsTable, crowdOwnershipTable,
 } from "@workspace/db/schema";
 import { eq, and, inArray, desc, isNotNull } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -86,6 +86,7 @@ type ScoredProp = {
   // GPP fields
   ceilingRating: number | null;
   ownershipEst: number | null;
+  ownershipSource: "real" | "estimated";
   leverageScore: number | null;
   paceTier: string | null;
   sharpSignal: string | null;
@@ -345,6 +346,43 @@ router.post("/lineup-factory/generate", async (req, res) => {
       }
     }
 
+    // ── 2e. Bulk query today's crowd ownership snapshots ─────────────────
+    // Real crowd ownership data takes precedence over tier-based estimates when
+    // available.  We look at today's slate date only so stale data from prior
+    // slates never bleeds in.  Falls back gracefully to the tier-based estimate
+    // when no real data exists.
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const playerIds = [...new Set(rows.map(r => r.player.id))];
+    const crowdOwnershipRows = playerIds.length
+      ? await db
+          .select({
+            playerId:     crowdOwnershipTable.playerId,
+            statType:     crowdOwnershipTable.statType,
+            ownershipPct: crowdOwnershipTable.ownershipPct,
+            source:       crowdOwnershipTable.source,
+            capturedAt:   crowdOwnershipTable.capturedAt,
+          })
+          .from(crowdOwnershipTable)
+          .where(
+            and(
+              eq(crowdOwnershipTable.slateDate, todayStr),
+              inArray(crowdOwnershipTable.playerId, playerIds),
+            ),
+          )
+          .orderBy(desc(crowdOwnershipTable.capturedAt))
+      : [];
+
+    // Key: "playerId:statType" → most-recently-captured ownership pct (already ordered DESC)
+    const crowdOwnershipByKey = new Map<string, number>();
+    for (const co of crowdOwnershipRows) {
+      if (co.playerId === null) continue;
+      const key = `${co.playerId}:${co.statType}`;
+      if (!crowdOwnershipByKey.has(key)) {
+        crowdOwnershipByKey.set(key, parseFloat(co.ownershipPct.toString()));
+      }
+    }
+    const hasCrowdData = crowdOwnershipByKey.size > 0;
+
     // ── 3. Market data freshness ───────────────────────────────────────────
     const [lastOddsRun] = await db
       .select()
@@ -489,15 +527,29 @@ router.post("/lineup-factory/generate", async (req, res) => {
         reasonCodes.push("high_blowout_risk");
 
       // ── GPP enrichment ──────────────────────────────────────────────────
-      // Ownership estimate: base from score tier, adjusted ±10pp by pOver vs tier median
+      // Ownership estimate: use real crowd data from today's snapshot when
+      // available (keyed by playerId:statType).  Falls back to the tier-based
+      // estimate (score tier + pOver adjustment) when no real data exists.
       const actionTag = row.score?.actionTag ?? null;
-      const tierBases: Record<string, number> = { PLAY: 35, ACTION: 20, WATCH: 10, PASS: 5, "NO-PLAY": 3 };
-      const tierMedianPOver: Record<string, number> = { PLAY: 65, ACTION: 55, WATCH: 50, PASS: 45, "NO-PLAY": 40 };
-      const tierBase = actionTag && tierBases[actionTag] ? tierBases[actionTag] : 15;
-      const tierMedian = actionTag && tierMedianPOver[actionTag] ? tierMedianPOver[actionTag] : 50;
-      const pOverPct = pOver !== null ? pOver * 100 : tierMedian;
-      const ownershipAdj = Math.max(-10, Math.min(10, (pOverPct - tierMedian) * 0.3));
-      const ownershipEst = Math.round(Math.max(1, Math.min(60, tierBase + ownershipAdj)) * 10) / 10;
+      const crowdKey = `${row.player.id}:${row.line.statType}`;
+      const realOwnership = hasCrowdData ? (crowdOwnershipByKey.get(crowdKey) ?? null) : null;
+
+      let ownershipEst: number;
+      let ownershipSource: "real" | "estimated";
+
+      if (realOwnership !== null) {
+        ownershipEst = Math.round(Math.max(1, Math.min(99, realOwnership)) * 10) / 10;
+        ownershipSource = "real";
+      } else {
+        const tierBases: Record<string, number> = { PLAY: 35, ACTION: 20, WATCH: 10, PASS: 5, "NO-PLAY": 3 };
+        const tierMedianPOver: Record<string, number> = { PLAY: 65, ACTION: 55, WATCH: 50, PASS: 45, "NO-PLAY": 40 };
+        const tierBase = actionTag && tierBases[actionTag] ? tierBases[actionTag] : 15;
+        const tierMedian = actionTag && tierMedianPOver[actionTag] ? tierMedianPOver[actionTag] : 50;
+        const pOverPct = pOver !== null ? pOver * 100 : tierMedian;
+        const ownershipAdj = Math.max(-10, Math.min(10, (pOverPct - tierMedian) * 0.3));
+        ownershipEst = Math.round(Math.max(1, Math.min(60, tierBase + ownershipAdj)) * 10) / 10;
+        ownershipSource = "estimated";
+      }
 
       // Pace tier: from team_pace_ratings (via player teamId → teams.abbreviation → pace table)
       const paceTier = row.player.teamId ? (paceByTeamId.get(row.player.teamId) ?? null) : null;
@@ -555,6 +607,7 @@ router.post("/lineup-factory/generate", async (req, res) => {
         compositeScore:    0, // set below
         ceilingRating,
         ownershipEst,
+        ownershipSource,
         leverageScore:     null, // set after composite scores pass
         paceTier,
         sharpSignal,

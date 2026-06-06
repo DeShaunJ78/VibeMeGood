@@ -37,3 +37,4 @@ export * from "./platform-lines";
 export * from "./team-pace-ratings";
 export * from "./nfl-advanced-metrics";
 export * from "./backtest-results";
+export * from "./crowd-ownership";

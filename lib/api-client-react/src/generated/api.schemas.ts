@@ -1066,6 +1066,17 @@ export const FactoryScoredPropDirection = {
   less: 'less',
 } as const;
 
+/**
+ * real = live crowd data from crowd_ownership_snapshots; estimated = tier-based fallback
+ */
+export type FactoryScoredPropOwnershipSource = typeof FactoryScoredPropOwnershipSource[keyof typeof FactoryScoredPropOwnershipSource];
+
+
+export const FactoryScoredPropOwnershipSource = {
+  real: 'real',
+  estimated: 'estimated',
+} as const;
+
 export interface FactoryScoredProp {
   ppLineId: number;
   playerId: number;
@@ -1100,10 +1111,12 @@ export interface FactoryScoredProp {
   reasonCodes: string[];
   compositeScore: number;
   /**
-     * Estimated ownership % (0–100), derived from score tier and calibrated pOver
+     * Crowd ownership % (0–100). Real crowd data when available (ownershipSource=real), otherwise estimated from score tier and calibrated pOver
      * @nullable
      */
   ownershipEst?: number | null;
+  /** real = live crowd data from crowd_ownership_snapshots; estimated = tier-based fallback */
+  ownershipSource?: FactoryScoredPropOwnershipSource;
   /**
      * GPP leverage = ceiling-weighted EV / ownership_est; higher = contrarian upside
      * @nullable

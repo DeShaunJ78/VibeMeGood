@@ -649,8 +649,11 @@ function LineupCard({ lineup, index, onLoad, isGppMode, propsMap }: {
               {pick.direction === "more" ? "▲" : "▼"} {pct(pick.hitProbability)}
             </span>
             {isGppMode && sp && (
-              <span className="font-mono text-[10px] shrink-0 text-amber-400/80" title={`Own ${sp.ownershipEst?.toFixed(1)}% / Lev ${sp.leverageScore?.toFixed(0)}`}>
-                {sp.ownershipEst != null ? `${sp.ownershipEst.toFixed(0)}%own` : ""}
+              <span
+                className={cn("font-mono text-[10px] shrink-0", sp.ownershipSource === "real" ? "text-cyan-400/90" : "text-amber-400/80")}
+                title={`${sp.ownershipSource === "real" ? "Live" : "Est."} ownership ${sp.ownershipEst?.toFixed(1)}% / Lev ${sp.leverageScore?.toFixed(0)}`}
+              >
+                {sp.ownershipEst != null ? `${sp.ownershipEst.toFixed(0)}%own${sp.ownershipSource === "real" ? "★" : ""}` : ""}
               </span>
             )}
             {pick.lineType !== "standard" && pick.payoutMultiplier != null && pick.payoutMultiplier !== 1 && (
@@ -864,10 +867,12 @@ function ScoredPropsTable({ props, pinnedIds, biasWeight, isGppMode }: {
                   <>
                     <TableCell className="py-1.5 text-xs font-mono">
                       <span className={cn(
-                        (p.ownershipEst ?? 20) <= 10 ? "text-emerald-400" :
-                        (p.ownershipEst ?? 20) <= 20 ? "text-foreground" : "text-amber-400",
-                      )} title="Estimated ownership %">
-                        {p.ownershipEst != null ? `${p.ownershipEst.toFixed(1)}%` : "—"}
+                        p.ownershipSource === "real"
+                          ? "text-cyan-400"
+                          : (p.ownershipEst ?? 20) <= 10 ? "text-emerald-400" :
+                            (p.ownershipEst ?? 20) <= 20 ? "text-foreground" : "text-amber-400",
+                      )} title={p.ownershipSource === "real" ? "Live crowd ownership %" : "Estimated ownership %"}>
+                        {p.ownershipEst != null ? `${p.ownershipEst.toFixed(1)}%${p.ownershipSource === "real" ? "★" : ""}` : "—"}
                       </span>
                     </TableCell>
                     <TableCell className="py-1.5 text-xs font-mono">

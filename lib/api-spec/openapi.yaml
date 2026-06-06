@@ -2456,7 +2456,8 @@ components:
         noPlayReason: { type: ["string", "null"] }
         reasonCodes: { type: array, items: { type: string } }
         compositeScore: { type: number }
-        ownershipEst: { type: ["number", "null"], description: "Estimated ownership % (0–100), derived from score tier and calibrated pOver" }
+        ownershipEst: { type: ["number", "null"], description: "Crowd ownership % (0–100). Real crowd data when available (ownershipSource=real), otherwise estimated from score tier and calibrated pOver" }
+        ownershipSource: { type: string, enum: [real, estimated], description: "real = live crowd data from crowd_ownership_snapshots; estimated = tier-based fallback" }
         leverageScore: { type: ["number", "null"], description: "GPP leverage = ceiling-weighted EV / ownership_est; higher = contrarian upside" }
         paceTier: { type: ["string", "null"], description: "fast / normal / slow — derived from the projection pace factor" }
         sharpSignal: { type: ["string", "null"], description: "Direction-aware sharp signal: sharp_for (sharp money agrees with pick direction) / sharp_against (opposes) / public (public chalk) / neutral" }
