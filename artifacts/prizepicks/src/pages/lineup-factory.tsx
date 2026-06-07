@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
 
 // ─── Persistence helpers ───────────────────────────────────────────────────────
 const CFG_KEY      = "lf_cfg";
-const CFG_VER      = 3;
+const CFG_VER      = 4;
 const RESULT_KEY   = "lf_last_result";
 const RESULT_TTL   = 24 * 60 * 60 * 1000;
 const REQUIRED_KEY = "lf_required_pinned_ids";
@@ -107,6 +107,7 @@ const DEFAULTS: LineupFactoryConfig = {
   numEntries: 5,
   varianceProfile: "conservative",
   optimizationObjective: "balanced_growth",
+  gppMode: false,
   maxPlayerExposure: 0.40,
   maxPickExposure: 0.40,
   maxTeamExposure: 0.50,
@@ -146,7 +147,6 @@ const OBJECTIVE_LABELS: Record<string, string> = {
   min_drawdown:    "Min Drawdown",
   balanced_growth: "Balanced Growth",
   high_ceiling:    "High Ceiling",
-  gpp_mode:        "GPP — Tournament Mode",
 };
 const EXPOSURE_OPTIONS = [
   { label: "20%", value: 0.20 }, { label: "30%", value: 0.30 },
@@ -223,8 +223,8 @@ function ExposureSelect({ label, value, onChange, options = EXPOSURE_OPTIONS }: 
 
 // ─── Config panel ─────────────────────────────────────────────────────────────
 function ConfigPanel({
-  cfg, onChange, onGenerate, loading,
-}: { cfg: LineupFactoryConfig; onChange: (c: LineupFactoryConfig) => void; onGenerate: () => void; loading: boolean }) {
+  cfg, onChange, onGenerate, onReset, loading,
+}: { cfg: LineupFactoryConfig; onChange: (c: LineupFactoryConfig) => void; onGenerate: () => void; onReset: () => void; loading: boolean }) {
   const set = <K extends keyof LineupFactoryConfig>(k: K, v: LineupFactoryConfig[K]) =>
     onChange({ ...cfg, [k]: v });
 
@@ -299,6 +299,28 @@ function ConfigPanel({
           <CardTitle className="text-xs uppercase font-mono text-muted-foreground tracking-wider">Strategy</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-3">
+          {/* GPP Mode toggle — prominent at top */}
+          <div className={cn(
+            "flex items-center justify-between rounded px-3 py-2.5 border transition-colors",
+            cfg.gppMode
+              ? "bg-amber-950/30 border-amber-700/50"
+              : "bg-slate-800/50 border-slate-700/50",
+          )}>
+            <div className="flex items-center gap-2">
+              <Trophy className={cn("w-3.5 h-3.5", cfg.gppMode ? "text-amber-400" : "text-muted-foreground")} />
+              <div>
+                <div className={cn("text-xs font-semibold font-mono", cfg.gppMode ? "text-amber-300" : "text-foreground")}>
+                  GPP Mode
+                </div>
+                <div className="text-[10px] text-muted-foreground">Ceiling-first · ownership leverage · tournament scoring</div>
+              </div>
+            </div>
+            <Switch
+              checked={cfg.gppMode ?? false}
+              onCheckedChange={v => set("gppMode", v)}
+            />
+          </div>
+
           <div>
             <Label className="text-xs text-muted-foreground mb-1.5 block">Variance Profile</Label>
             <ToggleGroup
@@ -309,10 +331,7 @@ function ConfigPanel({
           </div>
           <div>
             <Label className="text-xs text-muted-foreground mb-1.5 block">Optimization Objective</Label>
-            <Select value={cfg.optimizationObjective} onValueChange={v => {
-              const obj = v as LineupFactoryConfig["optimizationObjective"];
-              onChange({ ...cfg, optimizationObjective: obj, gppNarrativeFilters: obj === "gpp_mode" ? (cfg.gppNarrativeFilters ?? {}) : undefined });
-            }}>
+            <Select value={cfg.optimizationObjective} onValueChange={v => set("optimizationObjective", v as LineupFactoryConfig["optimizationObjective"])}>
               <SelectTrigger className="h-7 text-xs bg-slate-800 border-slate-700 w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -322,26 +341,14 @@ function ConfigPanel({
                 ))}
               </SelectContent>
             </Select>
-            {/* GPP quick-preset */}
-            {cfg.optimizationObjective !== "gpp_mode" && (
-              <button
-                onClick={() => onChange({
-                  ...cfg,
-                  optimizationObjective: "gpp_mode",
-                  varianceProfile: "aggressive",
-                  maxPlayerExposure: 0.30,
-                  maxPickExposure: 0.30,
-                  gppNarrativeFilters: {},
-                })}
-                className="mt-1.5 flex items-center gap-1.5 text-[10px] font-mono text-amber-400/70 hover:text-amber-400 transition-colors"
-              >
-                <Trophy className="w-2.5 h-2.5" />
-                GPP Preset (low-owned, ceiling-first)
-              </button>
+            {cfg.gppMode && (
+              <p className="text-[10px] text-amber-400/70 mt-1 font-mono">
+                GPP scoring overrides this objective — ceiling × leverage is used for pick ranking.
+              </p>
             )}
           </div>
-          {/* GPP Narrative Filters — shown only when gpp_mode is selected */}
-          {cfg.optimizationObjective === "gpp_mode" && (
+          {/* GPP Narrative Filters — shown only when GPP Mode is on */}
+          {cfg.gppMode && (
             <div className="rounded border border-amber-800/40 bg-amber-950/20 px-3 py-3 space-y-3">
               <div className="flex items-center gap-1.5 mb-0.5">
                 <Trophy className="w-3 h-3 text-amber-400" />
@@ -507,6 +514,14 @@ function ConfigPanel({
         ) : (
           <><Factory className="mr-2 h-4 w-4" />Generate Portfolio</>
         )}
+      </Button>
+      <Button
+        onClick={onReset}
+        variant="outline"
+        size="sm"
+        className="w-full font-mono text-xs border-slate-700 text-muted-foreground hover:text-foreground hover:border-slate-500"
+      >
+        <RefreshCw className="mr-1.5 h-3 w-3" />Reset to Defaults
       </Button>
     </div>
   );
@@ -1530,8 +1545,7 @@ export default function LineupFactory() {
 
   // Derive isGppMode from the entry whose result is displayed (not current editor state)
   // so historical runs are labelled correctly when a saved entry is selected.
-  const displayedObjective = activeEntry?.cfg.optimizationObjective ?? cfg.optimizationObjective;
-  const isGppMode = displayedObjective === "gpp_mode";
+  const isGppMode = !!(activeEntry?.cfg.gppMode ?? cfg.gppMode);
 
   // Build ppLineId → FactoryScoredProp map for LineupCard leverage lookup
   const scoredPropsMap = useMemo(
@@ -1542,6 +1556,12 @@ export default function LineupFactory() {
   function handleGenerate() {
     const requiredLineIds = [...requiredPinnedIds].filter(id => pinnedPicks.some(p => p.ppLineId === id));
     generate.mutate({ data: { ...cfg, requiredLineIds: requiredLineIds.length > 0 ? requiredLineIds : undefined } });
+  }
+
+  function handleReset() {
+    setCfg(DEFAULTS);
+    saveCfg(DEFAULTS);
+    handleClearPinned();
   }
 
   function handleRemovePinned(ppLineId: number) {
@@ -1674,7 +1694,7 @@ export default function LineupFactory() {
             onRename={handleRenameSaved}
             onCompare={id => setCompareId(id)}
           />
-          <ConfigPanel cfg={cfg} onChange={setCfg} onGenerate={handleGenerate} loading={generate.isPending} />
+          <ConfigPanel cfg={cfg} onChange={setCfg} onGenerate={handleGenerate} onReset={handleReset} loading={generate.isPending} />
         </div>
 
         {/* Results panel — scrollable */}

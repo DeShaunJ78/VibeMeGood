@@ -1888,7 +1888,8 @@ export const GenerateLineupFactoryBody = zod.object({
   "picksPerEntry": zod.number().min(generateLineupFactoryBodyPicksPerEntryMin).max(generateLineupFactoryBodyPicksPerEntryMax),
   "numEntries": zod.number().min(1).max(generateLineupFactoryBodyNumEntriesMax),
   "varianceProfile": zod.enum(['conservative', 'balanced', 'aggressive', 'chaos', 'custom']),
-  "optimizationObjective": zod.enum(['max_ev', 'max_profit_prob', 'min_drawdown', 'balanced_growth', 'high_ceiling', 'gpp_mode']),
+  "optimizationObjective": zod.enum(['max_ev', 'max_profit_prob', 'min_drawdown', 'balanced_growth', 'high_ceiling']),
+  "gppMode": zod.boolean().optional().describe('When true, applies GPP scoring (ceiling-first, ownership-leverage weighted) as an overlay on top of the selected optimizationObjective. Independent of the objective dropdown.'),
   "maxPlayerExposure": zod.number(),
   "maxPickExposure": zod.number(),
   "maxTeamExposure": zod.number(),
@@ -1910,7 +1911,7 @@ export const GenerateLineupFactoryBody = zod.object({
   "minGameTotal": zod.number().optional().describe('Only include props from games with implied total above this threshold (e.g. 220 for NBA)'),
   "pacePreference": zod.enum(['fast', 'neutral', 'any']).optional().describe('fast=only include props from fast-pace matchups; neutral=exclude slow; any=no filter'),
   "sharpAlignmentOnly": zod.boolean().optional().describe('When true, exclude props where sharp money opposes the pick direction (sharpSignal=sharp_against)')
-}).optional().describe('Optional GPP narrative context filters. Only applied when optimizationObjective is gpp_mode.')
+}).optional().describe('Optional GPP narrative context filters. Only applied when gppMode is true.')
 })
 
 export const GenerateLineupFactoryResponse = zod.object({

@@ -30,7 +30,8 @@ const configSchema = z.object({
   picksPerEntry: z.number().int().min(2).max(6),
   numEntries: z.number().int().min(1).max(25),
   varianceProfile: z.enum(["conservative", "balanced", "aggressive", "chaos", "custom"]),
-  optimizationObjective: z.enum(["max_ev", "max_profit_prob", "min_drawdown", "balanced_growth", "high_ceiling", "gpp_mode"]),
+  optimizationObjective: z.enum(["max_ev", "max_profit_prob", "min_drawdown", "balanced_growth", "high_ceiling"]),
+  gppMode: z.boolean().optional(),
   maxPlayerExposure: z.number().min(0).max(1),
   maxPickExposure: z.number().min(0).max(1),
   maxTeamExposure: z.number().min(0).max(1),
@@ -624,8 +625,10 @@ router.post("/lineup-factory/generate", async (req, res) => {
     }
 
     // Assign composite scores and GPP leverage scores
+    // gppMode is an overlay: when true, use GPP scoring regardless of the base objective.
+    const effectiveObjective = cfg.gppMode ? "gpp_mode" : cfg.optimizationObjective;
     for (const sp of allScoredProps) {
-      sp.compositeScore = Math.round(calcCompositeScore(sp, cfg.optimizationObjective) * 100) / 100;
+      sp.compositeScore = Math.round(calcCompositeScore(sp, effectiveObjective) * 100) / 100;
       // Leverage = ceiling EV / ownership — how much ceiling-adjusted value per unit of ownership taken on
       // ceiling EV = (ceilingRating / 100) * expectedValue; divide by ownershipEst to get per-ownership value
       const own = Math.max(1, sp.ownershipEst ?? 20);
@@ -698,8 +701,8 @@ router.post("/lineup-factory/generate", async (req, res) => {
       if (cfg.minEdgeThreshold !== undefined && (p.edgeScore ?? -Infinity) < cfg.minEdgeThreshold) return false;
       if (p.lineType === "demon" && !cfg.demonUnderAllowed && p.direction === "less") return false;
 
-      // ── GPP narrative filters (hard-gated to gpp_mode — never applied for cash objectives) ──
-      if (cfg.optimizationObjective === "gpp_mode" && cfg.gppNarrativeFilters) {
+      // ── GPP narrative filters (only applied when gppMode toggle is on) ──
+      if (cfg.gppMode && cfg.gppNarrativeFilters) {
         const { minGameTotal, pacePreference, sharpAlignmentOnly } = cfg.gppNarrativeFilters;
         // Game total threshold — exclude props from games below threshold OR with unknown total
         if (minGameTotal !== undefined && (p.gameTotal === null || p.gameTotal < minGameTotal)) return false;

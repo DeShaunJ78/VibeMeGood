@@ -2447,7 +2447,8 @@ components:
         picksPerEntry: { type: integer, minimum: 2, maximum: 6 }
         numEntries: { type: integer, minimum: 1, maximum: 25 }
         varianceProfile: { type: string, enum: [conservative, balanced, aggressive, chaos, custom] }
-        optimizationObjective: { type: string, enum: [max_ev, max_profit_prob, min_drawdown, balanced_growth, high_ceiling, gpp_mode] }
+        optimizationObjective: { type: string, enum: [max_ev, max_profit_prob, min_drawdown, balanced_growth, high_ceiling] }
+        gppMode: { type: boolean, description: "When true, applies GPP scoring (ceiling-first, ownership-leverage weighted) as an overlay on top of the selected optimizationObjective. Independent of the objective dropdown." }
         maxPlayerExposure: { type: number }
         maxPickExposure: { type: number }
         maxTeamExposure: { type: number }
@@ -2467,7 +2468,7 @@ components:
         biasWeight: { type: number, minimum: 0, maximum: 1, description: "Weight applied to personal bias delta when scoring props (0=off, 1=full weight). Nudges composite score by biasWeight × biasDelta so picks where the user historically outperforms the model rank higher." }
         gppNarrativeFilters:
           type: object
-          description: "Optional GPP narrative context filters. Only applied when optimizationObjective is gpp_mode."
+          description: "Optional GPP narrative context filters. Only applied when gppMode is true."
           properties:
             minGameTotal: { type: number, description: "Only include props from games with implied total above this threshold (e.g. 220 for NBA)" }
             pacePreference: { type: string, enum: [fast, neutral, any], description: "fast=only include props from fast-pace matchups; neutral=exclude slow; any=no filter" }

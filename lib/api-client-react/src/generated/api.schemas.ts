@@ -1020,7 +1020,6 @@ export const LineupFactoryConfigOptimizationObjective = {
   min_drawdown: 'min_drawdown',
   balanced_growth: 'balanced_growth',
   high_ceiling: 'high_ceiling',
-  gpp_mode: 'gpp_mode',
 } as const;
 
 /**
@@ -1036,7 +1035,7 @@ export const LineupFactoryConfigGppNarrativeFiltersPacePreference = {
 } as const;
 
 /**
- * Optional GPP narrative context filters. Only applied when optimizationObjective is gpp_mode.
+ * Optional GPP narrative context filters. Only applied when gppMode is true.
  */
 export type LineupFactoryConfigGppNarrativeFilters = {
   /** Only include props from games with implied total above this threshold (e.g. 220 for NBA) */
@@ -1061,6 +1060,8 @@ export interface LineupFactoryConfig {
   numEntries: number;
   varianceProfile: LineupFactoryConfigVarianceProfile;
   optimizationObjective: LineupFactoryConfigOptimizationObjective;
+  /** When true, applies GPP scoring (ceiling-first, ownership-leverage weighted) as an overlay on top of the selected optimizationObjective. Independent of the objective dropdown. */
+  gppMode?: boolean;
   maxPlayerExposure: number;
   maxPickExposure: number;
   maxTeamExposure: number;
@@ -1088,7 +1089,7 @@ export interface LineupFactoryConfig {
      * @maximum 1
      */
   biasWeight?: number;
-  /** Optional GPP narrative context filters. Only applied when optimizationObjective is gpp_mode. */
+  /** Optional GPP narrative context filters. Only applied when gppMode is true. */
   gppNarrativeFilters?: LineupFactoryConfigGppNarrativeFilters;
 }
 
