@@ -33,7 +33,7 @@ import {
 import {
   Factory, Zap, TrendingUp, DollarSign, AlertTriangle,
   ChevronRight, BarChart2, RefreshCw, CheckCircle2, Info, Pin, X, Lock, LockOpen,
-  History, Pencil, Check, Trash2, Clock, ArrowLeftRight, Trophy,
+  History, Pencil, Check, Trash2, Clock, ArrowLeftRight, Trophy, Star, BookOpen,
 } from "lucide-react";
 import {
   type LineupFactoryConfigGppNarrativeFilters,
@@ -101,6 +101,15 @@ function saveResult(result: LineupFactoryResult): void {
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
+// ─── Story Mode templates (mirrors backend STORY_TEMPLATES) ──────────────────
+const STORY_TEMPLATES_UI = [
+  { id: "shootout",    label: "Shootout Stack",    emoji: "🔥", description: "High-total games, fast pace, overs" },
+  { id: "pace_exploit",label: "Pace Exploit",      emoji: "⚡", description: "Fast-pace matchups, volume stats" },
+  { id: "grind",       label: "Grind / Low Total", emoji: "🔒", description: "Defensive games, floor stats, unders" },
+  { id: "blowout",     label: "Blowout Favorite",  emoji: "🏆", description: "Dominant teams, safe overs" },
+  { id: "underdog",    label: "Underdog Special",  emoji: "🎯", description: "Contrarian, low-owned, ceiling plays" },
+] as const;
+
 const DEFAULTS: LineupFactoryConfig = {
   format: "power",
   picksPerEntry: 3,
@@ -108,6 +117,7 @@ const DEFAULTS: LineupFactoryConfig = {
   varianceProfile: "conservative",
   optimizationObjective: "balanced_growth",
   gppMode: false,
+  storyMode: false,
   maxPerTeam: 2,
   maxPlayerExposure: 0.40,
   maxPickExposure: 0.40,
@@ -364,6 +374,72 @@ function ConfigPanel({
               </p>
             )}
           </div>
+          {/* Story Mode toggle — additive overlay on top of existing generation */}
+          <div className={cn(
+            "flex items-center justify-between rounded px-3 py-2.5 border transition-colors",
+            cfg.storyMode
+              ? "bg-violet-950/30 border-violet-700/50"
+              : "bg-slate-800/50 border-slate-700/50",
+          )}>
+            <div className="flex items-center gap-2">
+              <BookOpen className={cn("w-3.5 h-3.5", cfg.storyMode ? "text-violet-400" : "text-muted-foreground")} />
+              <div>
+                <div className={cn("text-xs font-semibold font-mono", cfg.storyMode ? "text-violet-300" : "text-foreground")}>
+                  Story Mode
+                </div>
+                <div className="text-[10px] text-muted-foreground">Narrative templates · anchor picks · diversity themes</div>
+              </div>
+            </div>
+            <Switch
+              checked={cfg.storyMode ?? false}
+              onCheckedChange={v => set("storyMode", v)}
+            />
+          </div>
+          {/* Story Mode controls — shown only when Story Mode is on */}
+          {cfg.storyMode && (
+            <div className="rounded border border-violet-800/40 bg-violet-950/20 px-3 py-3 space-y-3">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <BookOpen className="w-3 h-3 text-violet-400" />
+                <span className="text-[10px] uppercase tracking-wider font-mono text-violet-400 font-semibold">Narrative Template</span>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">Template</Label>
+                <Select
+                  value={cfg.storyTemplateId ?? "auto"}
+                  onValueChange={v => onChange({ ...cfg, storyTemplateId: v === "auto" ? undefined : v })}
+                >
+                  <SelectTrigger className="h-7 text-xs bg-slate-800 border-slate-700 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto" className="text-xs">🔀 Auto (balanced diversity)</SelectItem>
+                    {STORY_TEMPLATES_UI.map(t => (
+                      <SelectItem key={t.id} value={t.id} className="text-xs">
+                        {t.emoji} {t.label} — {t.description}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Auto distributes lineups evenly across all 5 templates.</p>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">
+                  Max concentration: {Math.round((cfg.maxStoryConcentration ?? 0.4) * 100)}%
+                </Label>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="1.0"
+                  step="0.05"
+                  value={cfg.maxStoryConcentration ?? 0.4}
+                  onChange={e => onChange({ ...cfg, maxStoryConcentration: Number(e.target.value) })}
+                  className="w-full accent-violet-500"
+                />
+                <p className="text-[10px] text-muted-foreground mt-0.5">Max % of lineups with any single template. Lower = more narrative diversity.</p>
+              </div>
+            </div>
+          )}
+
           {/* GPP Narrative Filters — shown only when GPP Mode is on */}
           {cfg.gppMode && (
             <div className="rounded border border-amber-800/40 bg-amber-950/20 px-3 py-3 space-y-3">
@@ -608,11 +684,12 @@ function ConfidenceDot({ c }: { c: string }) {
 }
 
 // ─── Single lineup card ───────────────────────────────────────────────────────
-function LineupCard({ lineup, index, onLoad, isGppMode, propsMap }: {
+function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap }: {
   lineup: GeneratedLineup;
   index: number;
   onLoad: (lu: GeneratedLineup) => void;
   isGppMode?: boolean;
+  isStoryMode?: boolean;
   propsMap?: Map<number, FactoryScoredProp>;
 }) {
   const evColor = lineup.ev >= 0 ? "text-emerald-400" : "text-red-400";
@@ -620,7 +697,9 @@ function LineupCard({ lineup, index, onLoad, isGppMode, propsMap }: {
     ? "border-amber-700/40"
     : isGppMode
       ? "border-amber-800/30"
-      : "border-slate-800";
+      : isStoryMode
+        ? "border-violet-800/30"
+        : "border-slate-800";
 
   // For GPP: compute avg leverage across picks
   const avgLeverage = isGppMode && propsMap
@@ -630,8 +709,17 @@ function LineupCard({ lineup, index, onLoad, isGppMode, propsMap }: {
       })()
     : null;
 
+  // Story template label for badge
+  const storyTpl = isStoryMode && lineup.storyTemplate
+    ? STORY_TEMPLATES_UI.find(t => t.id === lineup.storyTemplate)
+    : null;
+
   return (
-    <Card className={cn("bg-slate-900/60", corrBg, isGppMode && "bg-amber-950/10")}>
+    <Card className={cn(
+      "bg-slate-900/60", corrBg,
+      isGppMode && "bg-amber-950/10",
+      isStoryMode && !isGppMode && "bg-violet-950/10",
+    )}>
       <CardHeader className="pb-2 pt-3 px-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -639,6 +727,11 @@ function LineupCard({ lineup, index, onLoad, isGppMode, propsMap }: {
             {isGppMode && (
               <Badge className="text-[8px] px-1.5 py-0 bg-amber-900/50 text-amber-300 border-amber-700/50 font-mono">
                 <Trophy className="w-2 h-2 mr-0.5 inline" />GPP
+              </Badge>
+            )}
+            {storyTpl && (
+              <Badge className="text-[8px] px-1.5 py-0 bg-violet-900/50 text-violet-300 border-violet-700/50 font-mono">
+                {storyTpl.emoji} {storyTpl.label}
               </Badge>
             )}
             {isGppMode && avgLeverage !== null && (
@@ -671,10 +764,19 @@ function LineupCard({ lineup, index, onLoad, isGppMode, propsMap }: {
       <CardContent className="px-4 pb-3 space-y-1">
         {lineup.picks.map((pick, pi) => {
           const sp = propsMap?.get(pick.ppLineId);
+          const isAnchor = isStoryMode && lineup.anchorPickId === pick.ppLineId;
           return (
-          <div key={pi} className="flex items-center gap-2 text-xs py-0.5">
+          <div key={pi} className={cn(
+            "flex items-center gap-2 text-xs py-0.5 rounded",
+            isAnchor && "bg-violet-950/30 px-1 -mx-1",
+          )}>
             <PlayerAvatar name={pick.playerName} imageUrl={pick.imageUrl ?? null} size="xs" />
-            <span className="font-medium truncate flex-1 min-w-0">{pick.playerName}</span>
+            {isAnchor && (
+              <span title="Anchor pick — best narrative fit for this lineup's story">
+                <Star className="w-2.5 h-2.5 text-violet-400 shrink-0 fill-violet-400" />
+              </span>
+            )}
+            <span className={cn("font-medium truncate flex-1 min-w-0", isAnchor && "text-violet-200")}>{pick.playerName}</span>
             <span className="text-muted-foreground shrink-0">{pick.statType}</span>
             <span className="font-mono text-foreground shrink-0">{pick.ppLine}</span>
             <span className={cn("font-mono text-xs shrink-0 uppercase", pick.direction === "more" ? "text-emerald-400" : "text-red-400")}>
@@ -724,11 +826,12 @@ function SharpBadge({ signal }: { signal: string | null | undefined }) {
 }
 
 // ─── Scored props table ───────────────────────────────────────────────────────
-function ScoredPropsTable({ props, pinnedIds, biasWeight, isGppMode }: {
+function ScoredPropsTable({ props, pinnedIds, biasWeight, isGppMode, isStoryMode }: {
   props: FactoryScoredProp[];
   pinnedIds: Set<number>;
   biasWeight: number;
   isGppMode?: boolean;
+  isStoryMode?: boolean;
 }) {
   const [filter, setFilter] = useState<"all" | "eligible" | "excluded">("all");
 
@@ -845,6 +948,9 @@ function ScoredPropsTable({ props, pinnedIds, biasWeight, isGppMode }: {
                   <TableHead className="text-xs text-muted-foreground">Vol</TableHead>
                 </>
               )}
+              {isStoryMode && (
+                <TableHead className="text-xs text-violet-400" title="How often this prop appears across all generated lineups">Crowd%</TableHead>
+              )}
               <TableHead className="text-xs text-muted-foreground">Flags</TableHead>
             </TableRow>
           </TableHeader>
@@ -948,6 +1054,18 @@ function ScoredPropsTable({ props, pinnedIds, biasWeight, isGppMode }: {
                       {!p.volatilityRating             && <span className="text-muted-foreground">—</span>}
                     </TableCell>
                   </>
+                )}
+                {isStoryMode && (
+                  <TableCell className="py-1.5 text-xs font-mono">
+                    {p.crowdingFreq != null ? (
+                      <span className={cn(
+                        p.crowdingFreq >= 0.8 ? "text-red-400 font-bold" :
+                        p.crowdingFreq >= 0.6 ? "text-amber-400" : "text-muted-foreground",
+                      )} title={`Appears in ${Math.round(p.crowdingFreq * 100)}% of lineups`}>
+                        {Math.round(p.crowdingFreq * 100)}%
+                      </span>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </TableCell>
                 )}
                 <TableCell className="py-1.5">
                   <div className="flex gap-1 flex-wrap">
@@ -1563,6 +1681,7 @@ export default function LineupFactory() {
   // Derive isGppMode from the entry whose result is displayed (not current editor state)
   // so historical runs are labelled correctly when a saved entry is selected.
   const isGppMode = !!(activeEntry?.cfg.gppMode ?? cfg.gppMode);
+  const isStoryMode = !!(activeEntry?.cfg.storyMode ?? cfg.storyMode);
 
   // Build ppLineId → FactoryScoredProp map for LineupCard leverage lookup
   const scoredPropsMap = useMemo(
@@ -1763,6 +1882,25 @@ export default function LineupFactory() {
               {/* Portfolio stats */}
               <PortfolioStatsBar stats={result.portfolioStats} numLineups={result.lineups.length} />
 
+              {/* Story distribution — only shown when storyMode was active */}
+              {isStoryMode && result.portfolioStats.storyDistribution && Object.keys(result.portfolioStats.storyDistribution).length > 0 && (
+                <div className="rounded border border-violet-800/40 bg-violet-950/20 px-3 py-2.5 flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <BookOpen className="w-3 h-3 text-violet-400" />
+                    <span className="text-[10px] uppercase tracking-wider font-mono text-violet-400 font-semibold">Story Mix</span>
+                  </div>
+                  {STORY_TEMPLATES_UI.map(t => {
+                    const count = (result.portfolioStats.storyDistribution as Record<string, number>)[t.id] ?? 0;
+                    if (count === 0) return null;
+                    return (
+                      <span key={t.id} className="text-[10px] font-mono text-muted-foreground">
+                        {t.emoji} <span className="text-violet-300">{t.label}</span> ×{count}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Tabs: Lineups / Scored Props / Exposure */}
               <Tabs defaultValue="lineups">
                 <TabsList className="bg-slate-900 border border-slate-800">
@@ -1792,7 +1930,7 @@ export default function LineupFactory() {
                   ) : (
                     <div className="grid gap-3">
                       {result.lineups.map((lu, i) => (
-                        <LineupCard key={lu.id} lineup={lu} index={i} onLoad={handleLoadLineup} isGppMode={isGppMode} propsMap={scoredPropsMap} />
+                        <LineupCard key={lu.id} lineup={lu} index={i} onLoad={handleLoadLineup} isGppMode={isGppMode} isStoryMode={isStoryMode} propsMap={scoredPropsMap} />
                       ))}
                     </div>
                   )}
@@ -1800,7 +1938,7 @@ export default function LineupFactory() {
 
                 {/* Scored props */}
                 <TabsContent value="props" className="mt-4">
-                  <ScoredPropsTable props={result.scoredProps} pinnedIds={pinnedIds} biasWeight={cfg.biasWeight ?? 0} isGppMode={isGppMode} />
+                  <ScoredPropsTable props={result.scoredProps} pinnedIds={pinnedIds} biasWeight={cfg.biasWeight ?? 0} isGppMode={isGppMode} isStoryMode={isStoryMode} />
                 </TabsContent>
 
                 {/* Exposure */}

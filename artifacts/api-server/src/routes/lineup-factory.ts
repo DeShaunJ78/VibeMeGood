@@ -50,6 +50,9 @@ const configSchema = z.object({
     pacePreference: z.enum(["fast", "neutral", "any"]).optional(),
     sharpAlignmentOnly: z.boolean().optional(),
   }).optional(),
+  storyMode: z.boolean().optional(),
+  storyTemplateId: z.string().optional(),
+  maxStoryConcentration: z.number().min(0).max(1).optional(),
 });
 
 type FactoryConfig = z.infer<typeof configSchema>;
@@ -88,6 +91,8 @@ type ScoredProp = {
   paceTier: string | null;
   sharpSignal: string | null;
   gameTotal: number | null;
+  // Story mode field — populated after all lineups are generated
+  crowdingFreq: number | null;
 };
 
 type GeneratedLineup = {
@@ -102,7 +107,133 @@ type GeneratedLineup = {
   correlationAdjusted: boolean;
   correlationNote: string | null;
   diversificationScore: number;
+  // Story mode fields — null when storyMode is off
+  storyTemplate: string | null;
+  anchorPickId: number | null;
 };
+
+// ─── Story Mode ───────────────────────────────────────────────────────────────
+// Story Mode is a pure overlay. When cfg.storyMode is false (default), the
+// generation loop is byte-for-byte identical. Story logic only runs when
+// storyMode is explicitly enabled.
+
+interface StoryTemplate {
+  id: string;
+  label: string;
+  emoji: string;
+  description: string;
+  gameTotalMin: number | null;
+  gameTotalMax: number | null;
+  paceTierPref: "fast" | "slow" | null;
+  directionBias: "more" | "less" | null;
+  contrarianBonus: boolean;
+}
+
+const STORY_TEMPLATES: StoryTemplate[] = [
+  {
+    id: "shootout",
+    label: "Shootout Stack",
+    emoji: "🔥",
+    description: "High-total games, fast pace, overs",
+    gameTotalMin: 215,
+    gameTotalMax: null,
+    paceTierPref: "fast",
+    directionBias: "more",
+    contrarianBonus: false,
+  },
+  {
+    id: "pace_exploit",
+    label: "Pace Exploit",
+    emoji: "⚡",
+    description: "Fast-pace matchups, volume stats",
+    gameTotalMin: null,
+    gameTotalMax: null,
+    paceTierPref: "fast",
+    directionBias: null,
+    contrarianBonus: false,
+  },
+  {
+    id: "grind",
+    label: "Grind / Low Total",
+    emoji: "🔒",
+    description: "Defensive games, floor stats, unders",
+    gameTotalMin: null,
+    gameTotalMax: 210,
+    paceTierPref: "slow",
+    directionBias: "less",
+    contrarianBonus: false,
+  },
+  {
+    id: "blowout",
+    label: "Blowout Favorite",
+    emoji: "🏆",
+    description: "Dominant teams, safe overs",
+    gameTotalMin: null,
+    gameTotalMax: null,
+    paceTierPref: null,
+    directionBias: "more",
+    contrarianBonus: false,
+  },
+  {
+    id: "underdog",
+    label: "Underdog Special",
+    emoji: "🎯",
+    description: "Contrarian, low-owned, ceiling plays",
+    gameTotalMin: null,
+    gameTotalMax: null,
+    paceTierPref: null,
+    directionBias: null,
+    contrarianBonus: true,
+  },
+];
+
+function narrativeFit(prop: ScoredProp, template: StoryTemplate): number {
+  let score = 50;
+  if (template.gameTotalMin !== null) {
+    if (prop.gameTotal !== null && prop.gameTotal >= template.gameTotalMin) score += 20;
+    else score -= 15;
+  }
+  if (template.gameTotalMax !== null) {
+    if (prop.gameTotal !== null && prop.gameTotal <= template.gameTotalMax) score += 15;
+    else score -= 20;
+  }
+  if (template.paceTierPref !== null && prop.paceTier !== null) {
+    score += prop.paceTier === template.paceTierPref ? 15 : -10;
+  }
+  if (template.directionBias !== null) {
+    score += prop.direction === template.directionBias ? 10 : -10;
+  }
+  if (template.contrarianBonus) {
+    const own = prop.ownershipEst ?? 20;
+    const ceil = prop.ceilingRating ?? 50;
+    if (own <= 12 && ceil >= 60) score += 30;
+    else if (own <= 20 && ceil >= 55) score += 15;
+    else if (own > 30) score -= 20;
+  }
+  return Math.max(0, Math.min(100, score));
+}
+
+function pickStoryTemplate(
+  luIdx: number,
+  cfg: FactoryConfig,
+  storyDist: Record<string, number>,
+): StoryTemplate {
+  const allTemplates = STORY_TEMPLATES;
+  const tid = cfg.storyTemplateId;
+  // Specific template forced
+  if (tid && tid !== "auto") {
+    return allTemplates.find(t => t.id === tid) ?? allTemplates[luIdx % allTemplates.length];
+  }
+  // Auto: pick template with lowest current count, respecting maxStoryConcentration cap
+  const cap = Math.ceil((cfg.maxStoryConcentration ?? 0.4) * cfg.numEntries);
+  const available = allTemplates.filter(t => (storyDist[t.id] ?? 0) < cap);
+  const pool = available.length > 0 ? available : allTemplates;
+  // Among available, pick the one with fewest lineups (round-robin distribution)
+  return pool.reduce((best, t) =>
+    (storyDist[t.id] ?? 0) < (storyDist[best.id] ?? 0) ? t : best,
+    pool[0],
+  );
+}
 
 // ─── Math helpers ─────────────────────────────────────────────────────────────
 
@@ -617,6 +748,7 @@ router.post("/lineup-factory/generate", async (req, res) => {
         paceTier,
         sharpSignal,
         gameTotal,
+        crowdingFreq:  null, // populated after all lineups are generated
       });
     }
 
@@ -769,6 +901,8 @@ router.post("/lineup-factory/generate", async (req, res) => {
 
     const lineups: GeneratedLineup[] = [];
     const n = cfg.picksPerEntry;
+    // Story mode: track how many lineups have been assigned each template
+    const storyDist: Record<string, number> = {};
 
     for (let luIdx = 0; luIdx < cfg.numEntries; luIdx++) {
       // Exposure tracking across all generated lineups so far
@@ -803,6 +937,17 @@ router.post("/lineup-factory/generate", async (req, res) => {
       } else {
         const top = Math.max(n, Math.ceil(eligiblePool.length * 0.50));
         pool = seededShuffle(eligiblePool.slice(0, top), seed + luIdx);
+      }
+
+      // ── Story Mode overlay (additive — only runs when cfg.storyMode is true) ──
+      // Reorders the pool so narrative-fitting picks are tried first in the
+      // greedy selection loop below. Falls back cleanly when no narrative-fitting
+      // picks are available — the existing pick selection loop handles the rest.
+      let assignedTemplate: StoryTemplate | null = null;
+      let anchorPickId: number | null = null;
+      if (cfg.storyMode) {
+        assignedTemplate = pickStoryTemplate(luIdx, cfg, storyDist);
+        pool.sort((a, b) => narrativeFit(b, assignedTemplate!) - narrativeFit(a, assignedTemplate!));
       }
 
       // Pre-seed picks with required props. The first required pick fixes the
@@ -876,6 +1021,22 @@ router.post("/lineup-factory/generate", async (req, res) => {
 
       if (picks.length < 2) continue;
 
+      // ── Story Mode: identify anchor pick and record template distribution ──
+      if (cfg.storyMode && assignedTemplate !== null) {
+        let bestAnchorScore = -Infinity;
+        for (const p of picks) {
+          const fit = narrativeFit(p, assignedTemplate);
+          const ceiling = p.ceilingRating ?? 50;
+          const own = Math.max(1, p.ownershipEst ?? 20);
+          const aScore = (ceiling * fit) / own;
+          if (aScore > bestAnchorScore) {
+            bestAnchorScore = aScore;
+            anchorPickId = p.ppLineId;
+          }
+        }
+        storyDist[assignedTemplate.id] = (storyDist[assignedTemplate.id] ?? 0) + 1;
+      }
+
       const stake = cfg.stakePerEntry;
       // Product of demon/goblin payout boosts/discounts across the lineup's picks.
       const payoutFactor = lineupPayoutFactor(picks);
@@ -915,10 +1076,29 @@ router.post("/lineup-factory/generate", async (req, res) => {
         correlationAdjusted,
         correlationNote,
         diversificationScore,
+        storyTemplate:       assignedTemplate?.id ?? null,
+        anchorPickId,
       });
     }
 
-    // ── 7. Portfolio analytics ────────────────────────────────────────────
+    // ── 7. Post-generation: crowding frequency ────────────────────────────
+    // Compute how often each prop appears across all generated lineups.
+    // Always computed — useful at any time, negligible cost.
+    if (lineups.length > 0) {
+      const pickLineupCount: Record<number, number> = {};
+      for (const lu of lineups) {
+        for (const p of lu.picks) {
+          pickLineupCount[p.ppLineId] = (pickLineupCount[p.ppLineId] ?? 0) + 1;
+        }
+      }
+      const lu = lineups.length;
+      for (const sp of allScoredProps) {
+        const count = pickLineupCount[sp.ppLineId] ?? 0;
+        sp.crowdingFreq = Math.round((count / lu) * 1000) / 1000;
+      }
+    }
+
+    // ── 8. Portfolio analytics ────────────────────────────────────────────
     const totalStake = lineups.length * cfg.stakePerEntry;
     const portfolioEV = lineups.reduce((acc, lu) => acc + lu.ev, 0);
     const pNoneCash = lineups.reduce((acc, lu) => acc * (1 - lu.hitProbability), 1);
@@ -959,6 +1139,9 @@ router.post("/lineup-factory/generate", async (req, res) => {
     }
     const avgPairwiseOverlap = pairCount > 0 ? Math.round((totalPairwiseOverlap / pairCount) * 1000) / 1000 : 0;
 
+    // Story distribution: how many lineups have each template (only non-zero entries)
+    const storyDistribution: Record<string, number> = cfg.storyMode ? { ...storyDist } : {};
+
     res.json({
       lineups,
       portfolioStats: {
@@ -974,6 +1157,7 @@ router.post("/lineup-factory/generate", async (req, res) => {
         pickExposure,
         teamExposure,
         topPicksByExposure,
+        storyDistribution,
       },
       scoredProps:          allScoredProps.sort((a, b) => b.compositeScore - a.compositeScore).slice(0, 200),
       eligiblePropCount,
