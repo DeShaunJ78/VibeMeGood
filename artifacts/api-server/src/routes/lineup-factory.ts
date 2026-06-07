@@ -32,6 +32,7 @@ const configSchema = z.object({
   varianceProfile: z.enum(["conservative", "balanced", "aggressive", "chaos", "custom"]),
   optimizationObjective: z.enum(["max_ev", "max_profit_prob", "min_drawdown", "balanced_growth", "high_ceiling"]),
   gppMode: z.boolean().optional(),
+  maxPerTeam: z.number().int().min(1).max(6).nullable().optional(),
   maxPlayerExposure: z.number().min(0).max(1),
   maxPickExposure: z.number().min(0).max(1),
   maxTeamExposure: z.number().min(0).max(1),
@@ -836,6 +837,11 @@ router.post("/lineup-factory/generate", async (req, res) => {
         if (candidate.teamId) {
           const afterTeam = (teamCounts[candidate.teamId] ?? 0) + 1;
           if (afterTeam / totalFuture > cfg.maxTeamExposure + 0.001) continue;
+          // Per-lineup team cap: count how many picks in THIS lineup are from the same team
+          if (cfg.maxPerTeam != null) {
+            const inLineupFromTeam = picks.filter(p => p.teamId === candidate.teamId).length;
+            if (inLineupFromTeam >= cfg.maxPerTeam) continue;
+          }
         }
         if (candidate.gameId) {
           const afterGame = (gameCounts[candidate.gameId] ?? 0) + 1;
@@ -863,6 +869,11 @@ router.post("/lineup-factory/generate", async (req, res) => {
           if (picks.some(p => p.ppLineId === candidate.ppLineId)) continue;
           if (picks.some(p => p.playerId === candidate.playerId && p.statType === candidate.statType)) continue;
           if (lineupSport && candidate.sport !== lineupSport) continue;
+          // Still honour per-lineup team cap even in the relaxed fallback
+          if (cfg.maxPerTeam != null && candidate.teamId) {
+            const inLineupFromTeam = picks.filter(p => p.teamId === candidate.teamId).length;
+            if (inLineupFromTeam >= cfg.maxPerTeam) continue;
+          }
           picks.push(candidate);
           if (!lineupSport) lineupSport = candidate.sport;
         }

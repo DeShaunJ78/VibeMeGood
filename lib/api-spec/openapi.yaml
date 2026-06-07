@@ -2454,6 +2454,7 @@ components:
         maxTeamExposure: { type: number }
         maxGameExposure: { type: number }
         maxPairwiseOverlap: { type: number }
+        maxPerTeam: { type: integer, minimum: 1, maximum: 6, nullable: true, description: "Max picks from the same team within a single lineup (null = unlimited)" }
         stakePerEntry: { type: number }
         totalBudget: { type: number }
         minEdgeThreshold: { type: number }

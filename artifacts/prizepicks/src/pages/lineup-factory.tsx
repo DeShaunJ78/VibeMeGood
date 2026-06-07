@@ -108,6 +108,7 @@ const DEFAULTS: LineupFactoryConfig = {
   varianceProfile: "conservative",
   optimizationObjective: "balanced_growth",
   gppMode: false,
+  maxPerTeam: 2,
   maxPlayerExposure: 0.40,
   maxPickExposure: 0.40,
   maxTeamExposure: 0.50,
@@ -268,6 +269,22 @@ function ConfigPanel({
                 options={[1, 3, 5, 10, 25].map(n => ({ label: String(n), value: n }))}
               />
             </div>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1.5 block">
+              Max per team
+              <span className="ml-1.5 text-[10px] text-slate-600 font-normal">picks from same team per lineup</span>
+            </Label>
+            <ToggleGroup
+              value={cfg.maxPerTeam ?? 0}
+              onChange={v => set("maxPerTeam", Number(v) === 0 ? null : Number(v))}
+              options={[
+                { label: "1", value: 1 },
+                { label: "2", value: 2 },
+                { label: "3", value: 3 },
+                { label: "Any", value: 0 },
+              ]}
+            />
           </div>
           <div className="flex items-center gap-3">
             <div className="flex-1">

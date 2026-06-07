@@ -1067,6 +1067,12 @@ export interface LineupFactoryConfig {
   maxTeamExposure: number;
   maxGameExposure: number;
   maxPairwiseOverlap: number;
+  /**
+     * Max picks from the same team within a single lineup (null = unlimited)
+     * @minimum 1
+     * @maximum 6
+     */
+  maxPerTeam?: number | null;
   stakePerEntry: number;
   totalBudget?: number;
   minEdgeThreshold?: number;

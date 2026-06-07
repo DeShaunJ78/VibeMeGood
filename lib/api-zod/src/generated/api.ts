@@ -1875,6 +1875,8 @@ export const generateLineupFactoryBodyPicksPerEntryMax = 6;
 
 export const generateLineupFactoryBodyNumEntriesMax = 25;
 
+export const generateLineupFactoryBodyMaxPerTeamMax = 6;
+
 export const generateLineupFactoryBodyMonteCarloIterationsMin = 1000;
 export const generateLineupFactoryBodyMonteCarloIterationsMax = 50000;
 
@@ -1895,6 +1897,7 @@ export const GenerateLineupFactoryBody = zod.object({
   "maxTeamExposure": zod.number(),
   "maxGameExposure": zod.number(),
   "maxPairwiseOverlap": zod.number(),
+  "maxPerTeam": zod.number().min(1).max(generateLineupFactoryBodyMaxPerTeamMax).nullish().describe('Max picks from the same team within a single lineup (null = unlimited)'),
   "stakePerEntry": zod.number(),
   "totalBudget": zod.number().optional(),
   "minEdgeThreshold": zod.number().optional(),
