@@ -1,0 +1,644 @@
+DFS Lineup Intelligence Engine Specification
+
+Objective
+
+Build a professional DFS lineup generation engine capable of producing Cash, Small-Field GPP, Large-Field GPP, Single Entry, 3-Max, and MME (Mass Multi-Entry) lineups for DraftKings, FanDuel, PrizePicks-style contests, and future sportsbook applications.
+
+The goal is not simply to maximize projected points.
+
+The goal is to maximize Expected Value (EV), leverage ownership inefficiencies, capture correlation, and create contest-specific lineups that can realistically finish in the top 1% of tournaments.
+
+⸻
+
+Core Philosophy
+
+Most DFS players ask:
+
+“Who scores the most fantasy points?”
+
+Professional DFS players ask:
+
+“What lineup wins if my assumptions about the slate are correct?”
+
+The system should be built around scenario-based outcomes rather than raw projections.
+
+⸻
+
+Contest Types
+
+Cash Games
+
+Examples:
+
+* Head-to-Head
+* Double Ups
+* 50/50s
+
+Primary Goal:
+
+Finish above the median score.
+
+Optimization Priorities:
+
+1. Projection
+2. Floor
+3. Minutes Security
+4. Usage Stability
+5. Injury Certainty
+
+Avoid:
+
+* Boom/Bust Players
+* Minute Restrictions
+* Volatile Bench Players
+* Low Floor Options
+
+⸻
+
+Small-Field GPP
+
+Examples:
+
+* 100-1,000 Entries
+
+Primary Goal:
+
+Balance projection and uniqueness.
+
+Optimization Priorities:
+
+1. Projection
+2. Ceiling
+3. Correlation
+4. Moderate Ownership Leverage
+
+⸻
+
+Large-Field GPP
+
+Examples:
+
+* 5,000-100,000 Entries
+
+Primary Goal:
+
+Maximum Ceiling + Leverage
+
+Optimization Priorities:
+
+1. Ceiling
+2. Correlation
+3. Ownership Leverage
+4. Unique Construction
+5. Positive Game Environments
+
+⸻
+
+Core Scoring Framework
+
+Every player receives six independent scores.
+
+1. Projection Score
+
+Measures:
+
+* Raw projection
+* Fantasy points
+* Fantasy points per minute
+* Expected fantasy output
+
+Inputs:
+
+* Model projections
+* Market projections
+* Historical averages
+
+⸻
+
+2. Ceiling Score
+
+Measures:
+
+Player’s realistic 90th percentile outcome.
+
+Inputs:
+
+* Historical ceiling games
+* Usage spikes
+* Game environment
+* Matchup
+
+Questions:
+
+Can this player score 2x expectation?
+
+Can this player break the slate?
+
+⸻
+
+3. Ownership Leverage Score
+
+Measures:
+
+Difference between projection and ownership.
+
+Formula Example:
+
+Leverage = Ceiling × (1 - Ownership)
+
+Examples:
+
+Player A:
+40 Projection
+35% Ownership
+
+Player B:
+38 Projection
+5% Ownership
+
+Player B receives a higher leverage score.
+
+⸻
+
+4. Correlation Score
+
+Measures lineup synergy.
+
+Positive Examples:
+
+NFL:
+
+* QB + WR
+* QB + TE
+* QB + WR + WR
+* Game Bring-Back
+
+NBA:
+
+* Same Game Stack
+* Close Competitive Games
+
+MLB:
+
+* Team Stacks
+* Full Offensive Stacks
+
+Negative Examples:
+
+* RB vs Opposing Defense
+* Multiple Players Cannibalizing Usage
+* Opposing Closers
+
+⸻
+
+5. Role Stability Score
+
+Measures consistency of opportunity.
+
+Inputs:
+
+* Minutes
+* Usage
+* Touches
+* Snap Share
+* Target Share
+* Rotation Stability
+
+Questions:
+
+Will this player receive the expected opportunity?
+
+⸻
+
+6. Volatility Score
+
+Measures outcome variance.
+
+Inputs:
+
+* Standard deviation
+* Historical consistency
+* Ceiling/Floor spread
+
+Applications:
+
+Cash:
+Prefer lower volatility.
+
+GPP:
+Prefer controlled volatility.
+
+⸻
+
+Advanced Game Environment Model
+
+Every game receives a score.
+
+Factors:
+
+Vegas Total
+
+Higher total = More fantasy opportunity.
+
+⸻
+
+Spread
+
+Close games preferred.
+
+Large spreads increase blowout risk.
+
+⸻
+
+Team Total
+
+Implied scoring expectation.
+
+⸻
+
+Pace
+
+NBA:
+Possessions per game.
+
+Higher pace increases fantasy opportunities.
+
+⸻
+
+Weather
+
+NFL:
+
+* Wind
+* Rain
+* Snow
+
+MLB:
+
+* Wind Direction
+* Temperature
+* Humidity
+
+⸻
+
+Injury Impact Engine
+
+Injuries create the largest DFS edges.
+
+Track:
+
+* Usage Increase
+* Minutes Increase
+* Touch Increase
+* Target Increase
+* Rebound Increase
+
+Output:
+
+Opportunity Adjustment Score
+
+⸻
+
+Ownership Intelligence
+
+Required Outputs:
+
+Projected Ownership
+
+Expected field ownership.
+
+⸻
+
+Ownership Tier
+
+* Chalk
+* Popular
+* Neutral
+* Contrarian
+* Extreme Contrarian
+
+⸻
+
+Leverage Rating
+
+Comparison between:
+
+Projection
+vs
+Ownership
+
+⸻
+
+Stacking Engine
+
+NFL
+
+Supported Stack Types:
+
+* QB + WR
+* QB + WR + WR
+* QB + TE
+* QB + WR + Bring Back
+* Double Bring Back
+
+⸻
+
+NBA
+
+Supported Stack Types:
+
+* Game Stack
+* Team Mini Stack
+* Competitive Environment Stack
+
+⸻
+
+MLB
+
+Supported Stack Types:
+
+* 3-Man
+* 4-Man
+* 5-Man
+* Full Team Stack
+
+⸻
+
+Lineup Construction Rules
+
+Allow user-defined constraints.
+
+Examples:
+
+Player Exposure
+
+Minimum:
+10%
+
+Maximum:
+60%
+
+⸻
+
+Team Exposure
+
+Maximum players from one team.
+
+⸻
+
+Ownership Cap
+
+Maximum lineup ownership.
+
+⸻
+
+Projection Floor
+
+Minimum lineup projection.
+
+⸻
+
+Ceiling Threshold
+
+Minimum lineup ceiling.
+
+⸻
+
+Multi-Entry System
+
+5 Lineups
+
+Focused Core
+
+High Conviction
+
+⸻
+
+10 Lineups
+
+Moderate Diversification
+
+⸻
+
+20 Lineups
+
+Expanded Leverage Pool
+
+⸻
+
+50+ Lineups
+
+MME Strategy
+
+Controlled Exposure
+
+⸻
+
+Core Player Pool Structure
+
+Core
+
+Highest confidence plays.
+
+Exposure:
+60-80%
+
+⸻
+
+Secondary Core
+
+Strong plays.
+
+Exposure:
+20-50%
+
+⸻
+
+Leverage Pool
+
+High upside.
+
+Exposure:
+5-25%
+
+⸻
+
+Lottery Pool
+
+Rare outcomes.
+
+Exposure:
+1-10%
+
+⸻
+
+Late Swap Engine
+
+Monitor:
+
+* Current Position
+* Remaining Ownership
+* Remaining Ceiling
+
+Rules:
+
+If trailing:
+Increase leverage.
+
+If leading:
+Block ownership.
+
+If neutral:
+Maintain optimal EV.
+
+⸻
+
+Lineup Types
+
+Generate:
+
+Cash Lineup
+
+Max Floor
+
+⸻
+
+Single Entry
+
+Balanced
+
+⸻
+
+3-Max
+
+Moderate Leverage
+
+⸻
+
+Small-Field GPP
+
+Projection + Ceiling
+
+⸻
+
+Large-Field GPP
+
+Maximum Ceiling
+
+⸻
+
+Contrarian
+
+Low Ownership
+
+⸻
+
+Leverage
+
+Ownership Exploitation
+
+⸻
+
+Ceiling
+
+Highest Theoretical Upside
+
+⸻
+
+Sharp DFS Checklist
+
+Before Finalizing Any Lineup
+
+Projection
+
+Ceiling
+
+Floor
+
+Ownership
+
+Leverage
+
+Vegas Total
+
+Spread
+
+Team Total
+
+Minutes
+
+Usage
+
+Pace
+
+Matchup
+
+Injury News
+
+Correlation
+
+Stacking
+
+Bring Backs
+
+Weather
+
+Line Movement
+
+Closing Line Value
+
+Motivation
+
+Travel
+
+Back-to-Back
+
+Blowout Risk
+
+Overtime Potential
+
+Late Swap Opportunity
+
+Contest Type
+
+Exposure Limits
+
+Position Scarcity
+
+Role Changes
+
+⸻
+
+Future Enhancements
+
+Add support for:
+
+* Simulation Engine
+* Monte Carlo Outcomes
+* Player Synergy Database
+* Historical Contest Winning Scores
+* Sharp vs Public Ownership Tracking
+* Closing Line Value Tracking
+* AI Lineup Explanations
+* Bankroll Management Engine
+* Risk Tolerance Profiles
+* Custom User Strategy Presets
+
+⸻
+
+Ultimate Goal
+
+The system should not simply build lineups.
+
+The system should think like a professional DFS player.
+
+Every lineup should be evaluated through:
+
+1. Projection
+2. Ceiling
+3. Ownership
+4. Correlation
+5. Leverage
+6. Contest Context
+
+The objective is to maximize long-term Expected Value and generate lineups capable of competing for first place rather than merely cashing.
