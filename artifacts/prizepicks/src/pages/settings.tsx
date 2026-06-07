@@ -11,12 +11,9 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
-import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical, Lock, Zap, DollarSign, Download, Target } from "lucide-react";
+import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical, Lock, Zap, DollarSign, Target } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useUserSettings, useUpdateUserSettings, type UserSettings } from "@/hooks/use-user-settings";
 
@@ -272,20 +269,37 @@ function VarianceIntelSection({ settings, onUpdate }: { settings: UserSettings; 
   );
 }
 
-const SYNC_JOBS: Array<{ label: string; endpoint: string; staleDays?: number }> = [
-  // PrizePicks lines are NOT server-syncable (PerimeterX 403s every server fetch).
-  // Use the browser copy-paste import card below instead.
-  { label: "Injury Reports",       endpoint: "/api/sync/injuries" },
-  { label: "External Odds",        endpoint: "/api/sync/external-odds" },
-  { label: "Player Projections",   endpoint: "/api/sync/projections" },
-  { label: "Game Scores",          endpoint: "/api/sync/scores" },
-  { label: "Grade Pending Picks",  endpoint: "/api/sync/auto-grade-picks" },
-  { label: "Variance Compute",     endpoint: "/api/sync/variance" },
-  { label: "Team Pace Ratings",    endpoint: "/api/admin/sync/pace" },
-  { label: "Sync Games",           endpoint: "/api/sync/game-schedule" },
-  { label: "Run Calibration",      endpoint: "/api/sync/calibration", staleDays: 7 },
-  { label: "Backfill History",     endpoint: "/api/sync/historical-stats" },
+type SyncJob = { label: string; endpoint: string; staleDays?: number };
+
+const SYNC_JOB_GROUPS: Array<{ label: string; jobs: SyncJob[] }> = [
+  {
+    label: "Live Data",
+    jobs: [
+      { label: "Injury Reports",  endpoint: "/api/sync/injuries" },
+      { label: "External Odds",   endpoint: "/api/sync/external-odds" },
+      { label: "Game Schedule",   endpoint: "/api/sync/game-schedule" },
+    ],
+  },
+  {
+    label: "Projections & Scoring",
+    jobs: [
+      { label: "Player Projections", endpoint: "/api/sync/projections" },
+      { label: "Variance Compute",   endpoint: "/api/sync/variance" },
+      { label: "Team Pace Ratings",  endpoint: "/api/admin/sync/pace" },
+      { label: "Game Scores",        endpoint: "/api/sync/scores" },
+    ],
+  },
+  {
+    label: "Maintenance",
+    jobs: [
+      { label: "Grade Pending Picks", endpoint: "/api/sync/auto-grade-picks" },
+      { label: "Backfill History",    endpoint: "/api/sync/historical-stats" },
+      { label: "Run Calibration",     endpoint: "/api/sync/calibration", staleDays: 7 },
+    ],
+  },
 ];
+
+const SYNC_JOBS: SyncJob[] = SYNC_JOB_GROUPS.flatMap(g => g.jobs);
 
 // Maps a manual sync job to the data_pull_logs provider it refreshes, so each
 // row can show live status instead of a static button.
@@ -312,10 +326,7 @@ export default function Settings() {
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncingPreLock, setSyncingPreLock] = useState(false);
   const [syncingJob, setSyncingJob] = useState<string | null>(null);
-  const [ppPaste, setPpPaste] = useState("");
-  const [ppImporting, setPpImporting] = useState<"idle" | "importing" | "done" | "error">("idle");
-  const [ppDialogOpen, setPpDialogOpen] = useState(false);
-  const [ppFetching, setPpFetching] = useState<"idle" | "fetching" | "done" | "cors-blocked" | "error">("idle");
+  const [ppFetching, setPpFetching] = useState<"idle" | "fetching" | "done" | "error">("idle");
   const { data: userSettings } = useUserSettings();
   const updateSettings = useUpdateUserSettings();
 
@@ -402,72 +413,9 @@ export default function Settings() {
   const importUrl = `${serverOrigin}/api/sync/pp-lines-import`;
   const ppApiUrl = "https://api.prizepicks.com/projections?per_page=25000&single_stat=true&include=new_player,league";
 
-  // One-click sync bookmarklet: runs inside the user's logged-in prizepicks.com tab,
-  // fetches the projections feed (same-site, cookies + PerimeterX pass), then POSTs
-  // straight to our import endpoint (CORS is open). No copy-paste required.
-  const bookmarklet =
-    "javascript:(async()=>{try{const r=await fetch(" + JSON.stringify(ppApiUrl) +
-    ",{credentials:'include'});if(!r.ok)throw new Error('PrizePicks returned '+r.status+' \\u2014 make sure you are logged in at prizepicks.com');" +
-    "const j=await r.json();if(!j||!j.data||!j.included)throw new Error('That was not the projections feed.');" +
-    "const p=await fetch(" + JSON.stringify(importUrl) +
-    ",{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:j.data,included:j.included})});" +
-    "const o=await p.json().catch(()=>({}));if(!p.ok)throw new Error(o.error||('Import failed: '+p.status));" +
-    "alert('\\u2713 PrizePicks synced: '+o.recordsProcessed+' lines imported into your Workstation.');}" +
-    "catch(e){alert('PrizePicks sync failed: '+(e&&e.message?e.message:e));}})();";
-
-  // React sanitizes javascript: hrefs, so set it via the DOM after mount so the
-  // anchor remains draggable to the bookmarks bar.
-  const setBookmarkletRef = (el: HTMLAnchorElement | null) => {
-    if (el) el.setAttribute("href", bookmarklet);
-  };
-
-  async function importPpPaste() {
-    setPpImporting("importing");
-    try {
-      let parsed: { data?: unknown[]; included?: unknown[] };
-      try {
-        parsed = JSON.parse(ppPaste);
-      } catch {
-        throw new Error("That isn't valid JSON. Make sure you copied the entire page (Ctrl+A then Ctrl+C).");
-      }
-      if (!Array.isArray(parsed?.data) || !Array.isArray(parsed?.included)) {
-        throw new Error("This doesn't look like the PrizePicks feed — it should contain 'data' and 'included' arrays. You may have copied a login or block page.");
-      }
-      const res = await fetch(importUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: parsed.data, included: parsed.included }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(err.error ?? `Server returned ${res.status}`);
-      }
-      const result = await res.json() as { recordsProcessed: number };
-      setPpImporting("done");
-      setPpPaste("");
-      toast({ title: "PrizePicks synced", description: `${result.recordsProcessed} lines imported.` });
-      setTimeout(() => {
-        setPpImporting("idle");
-        qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
-        refetch();
-      }, 2500);
-    } catch (e) {
-      setPpImporting("error");
-      toast({
-        title: "Import failed",
-        description: e instanceof Error ? e.message : "Unknown error",
-        variant: "destructive",
-      });
-      setTimeout(() => setPpImporting("idle"), 5000);
-    }
-  }
-
-
   async function fetchPPDirect() {
     setPpFetching("fetching");
     try {
-      // Attempt a direct cross-origin fetch using the user's browser credentials.
-      // Works if PP's CORS headers allow it; throws TypeError if blocked.
       const ppRes = await fetch(ppApiUrl, { credentials: "include" });
       if (!ppRes.ok) {
         throw new Error(`PrizePicks returned ${ppRes.status}. Make sure you're logged in at app.prizepicks.com first.`);
@@ -490,22 +438,16 @@ export default function Settings() {
       toast({ title: "PrizePicks synced", description: `${result.recordsProcessed} lines imported.` });
       setTimeout(() => {
         setPpFetching("idle");
-        setPpDialogOpen(false);
         qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
         refetch();
       }, 2000);
     } catch (e) {
-      // TypeError = CORS block (browser won't say which, security spec).
-      // Any other error = actual fetch/import failure.
-      const isCors = e instanceof TypeError;
-      setPpFetching(isCors ? "cors-blocked" : "error");
-      if (!isCors) {
-        toast({
-          title: "Fetch failed",
-          description: e instanceof Error ? e.message : "Unknown error",
-          variant: "destructive",
-        });
-      }
+      setPpFetching("error");
+      toast({
+        title: "Fetch failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
     }
   }
 
@@ -663,182 +605,189 @@ export default function Settings() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setPpDialogOpen(true)}
+                onClick={fetchPPDirect}
+                disabled={ppFetching === "fetching" || ppFetching === "done"}
                 className={`h-7 font-mono text-xs ${
-                  ppFresh
+                  ppFetching === "done"
+                    ? "border-emerald-600/50 bg-emerald-600/10 text-emerald-300"
+                    : ppFetching === "error"
+                    ? "border-rose-600/50 bg-rose-600/10 text-rose-300 hover:bg-rose-600/20"
+                    : ppFresh
                     ? "border-emerald-600/50 bg-emerald-600/10 text-emerald-300 hover:bg-emerald-600/20"
                     : "border-amber-600/50 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20"
                 }`}
               >
-                {ppFresh ? <CheckCircle2 className="w-3 h-3 mr-1" /> : <Zap className="w-3 h-3 mr-1" />}
-                {ppFresh ? "Re-sync" : "Sync"}
+                {ppFetching === "fetching" ? (
+                  <><RefreshCw className="w-3 h-3 mr-1 animate-spin" />Fetching…</>
+                ) : ppFetching === "done" ? (
+                  <><CheckCircle2 className="w-3 h-3 mr-1" />Synced</>
+                ) : ppFetching === "error" ? (
+                  <><Zap className="w-3 h-3 mr-1" />Retry</>
+                ) : ppFresh ? (
+                  <><CheckCircle2 className="w-3 h-3 mr-1" />Re-sync</>
+                ) : (
+                  <><Zap className="w-3 h-3 mr-1" />Sync</>
+                )}
               </Button>
             </div>
 
-            {/* Chrome extension download — always visible below PP sync row */}
-            <div className="flex items-center justify-between px-3 py-2 rounded bg-emerald-500/5 border border-emerald-500/20">
-              <span className="text-[11px] font-mono text-emerald-300/80">
-                ⚡ Auto-sync Chrome extension
-              </span>
-              <a
-                href="/api/sync/extension-download"
-                download="vmg-extension.zip"
-                className="inline-flex items-center gap-1 rounded bg-emerald-700/80 px-2.5 py-1 font-mono text-[10px] font-bold text-white no-underline hover:bg-emerald-600"
-              >
-                <Download className="w-3 h-3" /> Download .zip
-              </a>
-            </div>
+            {SYNC_JOB_GROUPS.map(group => (
+              <div key={group.label} className="space-y-1.5">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500 pt-2 pb-0.5 px-1">
+                  {group.label}
+                </div>
+                {group.jobs.map(job => {
+                  const prov = JOB_PROVIDER[job.endpoint] ? providerByName[JOB_PROVIDER[job.endpoint]] : undefined;
+                  const isRunning = syncingJob === job.endpoint;
+                  const ok = prov?.status === "success";
+                  const failed = prov?.status === "error";
+                  const ageMs = prov?.lastSuccessAt ? Date.now() - new Date(prov.lastSuccessAt).getTime() : null;
+                  const isStale = job.staleDays != null && ageMs != null && ageMs > job.staleDays * 86400000;
 
-            {SYNC_JOBS.map(job => {
-              const prov = JOB_PROVIDER[job.endpoint] ? providerByName[JOB_PROVIDER[job.endpoint]] : undefined;
-              const isRunning = syncingJob === job.endpoint;
-              const ok = prov?.status === "success";
-              const failed = prov?.status === "error";
-              const ageMs = prov?.lastSuccessAt ? Date.now() - new Date(prov.lastSuccessAt).getTime() : null;
-              const isStale = job.staleDays != null && ageMs != null && ageMs > job.staleDays * 86400000;
-
-              if (job.endpoint === "/api/sync/auto-grade-picks") {
-                const gradeRunning = syncingJob === job.endpoint;
-                const gradeProv = JOB_PROVIDER[job.endpoint] ? providerByName[JOB_PROVIDER[job.endpoint]] : undefined;
-                const gradeOk = gradeProv?.status === "success";
-                const gradeFailed = gradeProv?.status === "error";
-                const pendingCount = autoGradeStats?.pendingPastDated ?? 0;
-                const pendingDot = gradeRunning ? "bg-amber-400 animate-pulse"
-                  : gradeFailed ? "bg-rose-400"
-                  : pendingCount > 0 ? "bg-amber-400"
-                  : gradeOk ? "bg-emerald-400"
-                  : "bg-slate-600";
-                return (
-                  <div key={job.endpoint} className={`flex flex-col gap-1.5 p-3 bg-slate-950 border rounded ${gradeFailed ? "border-rose-500/30" : pendingCount > 0 ? "border-amber-500/20" : "border-slate-800"}`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <span className={`w-2 h-2 rounded-full inline-block shrink-0 ${pendingDot}`} />
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-sm">{job.label}</span>
-                            {pendingCount > 0 && (
-                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-900/40 border border-amber-700/40 text-amber-300">
-                                {pendingCount} need review
+                  if (job.endpoint === "/api/sync/auto-grade-picks") {
+                    const gradeRunning = syncingJob === job.endpoint;
+                    const gradeProv = JOB_PROVIDER[job.endpoint] ? providerByName[JOB_PROVIDER[job.endpoint]] : undefined;
+                    const gradeOk = gradeProv?.status === "success";
+                    const gradeFailed = gradeProv?.status === "error";
+                    const pendingCount = autoGradeStats?.pendingPastDated ?? 0;
+                    const pendingDot = gradeRunning ? "bg-amber-400 animate-pulse"
+                      : gradeFailed ? "bg-rose-400"
+                      : pendingCount > 0 ? "bg-amber-400"
+                      : gradeOk ? "bg-emerald-400"
+                      : "bg-slate-600";
+                    return (
+                      <div key={job.endpoint} className={`flex flex-col gap-1.5 p-3 bg-slate-950 border rounded ${gradeFailed ? "border-rose-500/30" : pendingCount > 0 ? "border-amber-500/20" : "border-slate-800"}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-2 h-2 rounded-full inline-block shrink-0 ${pendingDot}`} />
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-sm">{job.label}</span>
+                                {pendingCount > 0 && (
+                                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-900/40 border border-amber-700/40 text-amber-300">
+                                    {pendingCount} need review
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] font-mono text-muted-foreground">
+                                {gradeProv?.lastSuccessAt
+                                  ? `${gradeProv.recordsLastSync != null ? `${gradeProv.recordsLastSync} graded · ` : ""}${formatDistanceToNow(new Date(gradeProv.lastSuccessAt), { addSuffix: true })}`
+                                  : "Runs nightly at 3:30 AM"}
                               </span>
-                            )}
+                            </div>
                           </div>
-                          <span className="text-[10px] font-mono text-muted-foreground">
-                            {gradeProv?.lastSuccessAt
-                              ? `${gradeProv.recordsLastSync != null ? `${gradeProv.recordsLastSync} graded · ` : ""}${formatDistanceToNow(new Date(gradeProv.lastSuccessAt), { addSuffix: true })}`
-                              : "Runs nightly at 3:30 AM"}
-                          </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => { triggerSync(job.endpoint, job.label); setTimeout(() => refetchGradeStats(), 3000); }}
+                            disabled={gradeRunning || syncingAll}
+                            className={`h-7 font-mono text-xs ${pendingCount > 0 ? "border-amber-600/50 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20" : "border-slate-700 bg-slate-800 hover:bg-slate-700"}`}
+                          >
+                            <RefreshCw className={`w-3 h-3 mr-1 ${gradeRunning ? "animate-spin" : ""}`} />
+                            {gradeRunning ? "Running" : "Grade Now"}
+                          </Button>
                         </div>
+                        {pendingCount > 0 && (
+                          <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-400/80 bg-amber-900/20 border border-amber-700/30 rounded px-2 py-1">
+                            <AlertCircle className="w-3 h-3 shrink-0" />
+                            {pendingCount} past-dated {pendingCount === 1 ? "pick" : "picks"} couldn't be auto-graded — missing game log data. Check Journal to grade manually.
+                          </div>
+                        )}
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => { triggerSync(job.endpoint, job.label); setTimeout(() => refetchGradeStats(), 3000); }}
-                        disabled={gradeRunning || syncingAll}
-                        className={`h-7 font-mono text-xs ${pendingCount > 0 ? "border-amber-600/50 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20" : "border-slate-700 bg-slate-800 hover:bg-slate-700"}`}
-                      >
-                        <RefreshCw className={`w-3 h-3 mr-1 ${gradeRunning ? "animate-spin" : ""}`} />
-                        {gradeRunning ? "Running" : "Grade Now"}
-                      </Button>
-                    </div>
-                    {pendingCount > 0 && (
-                      <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-400/80 bg-amber-900/20 border border-amber-700/30 rounded px-2 py-1">
-                        <AlertCircle className="w-3 h-3 shrink-0" />
-                        {pendingCount} past-dated {pendingCount === 1 ? "pick" : "picks"} couldn't be auto-graded — missing game log data. Check Journal to grade manually.
-                      </div>
-                    )}
-                  </div>
-                );
-              }
+                    );
+                  }
 
-              if (job.endpoint === "/api/sync/calibration") {
-                const calIsStale = calStatus?.isStale ?? isStale;
-                const calAge = calStatus?.lastUpdated
-                  ? formatDistanceToNow(new Date(calStatus.lastUpdated), { addSuffix: true })
-                  : prov?.lastSuccessAt
-                    ? formatDistanceToNow(new Date(prov.lastSuccessAt), { addSuffix: true })
-                    : "Never run";
-                const calDot = isRunning ? "bg-amber-400 animate-pulse"
-                  : calIsStale ? "bg-amber-400"
-                  : calStatus?.bucketCount ? "bg-emerald-400"
-                  : "bg-slate-600";
-                const calBorder = calibrationNudge
-                  ? "border-amber-500/30"
-                  : calIsStale ? "border-amber-500/20"
-                  : "border-slate-800";
-                return (
-                  <div key={job.endpoint} className={`flex flex-col gap-1.5 p-3 bg-slate-950 border rounded ${calBorder}`}>
-                    <div className="flex items-center justify-between">
+                  if (job.endpoint === "/api/sync/calibration") {
+                    const calIsStale = calStatus?.isStale ?? isStale;
+                    const calAge = calStatus?.lastUpdated
+                      ? formatDistanceToNow(new Date(calStatus.lastUpdated), { addSuffix: true })
+                      : prov?.lastSuccessAt
+                        ? formatDistanceToNow(new Date(prov.lastSuccessAt), { addSuffix: true })
+                        : "Never run";
+                    const calDot = isRunning ? "bg-amber-400 animate-pulse"
+                      : calIsStale ? "bg-amber-400"
+                      : calStatus?.bucketCount ? "bg-emerald-400"
+                      : "bg-slate-600";
+                    const calBorder = calibrationNudge
+                      ? "border-amber-500/30"
+                      : calIsStale ? "border-amber-500/20"
+                      : "border-slate-800";
+                    return (
+                      <div key={job.endpoint} className={`flex flex-col gap-1.5 p-3 bg-slate-950 border rounded ${calBorder}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-2 h-2 rounded-full inline-block shrink-0 ${calDot}`} />
+                            <div>
+                              <span className="font-mono text-sm block">{job.label}</span>
+                              <span className={`text-[10px] font-mono ${calIsStale ? "text-amber-400/80" : "text-muted-foreground"}`}>
+                                {calStatus?.bucketCount != null && calStatus.bucketCount > 0
+                                  ? `${calStatus.bucketCount.toLocaleString()} buckets · ${calAge}`
+                                  : calAge}
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => { triggerSync(job.endpoint, job.label); setCalibrationNudge(false); }}
+                            disabled={isRunning || syncingAll}
+                            className={`h-7 font-mono text-xs ${calIsStale || calibrationNudge
+                              ? "border-amber-600/50 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20"
+                              : "border-slate-700 bg-slate-800 hover:bg-slate-700"}`}
+                          >
+                            <RefreshCw className={`w-3 h-3 mr-1 ${isRunning ? "animate-spin" : ""}`} />
+                            {isRunning ? "Running" : "Re-run"}
+                          </Button>
+                        </div>
+                        {calibrationNudge && !isRunning && (
+                          <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-400/80 bg-amber-900/20 border border-amber-700/30 rounded px-2 py-1">
+                            <AlertCircle className="w-3 h-3 shrink-0" />
+                            New game logs imported — consider re-running calibration to improve model accuracy.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  const dotClass = isRunning ? "bg-amber-400 animate-pulse"
+                    : failed ? "bg-rose-400"
+                    : isStale ? "bg-amber-400"
+                    : ok ? "bg-emerald-400"
+                    : "bg-slate-600";
+                  const borderClass = failed ? "border-rose-500/30" : isStale ? "border-amber-500/20" : "border-slate-800";
+                  return (
+                    <div
+                      key={job.endpoint}
+                      className={`flex items-center justify-between p-3 bg-slate-950 border rounded ${borderClass}`}
+                    >
                       <div className="flex items-center gap-2.5">
-                        <span className={`w-2 h-2 rounded-full inline-block shrink-0 ${calDot}`} />
+                        <span className={`w-2 h-2 rounded-full inline-block shrink-0 ${dotClass}`} />
                         <div>
                           <span className="font-mono text-sm block">{job.label}</span>
-                          <span className={`text-[10px] font-mono ${calIsStale ? "text-amber-400/80" : "text-muted-foreground"}`}>
-                            {calStatus?.bucketCount != null && calStatus.bucketCount > 0
-                              ? `${calStatus.bucketCount.toLocaleString()} buckets · ${calAge}`
-                              : calAge}
-                          </span>
+                          {prov && (
+                            <span className={`text-[10px] font-mono ${failed ? "text-rose-400/80" : ok ? "text-muted-foreground" : "text-slate-500"}`}>
+                              {prov.lastSuccessAt
+                                ? `${prov.recordsLastSync != null ? `${prov.recordsLastSync} · ` : ""}${formatDistanceToNow(new Date(prov.lastSuccessAt), { addSuffix: true })}`
+                                : "Never run"}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => { triggerSync(job.endpoint, job.label); setCalibrationNudge(false); }}
+                        onClick={() => triggerSync(job.endpoint, job.label)}
                         disabled={isRunning || syncingAll}
-                        className={`h-7 font-mono text-xs ${calIsStale || calibrationNudge
-                          ? "border-amber-600/50 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20"
-                          : "border-slate-700 bg-slate-800 hover:bg-slate-700"}`}
+                        className="h-7 font-mono text-xs border-slate-700 bg-slate-800 hover:bg-slate-700"
                       >
                         <RefreshCw className={`w-3 h-3 mr-1 ${isRunning ? "animate-spin" : ""}`} />
-                        {isRunning ? "Running" : "Re-run"}
+                        {isRunning ? "Running" : "Sync"}
                       </Button>
                     </div>
-                    {calibrationNudge && !isRunning && (
-                      <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-400/80 bg-amber-900/20 border border-amber-700/30 rounded px-2 py-1">
-                        <AlertCircle className="w-3 h-3 shrink-0" />
-                        New game logs imported — consider re-running calibration to improve model accuracy.
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-
-              const dotClass = isRunning ? "bg-amber-400 animate-pulse"
-                : failed ? "bg-rose-400"
-                : isStale ? "bg-amber-400"
-                : ok ? "bg-emerald-400"
-                : "bg-slate-600";
-              const borderClass = failed ? "border-rose-500/30" : isStale ? "border-amber-500/20" : ok ? "border-slate-800" : "border-slate-800";
-              return (
-                <div
-                  key={job.endpoint}
-                  className={`flex items-center justify-between p-3 bg-slate-950 border rounded ${borderClass}`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className={`w-2 h-2 rounded-full inline-block shrink-0 ${dotClass}`} />
-                    <div>
-                      <span className="font-mono text-sm block">{job.label}</span>
-                      {prov && (
-                        <span className={`text-[10px] font-mono ${failed ? "text-rose-400/80" : ok ? "text-muted-foreground" : "text-slate-500"}`}>
-                          {prov.lastSuccessAt
-                            ? `${prov.recordsLastSync != null ? `${prov.recordsLastSync} · ` : ""}${formatDistanceToNow(new Date(prov.lastSuccessAt), { addSuffix: true })}`
-                            : "Never run"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => triggerSync(job.endpoint, job.label)}
-                    disabled={isRunning || syncingAll}
-                    className="h-7 font-mono text-xs border-slate-700 bg-slate-800 hover:bg-slate-700"
-                  >
-                    <RefreshCw className={`w-3 h-3 mr-1 ${isRunning ? "animate-spin" : ""}`} />
-                    {isRunning ? "Running" : "Sync"}
-                  </Button>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            ))}
           </CardContent>
         </Card>
 
@@ -1037,147 +986,6 @@ export default function Settings() {
           </CardContent>
         </Card>
       </div>
-
-      {/* PrizePicks sync dialog */}
-      <Dialog open={ppDialogOpen} onOpenChange={(open) => { setPpDialogOpen(open); if (!open) setPpFetching("idle"); }}>
-        <DialogContent className="bg-slate-900 border-slate-800 max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-mono flex items-center gap-2 text-amber-300">
-              <Zap className="w-4 h-4" /> Sync PrizePicks Lines
-            </DialogTitle>
-            <DialogDescription className="text-slate-400 text-xs">
-              Make sure you&apos;re already logged in at <span className="text-slate-300 font-mono">app.prizepicks.com</span> in this browser, then tap below.
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Primary: one-tap auto-fetch */}
-          {ppFetching !== "cors-blocked" && (
-            <div className="space-y-2">
-              <Button
-                onClick={fetchPPDirect}
-                disabled={ppFetching === "fetching" || ppFetching === "done"}
-                className="w-full h-12 font-mono text-sm bg-amber-600 hover:bg-amber-500 text-white border-0 disabled:opacity-60"
-              >
-                <RefreshCw className={`w-4 h-4 mr-2 ${ppFetching === "fetching" ? "animate-spin" : ""}`} />
-                {ppFetching === "fetching" ? "Fetching lines…" :
-                 ppFetching === "done"     ? "✓ Lines imported!" :
-                 ppFetching === "error"    ? "Retry fetch" :
-                 "Fetch PrizePicks Lines"}
-              </Button>
-              {ppFetching === "idle" && (
-                <p className="text-[10px] text-center text-muted-foreground">
-                  Pulls directly from PrizePicks using your login session.
-                </p>
-              )}
-              {ppFetching === "error" && (
-                <p className="text-[10px] text-center text-rose-400 font-mono">
-                  Fetch failed — see toast. Check you&apos;re logged in at app.prizepicks.com and try again.
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* CORS-blocked fallback — shown only after a CORS failure */}
-          {ppFetching === "cors-blocked" && (
-            <div className="space-y-3">
-              <div className="rounded border border-rose-500/30 bg-rose-500/5 p-3 text-[11px] text-rose-300 font-mono">
-                PrizePicks blocked the direct fetch (CORS restriction). Use one of the methods below instead.
-              </div>
-
-              {/* Chrome Extension download */}
-              <div className="rounded border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
-                <p className="font-mono text-xs font-bold text-emerald-300">Chrome on laptop — auto-sync extension</p>
-                <p className="text-[11px] text-muted-foreground">
-                  Installs a Chrome extension that syncs PrizePicks automatically on a schedule (default every 15 min) — no clicking required. Requires a <span className="text-slate-300">prizepicks.com</span> tab open in Chrome.
-                </p>
-                <a
-                  href="/api/sync/extension-download"
-                  download="vmg-extension.zip"
-                  className="inline-flex items-center gap-1.5 rounded bg-emerald-700 px-3 py-1.5 font-mono text-xs font-bold text-white no-underline hover:bg-emerald-600"
-                >
-                  <Download className="w-3 h-3" /> Download Extension (.zip)
-                </a>
-                <ol className="text-[10px] text-muted-foreground space-y-0.5 list-none mt-1">
-                  <li>1. Download and unzip the file</li>
-                  <li>2. Go to <span className="text-slate-300 font-mono">chrome://extensions</span> → enable <span className="text-slate-300">Developer mode</span> → <span className="text-slate-300">Load unpacked</span> → select the unzipped folder</li>
-                  <li>3. Click the ⚡ icon in Chrome toolbar → paste this page&apos;s URL as the Workstation URL → Save</li>
-                </ol>
-              </div>
-
-              {/* Bookmarklet — works on desktop + iOS Safari */}
-              <div className="rounded border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
-                <p className="font-mono text-xs font-bold text-amber-300">Desktop / iOS Safari — one-click bookmarklet</p>
-                <ol className="text-[11px] text-muted-foreground space-y-1.5 list-none">
-                  <li className="flex gap-2">
-                    <span className="text-amber-500 font-mono shrink-0 font-bold">Desktop:</span>
-                    <span>Drag the button below to your bookmarks bar. Then go to <span className="text-slate-300 font-mono">app.prizepicks.com</span> and click it — done.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="text-amber-500 font-mono shrink-0 font-bold">iPhone:</span>
-                    <span>Bookmark any page in Safari, then edit that bookmark and replace the URL with the bookmarklet code. Tap &quot;Copy code&quot; below first.</span>
-                  </li>
-                </ol>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <a
-                    ref={setBookmarkletRef}
-                    href="#"
-                    onClick={e => e.preventDefault()}
-                    draggable
-                    className="inline-flex items-center gap-1.5 cursor-grab rounded bg-amber-700 px-3 py-1.5 font-mono text-xs font-bold text-white no-underline hover:bg-amber-600"
-                  >
-                    <Zap className="w-3 h-3" /> PP → Workstation
-                  </a>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => { navigator.clipboard.writeText(bookmarklet); toast({ title: "Bookmarklet code copied", description: "Paste it as the URL of a new Safari bookmark." }); }}
-                    className="h-7 font-mono text-xs border-slate-600 text-slate-300"
-                  >
-                    Copy code
-                  </Button>
-                </div>
-              </div>
-
-              {/* Manual paste — last resort */}
-              <details className="group">
-                <summary className="cursor-pointer text-[10px] font-mono text-muted-foreground hover:text-slate-300 select-none list-none flex items-center gap-1">
-                  <span className="group-open:rotate-90 inline-block transition-transform">▶</span>
-                  Manual paste fallback (Android Chrome / last resort)
-                </summary>
-                <div className="mt-2 space-y-2 rounded border border-slate-700 bg-slate-950 p-3">
-                  <p className="text-[10px] text-muted-foreground">
-                    Open the <a href={ppApiUrl} target="_blank" rel="noreferrer" className="text-amber-300 underline">PP data feed</a>, then in Chrome on Android tap ⋮ → <strong className="text-slate-300">Share → Copy text</strong> (not Copy link). Paste below.
-                  </p>
-                  <textarea
-                    value={ppPaste}
-                    onChange={e => setPpPaste(e.target.value)}
-                    placeholder="Paste the PrizePicks JSON here…"
-                    spellCheck={false}
-                    className="w-full h-20 rounded border border-slate-700 bg-slate-900 p-2 font-mono text-[10px] text-slate-300 resize-y focus:outline-none focus:border-amber-500/50"
-                  />
-                  <Button
-                    onClick={importPpPaste}
-                    disabled={ppImporting === "importing" || ppPaste.trim().length === 0}
-                    className="w-full h-8 font-mono text-xs bg-amber-600 hover:bg-amber-500 text-white border-0 disabled:opacity-40"
-                  >
-                    <RefreshCw className={`w-3 h-3 mr-1.5 ${ppImporting === "importing" ? "animate-spin" : ""}`} />
-                    {ppImporting === "importing" ? "Importing…" : ppImporting === "done" ? "✓ Done" : "Import Pasted Lines"}
-                  </Button>
-                </div>
-              </details>
-
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setPpFetching("idle")}
-                className="w-full h-7 font-mono text-xs text-muted-foreground"
-              >
-                ← Try auto-fetch again
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
