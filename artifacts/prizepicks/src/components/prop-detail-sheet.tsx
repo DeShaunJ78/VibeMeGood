@@ -1207,6 +1207,11 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                               {diff < 0 ? `easier (${diff.toFixed(1)})` : diff > 0 ? `harder (+${diff.toFixed(1)})` : "same"}
                             </span>
                           )}
+                          {!isCurrent && (
+                            <span className="ml-auto text-[9px] font-mono font-bold text-slate-300 bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded shrink-0">
+                              {direction === "more" ? "↑ MORE" : "↓ LESS"}
+                            </span>
+                          )}
                         </div>
                       );
                     })}
