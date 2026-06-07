@@ -2513,6 +2513,9 @@ components:
             minGameTotal: { type: number, description: "Only include props from games with implied total above this threshold (e.g. 220 for NBA)" }
             pacePreference: { type: string, enum: [fast, neutral, any], description: "fast=only include props from fast-pace matchups; neutral=exclude slow; any=no filter" }
             sharpAlignmentOnly: { type: boolean, description: "When true, exclude props where sharp money opposes the pick direction (sharpSignal=sharp_against)" }
+        storyMode: { type: boolean, description: "When true, enables Story Mode — each lineup is built around a named game narrative template (Shootout Stack, Pace Exploit, etc.). Requires gppMode=true for full effect." }
+        storyTemplateId: { type: string, description: "Template to use when storyMode is true. 'auto' distributes lineups across all templates; otherwise a specific template id (shootout, pace_exploit, grind, blowout, underdog)." }
+        maxStoryConcentration: { type: number, minimum: 0, maximum: 1, description: "Max proportion of lineups that can share the same story template (0–1, default 0.4). Only used when storyTemplateId=auto." }
       required: [format, picksPerEntry, numEntries, varianceProfile, optimizationObjective, maxPlayerExposure, maxPickExposure, maxTeamExposure, maxGameExposure, maxPairwiseOverlap, stakePerEntry, allowGtdPlayers, allowSingleBookData, allowStaleMarketData, demonUnderAllowed]
 
     FactoryScoredProp:
@@ -2549,6 +2552,7 @@ components:
         paceTier: { type: ["string", "null"], description: "fast / normal / slow — derived from the projection pace factor" }
         sharpSignal: { type: ["string", "null"], description: "Direction-aware sharp signal: sharp_for (sharp money agrees with pick direction) / sharp_against (opposes) / public (public chalk) / neutral" }
         gameTotal: { type: ["number", "null"], description: "Implied game total from game_environment" }
+        crowdingFreq: { type: ["number", "null"], description: "Proportion of generated lineups this prop appears in (0–1). Null before a run is generated." }
       required: [ppLineId, playerId, playerName, team, sport, statType, direction, lineType, ppLine, hitProbability, probabilitySource, confidence, expectedValue, bookCount, marketDataStatus, reasonCodes, compositeScore]
 
     FactoryLineupPick:
@@ -2587,6 +2591,8 @@ components:
         correlationAdjusted: { type: boolean }
         correlationNote: { type: ["string", "null"] }
         diversificationScore: { type: number }
+        storyTemplate: { type: ["string", "null"], description: "Story template id assigned to this lineup (e.g. 'shootout', 'pace_exploit'). Null when storyMode is off." }
+        anchorPickId: { type: ["integer", "null"], description: "ppLineId of the anchor pick — the pick with highest narrative fit × ceiling / ownership for the assigned story." }
       required: [id, picks, format, picksPerEntry, ev, hitProbability, grossPayout, stake, correlationAdjusted, diversificationScore]
 
     PortfolioStats:
@@ -2604,6 +2610,7 @@ components:
         pickExposure: { type: object, additionalProperties: { type: number } }
         teamExposure: { type: object, additionalProperties: { type: number } }
         topPicksByExposure: { type: array, items: {} }
+        storyDistribution: { type: object, additionalProperties: { type: integer }, description: "Count of lineups per story template when storyMode is active." }
       required: [totalStake, portfolioEV, probAtLeastOneCashes, probBreakEven, probProfitable, worstCaseLoss, maxPayout, avgPairwiseOverlap, playerExposure, pickExposure, teamExposure, topPicksByExposure]
 
     LineupFactoryResult:

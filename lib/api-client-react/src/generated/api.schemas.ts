@@ -1146,6 +1146,16 @@ export interface LineupFactoryConfig {
   biasWeight?: number;
   /** Optional GPP narrative context filters. Only applied when gppMode is true. */
   gppNarrativeFilters?: LineupFactoryConfigGppNarrativeFilters;
+  /** When true, enables Story Mode — each lineup is built around a named game narrative template (Shootout Stack, Pace Exploit, etc.). Requires gppMode=true for full effect. */
+  storyMode?: boolean;
+  /** Template to use when storyMode is true. 'auto' distributes lineups across all templates; otherwise a specific template id (shootout, pace_exploit, grind, blowout, underdog). */
+  storyTemplateId?: string;
+  /**
+     * Max proportion of lineups that can share the same story template (0–1, default 0.4). Only used when storyTemplateId=auto.
+     * @minimum 0
+     * @maximum 1
+     */
+  maxStoryConcentration?: number;
 }
 
 export type FactoryScoredPropDirection = typeof FactoryScoredPropDirection[keyof typeof FactoryScoredPropDirection];
@@ -1227,6 +1237,11 @@ export interface FactoryScoredProp {
      * @nullable
      */
   gameTotal?: number | null;
+  /**
+     * Proportion of generated lineups this prop appears in (0–1). Null before a run is generated.
+     * @nullable
+     */
+  crowdingFreq?: number | null;
 }
 
 export interface FactoryLineupPick {
@@ -1267,6 +1282,16 @@ export interface GeneratedLineup {
   /** @nullable */
   correlationNote?: string | null;
   diversificationScore: number;
+  /**
+     * Story template id assigned to this lineup (e.g. 'shootout', 'pace_exploit'). Null when storyMode is off.
+     * @nullable
+     */
+  storyTemplate?: string | null;
+  /**
+     * ppLineId of the anchor pick — the pick with highest narrative fit × ceiling / ownership for the assigned story.
+     * @nullable
+     */
+  anchorPickId?: number | null;
 }
 
 export type PortfolioStatsPlayerExposure = {[key: string]: number};
@@ -1274,6 +1299,11 @@ export type PortfolioStatsPlayerExposure = {[key: string]: number};
 export type PortfolioStatsPickExposure = {[key: string]: number};
 
 export type PortfolioStatsTeamExposure = {[key: string]: number};
+
+/**
+ * Count of lineups per story template when storyMode is active.
+ */
+export type PortfolioStatsStoryDistribution = {[key: string]: number};
 
 export interface PortfolioStats {
   totalStake: number;
@@ -1288,6 +1318,8 @@ export interface PortfolioStats {
   pickExposure: PortfolioStatsPickExposure;
   teamExposure: PortfolioStatsTeamExposure;
   topPicksByExposure: unknown[];
+  /** Count of lineups per story template when storyMode is active. */
+  storyDistribution?: PortfolioStatsStoryDistribution;
 }
 
 export interface LineupFactoryResult {

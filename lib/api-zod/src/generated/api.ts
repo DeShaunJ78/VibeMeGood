@@ -1912,6 +1912,9 @@ export const generateLineupFactoryBodyMonteCarloIterationsMax = 50000;
 export const generateLineupFactoryBodyBiasWeightMin = 0;
 export const generateLineupFactoryBodyBiasWeightMax = 1;
 
+export const generateLineupFactoryBodyMaxStoryConcentrationMin = 0;
+export const generateLineupFactoryBodyMaxStoryConcentrationMax = 1;
+
 
 
 export const GenerateLineupFactoryBody = zod.object({
@@ -1943,7 +1946,10 @@ export const GenerateLineupFactoryBody = zod.object({
   "minGameTotal": zod.number().optional().describe('Only include props from games with implied total above this threshold (e.g. 220 for NBA)'),
   "pacePreference": zod.enum(['fast', 'neutral', 'any']).optional().describe('fast=only include props from fast-pace matchups; neutral=exclude slow; any=no filter'),
   "sharpAlignmentOnly": zod.boolean().optional().describe('When true, exclude props where sharp money opposes the pick direction (sharpSignal=sharp_against)')
-}).optional().describe('Optional GPP narrative context filters. Only applied when gppMode is true.')
+}).optional().describe('Optional GPP narrative context filters. Only applied when gppMode is true.'),
+  "storyMode": zod.boolean().optional().describe('When true, enables Story Mode — each lineup is built around a named game narrative template (Shootout Stack, Pace Exploit, etc.). Requires gppMode=true for full effect.'),
+  "storyTemplateId": zod.string().optional().describe('Template to use when storyMode is true. \'auto\' distributes lineups across all templates; otherwise a specific template id (shootout, pace_exploit, grind, blowout, underdog).'),
+  "maxStoryConcentration": zod.number().min(generateLineupFactoryBodyMaxStoryConcentrationMin).max(generateLineupFactoryBodyMaxStoryConcentrationMax).optional().describe('Max proportion of lineups that can share the same story template (0–1, default 0.4). Only used when storyTemplateId=auto.')
 })
 
 export const GenerateLineupFactoryResponse = zod.object({
@@ -1976,7 +1982,9 @@ export const GenerateLineupFactoryResponse = zod.object({
   "stake": zod.number(),
   "correlationAdjusted": zod.boolean(),
   "correlationNote": zod.string().nullish(),
-  "diversificationScore": zod.number()
+  "diversificationScore": zod.number(),
+  "storyTemplate": zod.string().nullish().describe('Story template id assigned to this lineup (e.g. \'shootout\', \'pace_exploit\'). Null when storyMode is off.'),
+  "anchorPickId": zod.number().nullish().describe('ppLineId of the anchor pick — the pick with highest narrative fit × ceiling \/ ownership for the assigned story.')
 })),
   "portfolioStats": zod.object({
   "totalStake": zod.number(),
@@ -1990,7 +1998,8 @@ export const GenerateLineupFactoryResponse = zod.object({
   "playerExposure": zod.record(zod.string(), zod.number()),
   "pickExposure": zod.record(zod.string(), zod.number()),
   "teamExposure": zod.record(zod.string(), zod.number()),
-  "topPicksByExposure": zod.array(zod.unknown())
+  "topPicksByExposure": zod.array(zod.unknown()),
+  "storyDistribution": zod.record(zod.string(), zod.number()).optional().describe('Count of lineups per story template when storyMode is active.')
 }),
   "scoredProps": zod.array(zod.object({
   "ppLineId": zod.number(),
@@ -2023,7 +2032,8 @@ export const GenerateLineupFactoryResponse = zod.object({
   "leverageScore": zod.number().nullish().describe('GPP leverage = ceiling-weighted EV \/ ownership_est; higher = contrarian upside'),
   "paceTier": zod.string().nullish().describe('fast \/ normal \/ slow — derived from the projection pace factor'),
   "sharpSignal": zod.string().nullish().describe('Direction-aware sharp signal: sharp_for (sharp money agrees with pick direction) \/ sharp_against (opposes) \/ public (public chalk) \/ neutral'),
-  "gameTotal": zod.number().nullish().describe('Implied game total from game_environment')
+  "gameTotal": zod.number().nullish().describe('Implied game total from game_environment'),
+  "crowdingFreq": zod.number().nullish().describe('Proportion of generated lineups this prop appears in (0–1). Null before a run is generated.')
 })),
   "eligiblePropCount": zod.number(),
   "filteredPropCount": zod.number(),
