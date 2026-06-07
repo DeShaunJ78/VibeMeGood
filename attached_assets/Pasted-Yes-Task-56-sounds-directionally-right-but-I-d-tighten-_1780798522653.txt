@@ -1,0 +1,123 @@
+Yes — Task #56 sounds directionally right, but I’d tighten the scope so it doesn’t become fake “GPP sharpness.”
+
+Right now it fixes the correct problem: your solver is acting like raw projection is king. In Showdown GPP, that is how people donate.
+
+The missing piece: ownership leverage alone is not enough. A low-owned bad captain is still a bad captain. The system needs to prefer:
+
+ceiling + ownership discount + lineup story
+
+Not just “low owned.”
+
+I’d adjust Task #56 like this:
+
+Keep Task #56, but require these rules
+
+1. CPT should not simply be “stud or contrarian”
+
+It should rank CPTs by:
+
+CPT Score = ceiling + projection + leverage + game script fit - ownership penalty
+
+So yes, a stud can still be CPT.
+
+But not automatically.
+
+If the chalk stud is 45% CPT owned and another player has similar ceiling at 12%, the GPP engine should strongly consider the lower-owned player.
+
+That’s real leverage.
+
+⸻
+
+2. Game script must control the lineup story
+
+Each lineup should have a narrative:
+
+Chiefs dominate
+
+* Mahomes CPT
+* 3-2 or 4-2 Chiefs build
+* Opposing bring-back
+
+Underdog wins
+
+* Underdog CPT
+* 3-3 or 4-2 dog build
+* Favorite pass-catcher bring-back
+
+Ugly defensive game
+
+* Kicker/Defense viable
+* Fewer expensive skill players
+* Lower total build
+
+Without story logic, the optimizer just makes math soup.
+
+⸻
+
+3. Cash and GPP must use different brains
+
+Cash mode:
+
+* safer CPT
+* higher median projection
+* less concern for ownership
+* avoid thin punts
+* avoid weird game scripts
+
+GPP mode:
+
+* ceiling CPT
+* ownership penalty
+* correlated stack
+* lower duplicated lineup risk
+* embrace uncomfortable but logical builds
+
+Let that sink in: GPP lineups should make you slightly uncomfortable. Not reckless. Just not obvious.
+
+⸻
+
+4. Add duplication risk
+
+This is the big one I’d add.
+
+DraftKings Showdown GPPs are brutal because duplicate lineups kill upside.
+
+Task #56 should also penalize:
+
+* leaving $0 salary unused too often
+* using the most obvious CPT
+* using the most common 5 flex combinations
+* building 5-1 favorite stacks when everyone is doing it
+* playing the same cheap value everyone needs
+
+A lineup can project well and still be dead because 800 people have it.
+
+⸻
+
+My verdict
+
+Do Task #56 — but expand it slightly.
+
+Rename it something like:
+
+Task #56: Showdown Contest Intelligence Engine
+
+It should include:
+
+* Contest mode toggle
+* Ownership leverage
+* CPT ownership penalty
+* Game script templates
+* Correlation rules
+* Duplication risk penalty
+* Cash vs GPP scoring weights
+
+The core idea is right.
+
+But don’t let the dev stop at “we added ownership penalty.”
+
+That’s baby food.
+
+You want the solver asking:
+
+“What story wins this slate, and how many people are likely telling the same story?”
