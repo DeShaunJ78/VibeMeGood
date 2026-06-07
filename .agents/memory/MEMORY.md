@@ -33,6 +33,7 @@
 - [Rescore vs Sync Odds](rescore-vs-sync-odds.md) — POST /api/sync/rescore-props runs only recalcPropScores() (free, no API call); POST /api/sync/external-odds fetches live lines (costs Odds API credits). Never conflate the two.
 - [Roster auto-population](roster-auto-population.md) — backfill was silently dropping 95%+ of boxscore data; fix: pre-fetch all 30 NBA/32 NHL/MLB rosters and upsert unknown players before boxscore pass; TRUNCATE calibration + re-run calibration job after first full run.
 - [GPP mode design](gpp-mode-design.md) — composite score, leverage formula, direction-aware sharp signal mapping, narrative filter gate, pace season dedup, ownership source, and backtest entry tagging.
+- [GPP filter null-guard](gpp-filter-null-guard.md) — null data = include (unknown), not exclude; pattern: `p.field !== null && p.field < threshold`. Missing this silently drops all props.
 - [Role stability scoring](role-stability-scoring.md) — minutes computed from player_game_logs.minutes (existing col); dedupe by (playerId, gameDate); stored in prop_scores.reasoning JSONB; penalty applied in riskScore capped at 100.
 - [Exposure endpoint pattern](exposure-endpoint-pattern.md) — GET /api/entries/exposure aggregates pending-entry stake by gameId; dedupe entryId+gameId to avoid double-counting multi-pick games; load games/teams separately and join in-memory.
 - [edgeScore market formula](edgescore-market-formula.md) — marketEdge is a %; dividing by ppLine (raw line value) makes scores depend on line magnitude; correct formula is marketEdge*3 capped 0–100.

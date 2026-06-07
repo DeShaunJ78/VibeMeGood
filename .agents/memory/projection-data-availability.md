@@ -8,7 +8,8 @@ Always check row-level population before building a factor that reads them, or y
 ship a no-op that silently does nothing.
 
 **As audited (verify again — data may accrue over time):**
-- `games.spread` / `games.total`: **empty** (0 of recent games). `game_environment` table: **0 rows**. → implied team total has no source; the games sync does not fetch spreads/totals, and the odds sync pulls only player-prop markets (adding game markets costs extra Odds API credits).
+- `games.spread` / `games.total`: **51/57 games have totals** — `syncGameOdds` writes them from the Odds API. **`game_environment` table is 0 rows and should never be read** — use `gamesTable.total` directly. Lineup-factory was reading `game_environment` (bug: fixed).
+- `team_pace_ratings`: 53 rows, NBA-only, `pace_rating` is raw possessions (~95–110). Use absolute thresholds (>102 = fast, <98 = slow), NOT ratio thresholds (1.02/0.98) — that bug made every team "fast".
 - `player_game_logs.minutes`: **all NULL**. `home_away`: **all NULL**. `opponent_team_id`: partially populated (~3%). → projected-minutes, minutes-blowout haircut, and home/away *splits* have no data.
 - Box-score stat rows (`FieldGoalsAttempted`/`FreeThrowsAttempted`/`OffensiveRebounds`/`Minutes`) are **absent** from `player_game_logs` (only `Turnovers` exists among them). → live pace-from-logs cannot compute; `team_pace_ratings` are 100% **seed constants** (`games_computed=0`), NBA-only. Pace is a static preseason constant, not a live signal.
 - `our_projections` has `paceFactor`/`defenseFactor`/`restFactor` columns — **never written** by computeProjection.

@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import {
   ppLinesTable, playersTable, propScoresTable, ourProjectionsTable,
   varianceScoresTable, externalLinesTable, syncRunsTable,
-  entryPicksTable, entriesTable, gameEnvironmentTable, lineMoveEventsTable,
+  entryPicksTable, entriesTable, gamesTable, lineMoveEventsTable,
   teamPaceRatingsTable, teamsTable, crowdOwnershipTable,
 } from "@workspace/db/schema";
 import { eq, and, inArray, desc, isNotNull } from "drizzle-orm";
@@ -411,14 +411,18 @@ router.post("/lineup-factory/generate", async (req, res) => {
       extByLineId.get(el.ppLineId)!.push(el);
     }
 
-    // ── 2b. Bulk query game environment (for GPP game totals) ─────────────
+    // ── 2b. Bulk query game totals from games table ────────────────────────
+    // syncGameOdds writes consensus totals onto games.total from the Odds API.
+    // game_environment is a legacy table and is never populated; read games directly.
     const gameIds = [...new Set(rows.map(r => r.line.gameId).filter((id): id is number => id !== null))];
-    const allGameEnvs = gameIds.length
-      ? await db.select().from(gameEnvironmentTable).where(inArray(gameEnvironmentTable.gameId, gameIds))
+    const allGameRows = gameIds.length
+      ? await db.select({ id: gamesTable.id, total: gamesTable.total })
+          .from(gamesTable)
+          .where(inArray(gamesTable.id, gameIds))
       : [];
     const gameTotalById = new Map<number, number>();
-    for (const ge of allGameEnvs) {
-      if (ge.gameId && ge.gameTotal) gameTotalById.set(ge.gameId, parseFloat(ge.gameTotal.toString()));
+    for (const g of allGameRows) {
+      if (g.total != null) gameTotalById.set(g.id, parseFloat(g.total.toString()));
     }
 
     // ── 2c. Bulk query team pace ratings (keyed by teamId via teams.abbreviation) ──
@@ -462,7 +466,9 @@ router.post("/lineup-factory/generate", async (req, res) => {
         for (const t of allTeams) {
           const rating = paceByAbbrSport.get(`${t.abbr}:${t.sport}`);
           if (rating !== undefined) {
-            paceByTeamId.set(t.id, rating > 1.02 ? "fast" : rating < 0.98 ? "slow" : "normal");
+            // pace_rating is a raw pace number (e.g. NBA: ~95–110 possessions/48 min).
+            // Use absolute thresholds, not ratio thresholds.
+            paceByTeamId.set(t.id, rating > 102 ? "fast" : rating < 98 ? "slow" : "normal");
           }
         }
       }
@@ -830,14 +836,17 @@ router.post("/lineup-factory/generate", async (req, res) => {
       if (p.lineType === "demon" && !cfg.demonUnderAllowed && p.direction === "less") return false;
 
       // ── GPP narrative filters (only applied when gppMode toggle is on) ──
+      // When the underlying field is null (unknown), the filter does NOT exclude
+      // the prop — data absence means "we don't know", not "it doesn't qualify".
+      // This prevents all props being silently eliminated when data is sparse.
       if (cfg.gppMode && cfg.gppNarrativeFilters) {
         const { minGameTotal, pacePreference, sharpAlignmentOnly } = cfg.gppNarrativeFilters;
-        // Game total threshold — exclude props from games below threshold OR with unknown total
-        if (minGameTotal !== undefined && (p.gameTotal === null || p.gameTotal < minGameTotal)) return false;
-        // Pace preference — use paceTier from projection paceFactor
-        if (pacePreference === "fast" && p.paceTier !== "fast") return false;
-        if (pacePreference === "neutral" && p.paceTier === "slow") return false;
-        // Sharp alignment — exclude props where sharp money opposes the pick direction
+        // Game total: only exclude when we actually have the total and it's below threshold
+        if (minGameTotal !== undefined && p.gameTotal !== null && p.gameTotal < minGameTotal) return false;
+        // Pace: only exclude when pace data is present and the tier doesn't match the preference
+        if (pacePreference === "fast" && p.paceTier !== null && p.paceTier !== "fast") return false;
+        if (pacePreference === "neutral" && p.paceTier !== null && p.paceTier === "slow") return false;
+        // Sharp: only exclude when we have an explicit signal that opposes the pick
         if (sharpAlignmentOnly && p.sharpSignal === "sharp_against") return false;
       }
 

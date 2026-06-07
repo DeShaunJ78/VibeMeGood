@@ -313,18 +313,30 @@ async function runSyncExternalOdds(force = false): Promise<number> {
 
               const existingVal = existing?.lineValue?.toString();
               if (existing && existingVal !== lineVal) {
+                const prevF = parseFloat(existingVal || "0");
+                const newF  = parseFloat(lineVal);
+                const size  = newF - prevF;
+                const absSz = Math.abs(size);
+                const dir   = size > 0 ? "up" : "down";
+                // A move ≥ 0.5 is large enough to indicate sharp/informed money.
+                // The lineup factory combines this signal with move direction to
+                // determine per-pick "sharp_for" vs "sharp_against".
+                const sharpSig = absSz >= 0.5 ? "sharp_for" : null;
+                const sharpConf = absSz >= 1.0 ? "high" : absSz >= 0.5 ? "medium" : null;
+                const sharpExpl = sharpSig
+                  ? `Line moved ${dir} by ${absSz.toFixed(1)} from ${prevF} to ${newF} — significant move suggests sharp action`
+                  : null;
                 await db.insert(lineMoveEventsTable).values({
-                  ppLineId: match.line.id,
-                  bookName: bookmaker.key,
-                  prevLine: existingVal || null,
-                  newLine: lineVal,
-                  moveSize: existingVal
-                    ? (parseFloat(lineVal) - parseFloat(existingVal)).toString()
-                    : null,
-                  moveDirection: existingVal
-                    ? parseFloat(lineVal) > parseFloat(existingVal) ? "up" : "down"
-                    : null,
-                  capturedAt: new Date(),
+                  ppLineId:        match.line.id,
+                  bookName:        bookmaker.key,
+                  prevLine:        existingVal || null,
+                  newLine:         lineVal,
+                  moveSize:        existingVal ? size.toString() : null,
+                  moveDirection:   existingVal ? dir : null,
+                  capturedAt:      new Date(),
+                  sharpSignal:     sharpSig,
+                  sharpConfidence: sharpConf,
+                  sharpExplanation: sharpExpl,
                 });
               }
 
