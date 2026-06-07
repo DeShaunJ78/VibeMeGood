@@ -409,29 +409,13 @@ export default function Settings() {
     setSyncingAll(false);
   }
 
-  const serverOrigin = window.location.origin;
-  const importUrl = `${serverOrigin}/api/sync/pp-lines-import`;
-  const ppApiUrl = "https://api.prizepicks.com/projections?per_page=25000&single_stat=true&include=new_player,league";
-
   async function fetchPPDirect() {
     setPpFetching("fetching");
     try {
-      const ppRes = await fetch(ppApiUrl, { credentials: "include" });
-      if (!ppRes.ok) {
-        throw new Error(`PrizePicks returned ${ppRes.status}. Make sure you're logged in at app.prizepicks.com first.`);
-      }
-      const json = await ppRes.json() as { data?: unknown[]; included?: unknown[] };
-      if (!Array.isArray(json?.data) || !Array.isArray(json?.included)) {
-        throw new Error("Response wasn't the projections feed. Try logging in to PrizePicks first.");
-      }
-      const importRes = await fetch(importUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: json.data, included: json.included }),
-      });
+      const importRes = await fetch("/api/sync/pp-lines-fetch", { method: "POST" });
       if (!importRes.ok) {
         const err = await importRes.json().catch(() => ({})) as { error?: string };
-        throw new Error(err.error ?? `Import failed: ${importRes.status}`);
+        throw new Error(err.error ?? `Sync failed: ${importRes.status}`);
       }
       const result = await importRes.json() as { recordsProcessed: number };
       setPpFetching("done");
@@ -591,7 +575,6 @@ export default function Settings() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-sm">PrizePicks Lines</span>
-                    <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">Browser</span>
                   </div>
                   <span className={`text-[10px] font-mono ${ppFresh ? "text-emerald-400/80" : ppNever ? "text-slate-500" : "text-amber-400/80"}`}>
                     {ppNever

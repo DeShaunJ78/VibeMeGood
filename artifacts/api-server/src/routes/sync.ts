@@ -335,6 +335,65 @@ router.post("/sync/pp-lines-import", async (req, res) => {
   }
 });
 
+// Server-side PP fetch: eliminates CORS issues from browser-direct approach.
+// Uses PP_PROXY_URL (residential proxy) if set; falls back to direct.
+router.post("/sync/pp-lines-fetch", async (req, res) => {
+  const proxyUrl = process.env.PP_PROXY_URL;
+  const ppApiUrl = "https://api.prizepicks.com/projections?per_page=25000&single_stat=true&include=new_player,league";
+  const ppHeaders = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://app.prizepicks.com/",
+    "Origin": "https://app.prizepicks.com",
+  };
+
+  const [log] = await db.insert(dataPullLogsTable).values({
+    provider: "prizepicks",
+    jobName: "pp-lines-browser-import",
+    status: "running",
+    startedAt: new Date(),
+  }).returning();
+
+  try {
+    let ppRes: Response;
+    if (proxyUrl) {
+      const { ProxyAgent } = await import("undici");
+      const dispatcher = new ProxyAgent(proxyUrl);
+      // @ts-ignore — undici dispatcher is not in the standard fetch types
+      ppRes = await fetch(ppApiUrl, { headers: ppHeaders, dispatcher, signal: AbortSignal.timeout(30_000) });
+    } else {
+      ppRes = await fetch(ppApiUrl, { headers: ppHeaders, signal: AbortSignal.timeout(30_000) });
+    }
+
+    if (!ppRes.ok) {
+      throw new Error(`PrizePicks returned ${ppRes.status} — ${ppRes.statusText || "blocked"}`);
+    }
+
+    const json = await ppRes.json() as { data?: unknown[]; included?: unknown[] };
+    if (!Array.isArray(json?.data) || !Array.isArray(json?.included)) {
+      throw new Error("PrizePicks response missing data/included arrays");
+    }
+
+    const recordsProcessed = await processPpData({ data: json.data, included: json.included });
+    await recalcPropScores();
+    await db.update(dataPullLogsTable)
+      .set({ status: "success", recordsProcessed, finishedAt: new Date() })
+      .where(eq(dataPullLogsTable.id, log.id));
+    broadcastSyncStatus("pp-lines", "success", `${recordsProcessed} records`);
+    req.log.info({ recordsProcessed, proxy: !!proxyUrl }, "PP server fetch complete");
+    res.json({ status: "success", recordsProcessed });
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    await db.update(dataPullLogsTable)
+      .set({ status: "error", errorMessage, finishedAt: new Date() })
+      .where(eq(dataPullLogsTable.id, log.id));
+    broadcastSyncStatus("pp-lines", "error", errorMessage);
+    req.log.error({ err, proxy: !!proxyUrl }, "PP server fetch failed");
+    res.status(502).json({ error: errorMessage });
+  }
+});
+
 router.post("/sync/injuries", async (req, res) => {
   await runSync("injury-news", "sync-injuries", syncInjuriesImpl, res);
 });
