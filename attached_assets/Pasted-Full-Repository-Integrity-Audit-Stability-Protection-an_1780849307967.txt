@@ -1,0 +1,614 @@
+Full Repository Integrity Audit, Stability Protection, and Root-Cause Fix Command
+
+You are not doing a quick patch.
+
+You are performing a full data-integrity, projection-accuracy, sync-flow, calculation, database, architecture, and UI trust audit of this application.
+
+The app keeps getting patched component-by-component instead of receiving permanent root-cause fixes. Every time one thing gets fixed, another thing breaks. That stops now.
+
+The goal is not simply to make individual bugs disappear.
+
+The goal is to make the entire system reliable, accurate, maintainable, trustworthy, and stable.
+
+⸻
+
+Core Mission
+
+Determine whether this application can be trusted.
+
+Review the relevant codebase deeply and trace the full lifecycle of every important value from source to screen:
+
+1. API ingestion
+2. Sync buttons and sync jobs
+3. Data normalization
+4. Database/storage writes
+5. Projection generation
+6. Calibration buckets
+7. Edge scoring
+8. Probability/confidence logic
+9. Math formulas and calculations
+10. UI display of projections, scores, lines, results, and recommendations
+11. Error handling, loading states, retries, and failure recovery
+
+This app was designed to generate accurate projections based on multiple data sources, historical data, calibration systems, market data, and supporting calculations.
+
+Currently, it does not behave reliably.
+
+⸻
+
+Stability and Non-Breaking Change Requirements
+
+This application already contains working functionality.
+
+The objective is to improve reliability, accuracy, maintainability, and trustworthiness WITHOUT breaking existing working features.
+
+Before making any code changes:
+
+1. Identify all affected systems.
+2. Identify all dependencies.
+3. Identify all upstream and downstream consumers.
+4. Determine what could break if the change is applied.
+5. Document the risk level of the change.
+6. Propose a safer alternative if risk is high.
+
+⸻
+
+Change Safety Rules
+
+Do not restructure major systems unless there is a clear architectural reason.
+
+Do not rename routes, services, database fields, hooks, components, utilities, API contracts, or schemas without verifying every dependency.
+
+Do not remove existing logic simply because it appears unused.
+
+Verify whether code is:
+
+* Referenced dynamically
+* Feature flagged
+* Used by scheduled jobs
+* Used by admin tooling
+* Used by reporting
+* Used by background services
+* Used by hidden routes
+* Used by future workflows
+
+before removing it.
+
+⸻
+
+Backward Compatibility Requirements
+
+Every change must preserve:
+
+* Existing API contracts
+* Existing database compatibility
+* Existing user workflows
+* Existing projection workflows
+* Existing sync workflows
+* Existing reporting functionality
+* Existing calibration functionality
+* Existing tracking functionality
+* Existing historical data
+* Existing bankroll logic
+* Existing recommendation logic
+
+If a breaking change is required:
+
+1. Explain why.
+2. Identify impacted systems.
+3. Provide migration steps.
+4. Provide rollback steps.
+5. Provide regression tests.
+
+⸻
+
+Regression Prevention Requirements
+
+For every bug fixed:
+
+Create a test that reproduces the original bug.
+
+Verify:
+
+* Existing functionality still works.
+* Existing calculations still match expected results.
+* Existing sync flows still complete successfully.
+* Existing projections still generate correctly.
+* Existing pages still render correctly.
+* Existing user actions still work.
+
+No bug fix is considered complete until a regression test exists.
+
+⸻
+
+Protected Systems
+
+Treat these as high-risk systems:
+
+* Projection generation
+* Calibration buckets
+* Edge scoring
+* Confidence calculations
+* Probability calculations
+* CLV calculations
+* Historical tracking
+* Sync jobs
+* Database writes
+* Authentication
+* User settings
+* Bankroll logic
+* Entry tracking
+* Contest tracking
+* Recommendation engine
+
+Changes to these systems require dependency analysis and regression validation.
+
+⸻
+
+Refactoring Rules
+
+If code must be centralized or cleaned up:
+
+* Preserve existing behavior.
+* Preserve outputs.
+* Preserve database compatibility.
+* Preserve API responses.
+* Preserve user-facing functionality.
+
+Refactoring must not change business logic unless a documented bug is being fixed.
+
+⸻
+
+Verification Before Merge
+
+Before marking work complete, prove:
+
+* No existing feature was broken.
+* No existing route was broken.
+* No existing sync process was broken.
+* No existing calculation changed unexpectedly.
+* No existing database records became invalid.
+* No existing user workflow regressed.
+
+Provide evidence through tests, validation logs, or documented verification steps.
+
+⸻
+
+Final Stability Requirement
+
+Assume every modification has the potential to create hidden regressions.
+
+Favor root-cause fixes over patches.
+
+Favor safe improvements over risky rewrites.
+
+Improve architecture where necessary, but do not sacrifice working functionality to achieve cleaner code.
+
+The goal is not simply to make the requested feature work.
+
+The goal is to make the entire system more reliable while preserving everything that already works correctly.
+
+⸻
+
+Known Problems To Investigate
+
+* Sync buttons are messy, disorganized, duplicated, and unclear.
+* Sync buttons often spin forever or fail silently.
+* Sync actions do not always complete.
+* Data displayed in the UI appears inaccurate.
+* Projection logic is unreliable.
+* Calibration buckets may not be applied correctly.
+* Some areas of the app do not make logical sense.
+* Previous fixes appear to be patches instead of root-cause repairs.
+* One fix often breaks another feature.
+* Math and calculations may be wrong, inconsistent, duplicated, stale, or split across frontend/backend.
+* Loading states, failure states, and success states are not trustworthy.
+* The app may be generating confidence from incomplete or bad data.
+* The app may be hiding API/data failures behind fallback values.
+* The app may be recomputing values that should be snapshotted.
+* The app may be displaying stale cached data as if it is current.
+
+This is a decision engine.
+
+Bad math equals bad decisions.
+
+Bad data equals bad projections.
+
+Bad projections destroy trust.
+
+⸻
+
+Audit Instructions
+
+1. Map the Current System
+
+Identify and document:
+
+* Which APIs are being used.
+* Where each data source enters the app.
+* Where data is transformed.
+* Where data is stored.
+* Which tables/collections are involved.
+* Which backend routes receive sync/projection requests.
+* Which services calculate projections.
+* Which files calculate:
+    * Calibration
+    * Edge score
+    * Confidence
+    * Probability
+    * Expected value
+    * CLV
+    * Source weighting
+    * Recommendation tiers
+    * Suggested stake
+* Which frontend components display those values.
+* Which sync buttons call which frontend functions.
+* Which frontend functions call which backend routes.
+* Which backend routes call which services.
+* Which services write to the database.
+* Which functions can fail silently.
+* Which functions can hang indefinitely.
+* Which calculations are duplicated across files.
+* Which values are being recomputed instead of stored as historical snapshots.
+* Which values are stale, nullable, missing, mocked, assumed, or unsafe.
+
+⸻
+
+2. Verify Every Important Calculation
+
+For every projection-related calculation, identify:
+
+* Formula name
+* File path
+* Function name
+* Inputs
+* Output
+* Expected behavior
+* Current behavior
+* Whether the formula is correct
+* Whether the formula is used consistently
+* Whether frontend and backend agree
+* Whether values are rounded too early
+* Whether percentages, decimals, odds, probabilities, and multipliers are mixed incorrectly
+* Whether null/undefined data creates false confidence
+* Whether fallback values hide bad data
+* Whether the formula should be centralized
+
+Pay special attention to:
+
+* Projection gap
+* Edge score
+* Confidence score
+* Calibration bucket assignment
+* Historical hit rate
+* Expected value
+* CLV
+* Closing line comparison
+* Recommended stake
+* Tier assignment
+* Source weighting
+* Market consensus
+* Model projection vs market line comparison
+* Ownership leverage
+* Game script logic
+* DFS optimizer logic
+* Contest-specific logic
+* PrizePicks recommendation logic
+
+If the same metric is calculated in more than one place, flag it.
+
+There should be one source of truth for critical math.
+
+⸻
+
+3. Audit Sync Behavior
+
+For each sync button/job, identify:
+
+* Frontend component path
+* Button label
+* Button location
+* Handler function
+* API route called
+* Backend controller/route file
+* Backend service called
+* External API/data source involved
+* Data expected from source
+* Data transformation step
+* Database table written to
+* What success means
+* What partial success means
+* What failure means
+* What UI shows during loading
+* What UI shows on success
+* What UI shows on partial failure
+* What UI shows on failure
+* Why it may spin forever
+* Whether timeout handling exists
+* Whether duplicate jobs can run
+* Whether duplicate records can be created
+* Whether good data can be overwritten
+* Whether job locking or deduplication is needed
+
+Every sync must terminate in:
+
+* idle
+* running
+* success
+* partial_success
+* failed
+
+No endless spinners.
+
+⸻
+
+4. Audit Data Integrity
+
+Review:
+
+* Database schema
+* Migrations
+* Storage layer
+* ORM models
+* Database access patterns
+* Write/update logic
+
+Identify:
+
+* Missing required fields
+* Unsafe nullable fields
+* Incorrect field types
+* Missing indexes
+* Missing unique constraints
+* Missing foreign keys
+* Duplicate records
+* Orphaned records
+* Stale records
+* Incorrect upserts
+* Race conditions
+* Unsafe writes
+* Failed sync overwrites
+* Snapshot gaps
+
+Important snapshot candidates:
+
+* Projection at recommendation time
+* Market line at recommendation time
+* Edge score at recommendation time
+* Confidence score at recommendation time
+* Calibration bucket at recommendation time
+* Tier at recommendation time
+* Recommended stake at recommendation time
+* Source weights at recommendation time
+* CLV values
+* Final outcomes
+
+Historical reporting must remain historically accurate.
+
+⸻
+
+5. Audit UI Logic
+
+Identify:
+
+* Confusing button placement
+* Duplicate sync controls
+* Missing explanations
+* Misleading labels
+* Missing source transparency
+* Missing timestamps
+* Empty states that appear broken
+* Endless loading states
+* Weak error messages
+* Frontend-generated calculations
+* Stale cache presentation
+* Inconsistent terminology
+* Data displayed without sufficient context
+
+The UI must tell the truth.
+
+If data is missing, stale, invalid, or incomplete, the app should clearly communicate that.
+
+⸻
+
+6. Search for Dangerous Code Patterns
+
+Search the entire repo for:
+
+catch (e) {}
+catch {}
+return null
+return []
+return {}
+as any
+@ts-ignore
+@ts-expect-error
+console.error
+TODO
+FIXME
+mock
+fake
+placeholder
+fallback
+hardcoded
+setTimeout
+setInterval
+isLoading
+isPending
+isFetching
+staleTime
+cacheTime
+enabled:
+retry:
+NaN
+Infinity
+Number(
+parseFloat
+parseInt
+Math.round
+Math.floor
+Math.ceil
+
+Review every occurrence.
+
+Determine whether it can hide bad data, stale state, broken calculations, silent failures, or false confidence.
+
+⸻
+
+Required Report Before Coding
+
+Before changing code, produce:
+
+1. Executive Summary
+
+Explain root problems in plain English.
+
+2. Data Flow Map
+
+External APIs → Backend Routes → Services → Normalization → Database → Calculation Layer → Frontend API → UI
+
+3. Sync System Diagnosis
+
+Every sync button, route, service, issue, and permanent fix.
+
+4. Math & Calculation Audit
+
+Every important formula, file path, function, correctness review, duplication analysis, and recommended changes.
+
+5. Projection Accuracy Risks
+
+Separate risks into:
+
+* Data risk
+* Formula risk
+* Calibration risk
+* Sync risk
+* Cache risk
+* UI risk
+
+6. Root-Cause Fix Plan
+
+Prioritized permanent solution roadmap.
+
+7. Files to Change
+
+Exact files and reasons.
+
+8. Database & Schema Concerns
+
+Data model weaknesses and fixes.
+
+9. Testing Plan
+
+Tests proving correctness.
+
+10. Regression Protection
+
+How future changes will avoid breaking working functionality.
+
+11. Integrity Scorecard
+
+Rate:
+
+* Data Integrity
+* Sync Reliability
+* Projection Accuracy
+* Math Consistency
+* Calibration Reliability
+* Database Design
+* UI Trustworthiness
+* Error Handling
+* Regression Safety
+
+Explain every score.
+
+⸻
+
+Implementation Rules
+
+* Do not patch symptoms.
+* Do not fake data.
+* Do not hide errors.
+* Do not silently swallow failures.
+* Do not duplicate formulas.
+* Do not calculate critical values differently in frontend and backend.
+* Do not allow endless spinners.
+* Do not allow duplicate sync corruption.
+* Do not make cosmetic fixes before architectural fixes.
+* Do not remove working features without proof.
+* Do not overwrite good data with failed sync results.
+* Do not generate projections from incomplete required inputs.
+* Do not claim success without evidence.
+
+⸻
+
+Required Improvements
+
+Implement or propose:
+
+* Centralized projection calculation service
+* Centralized calibration service
+* Centralized sync job service
+* Shared formula library
+* Sync job status model
+* Timeout handling
+* Duplicate job prevention
+* Useful user-facing errors
+* Source transparency
+* Input validation
+* Missing-data safeguards
+* API response validation
+* Structured logging
+* Formula tests
+* Sync tests
+* Projection tests
+* Calibration tests
+* Regression tests
+
+⸻
+
+Implementation Phases
+
+Phase 1: Stabilize Sync System
+
+Phase 2: Fix Data Normalization and Storage
+
+Phase 3: Centralize and Verify Math
+
+Phase 4: Fix Projection and Calibration Logic
+
+Phase 5: Clean Up UI Logic
+
+Phase 6: Add Tests and Regression Protection
+
+Phase 7: Final Verification with Real Data
+
+⸻
+
+Final Acceptance Criteria
+
+The work is not complete until:
+
+* Sync buttons complete or fail clearly.
+* No endless spinners exist.
+* Projection math is centralized and tested.
+* Calibration buckets function correctly.
+* Data shown in UI matches backend calculations.
+* Missing data does not create fake confidence.
+* API failures are visible and logged.
+* Stale data is identified.
+* Valid data is not overwritten by failed syncs.
+* Historical records remain historically accurate.
+* Frontend and backend agree on calculations.
+* Existing working functionality remains intact.
+* No regressions are introduced.
+* The app produces projections only when valid data exists.
+* The application becomes trustworthy enough to make real decisions from.
+
+Start by auditing.
+
+Do not patch first.
+
+Diagnose first.
+
+Present the full audit and implementation plan before making code changes.
