@@ -91,15 +91,21 @@ router.get("/dashboard/review", async (req, res) => {
     const gradedPicks = picks.filter(p =>
       completedEntryIds.has(p.entryId) && (p.result === "hit" || p.result === "miss")
     );
-    const statMap: Record<string, { hits: number; total: number; edgeSum: number; edgeCount: number }> = {};
+    const statMap: Record<string, { hits: number; total: number; edgeSum: number; edgeCount: number; marginSum: number; marginCount: number }> = {};
     for (const p of gradedPicks) {
       const st = p.statType;
-      if (!statMap[st]) statMap[st] = { hits: 0, total: 0, edgeSum: 0, edgeCount: 0 };
+      if (!statMap[st]) statMap[st] = { hits: 0, total: 0, edgeSum: 0, edgeCount: 0, marginSum: 0, marginCount: 0 };
       statMap[st].total++;
       if (p.result === "hit") statMap[st].hits++;
       if (p.snapshotEdgeScore != null) {
         statMap[st].edgeSum += Number(p.snapshotEdgeScore);
         statMap[st].edgeCount++;
+      }
+      if (p.actualResult != null) {
+        // margin = actualResult - lineValue (positive = cleared line)
+        const margin = Number(p.actualResult) - Number(p.lineValue);
+        statMap[st].marginSum += margin;
+        statMap[st].marginCount++;
       }
     }
     const statBreakdown = Object.entries(statMap)
@@ -110,6 +116,7 @@ router.get("/dashboard/review", async (req, res) => {
         hitCount: d.hits,
         hitRate: d.total > 0 ? Math.round((d.hits / d.total) * 1000) / 1000 : null,
         avgEdge: d.edgeCount > 0 ? Math.round((d.edgeSum / d.edgeCount) * 10) / 10 : null,
+        avgMargin: d.marginCount > 0 ? Math.round((d.marginSum / d.marginCount) * 10) / 10 : null,
       }))
       .sort((a, b) => b.pickCount - a.pickCount);
 

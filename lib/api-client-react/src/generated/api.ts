@@ -45,6 +45,7 @@ import type {
   EntryUpdate,
   EntryWithPicks,
   ExportEntriesCsvParams,
+  ExposureResponse,
   ExternalLine,
   Game,
   GameInput,
@@ -2437,6 +2438,83 @@ export function useGetSlateRow<TData = Awaited<ReturnType<typeof getSlateRow>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetSlateRowQueryOptions(ppLineId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetEntriesExposureUrl = () => {
+
+
+
+
+  return `/api/entries/exposure`
+}
+
+/**
+ * @summary Per-game stake exposure across all pending (open) entries
+ */
+export const getEntriesExposure = async ( options?: RequestInit): Promise<ExposureResponse> => {
+
+  return customFetch<ExposureResponse>(getGetEntriesExposureUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEntriesExposureQueryKey = () => {
+    return [
+    `/api/entries/exposure`
+    ] as const;
+    }
+
+
+export const getGetEntriesExposureQueryOptions = <TData = Awaited<ReturnType<typeof getEntriesExposure>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEntriesExposure>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEntriesExposureQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEntriesExposure>>> = ({ signal }) => getEntriesExposure({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEntriesExposure>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEntriesExposureQueryResult = NonNullable<Awaited<ReturnType<typeof getEntriesExposure>>>
+export type GetEntriesExposureQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Per-game stake exposure across all pending (open) entries
+ */
+
+export function useGetEntriesExposure<TData = Awaited<ReturnType<typeof getEntriesExposure>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEntriesExposure>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEntriesExposureQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

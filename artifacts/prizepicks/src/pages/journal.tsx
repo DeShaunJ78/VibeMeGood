@@ -362,6 +362,18 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
                   <span className={`font-bold uppercase ${PICK_RESULT_STYLES[pick.result] ?? "text-muted-foreground"}`}>
                     {pick.result}
                   </span>
+                  {pick.actualResult != null && pick.result !== "dnp" && (() => {
+                    const margin = Number(pick.actualResult) - Number(pick.lineValue);
+                    const positive = margin >= 0;
+                    return (
+                      <span
+                        className={`text-[10px] font-mono shrink-0 ${positive ? "text-emerald-400/80" : "text-rose-400/80"}`}
+                        title={`Actual: ${Number(pick.actualResult).toFixed(1)} · Line: ${Number(pick.lineValue).toFixed(1)} · Margin: ${positive ? "+" : ""}${margin.toFixed(1)}`}
+                      >
+                        {positive ? "+" : ""}{margin.toFixed(1)}
+                      </span>
+                    );
+                  })()}
                   {pick.id && (
                     <button
                       onClick={() => setRegradingPickId(pick.id)}

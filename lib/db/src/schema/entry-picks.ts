@@ -22,6 +22,7 @@ export const entryPicksTable = pgTable("entry_picks", {
   gradedAt: timestamp("graded_at"), // when the pick was last graded (auto or manual)
   closingLine: numeric("closing_line"),
   clv: numeric("clv"),
+  actualResult: numeric("actual_result"),
   // Edge + tier snapshot — frozen at log time so Journal/Review analysis
   // reflects the model's confidence at the moment the bet was made.
   snapshotEdgeScore: numeric("snapshot_edge_score"),

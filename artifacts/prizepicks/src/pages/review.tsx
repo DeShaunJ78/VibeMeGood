@@ -587,11 +587,12 @@ export default function Review() {
                         <th className="text-right py-2 px-3">Picks</th>
                         <th className="text-right py-2 px-3">Hits</th>
                         <th className="text-right py-2 px-3">Hit Rate</th>
-                        <th className="text-right py-2 pl-3">Avg Edge</th>
+                        <th className="text-right py-2 px-3">Avg Edge</th>
+                        <th className="text-right py-2 pl-3" title="Average margin vs line (positive = comfortably hit, negative = fell short)">Avg Margin</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(s.statBreakdown as Array<{ statType: string; pickCount: number; hitCount: number; hitRate: number | null; avgEdge: number | null }>).map((row) => (
+                      {(s.statBreakdown as Array<{ statType: string; pickCount: number; hitCount: number; hitRate: number | null; avgEdge: number | null; avgMargin: number | null }>).map((row) => (
                         <tr key={row.statType} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
                           <td className="py-2 pr-4 text-slate-200 font-semibold">{row.statType}</td>
                           <td className="py-2 px-3 text-right text-muted-foreground">{row.pickCount}</td>
@@ -606,8 +607,15 @@ export default function Review() {
                               {row.hitRate != null ? `${(row.hitRate * 100).toFixed(1)}%` : "—"}
                             </span>
                           </td>
-                          <td className="py-2 pl-3 text-right text-muted-foreground">
+                          <td className="py-2 px-3 text-right text-muted-foreground">
                             {row.avgEdge != null ? `${row.avgEdge.toFixed(1)}` : "—"}
+                          </td>
+                          <td className="py-2 pl-3 text-right">
+                            {row.avgMargin != null ? (
+                              <span className={`font-mono text-[10px] ${row.avgMargin >= 0 ? "text-emerald-400/80" : "text-rose-400/80"}`}>
+                                {row.avgMargin >= 0 ? "+" : ""}{row.avgMargin.toFixed(1)}
+                              </span>
+                            ) : <span className="text-muted-foreground">—</span>}
                           </td>
                         </tr>
                       ))}

@@ -7,6 +7,7 @@ import {
   useMarkAlertRead, useMarkAllAlertsRead, useClearReadAlerts,
   useClearAllAlerts, useDeleteAlert,
   useGetDataHealth,
+  useGetEntriesExposure,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { PropDetailSheet } from "@/components/prop-detail-sheet";
 import {
   AlertTriangle, Activity, Eye, Target, TrendingUp, Cpu, ShieldOff, BarChart2,
-  BellOff, CheckCheck, Trash2, X, ChevronRight, Clock,
+  BellOff, CheckCheck, Trash2, X, ChevronRight, Clock, Layers,
 } from "lucide-react";
 import { LineTypeBadge, ActionTagBadge, POverBadge, DQBadge } from "@/components/ui/badges";
 
@@ -247,6 +248,12 @@ export default function Dashboard() {
 
   const topProjProps: any[] = (data as any)?.topProjProps ?? [];
 
+  const { data: exposure } = useGetEntriesExposure({
+    query: { queryKey: ["/api/entries/exposure"], staleTime: 60_000 },
+  });
+  const topGame = exposure?.games?.[0] ?? null;
+  const showConcentration = topGame != null && exposure!.totalStake > 0 && topGame.concentrationPct >= 35;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -352,6 +359,34 @@ export default function Dashboard() {
               onClick={() => setAlertsOpen(true)}
             />
           </div>
+
+          {/* Concentration KPI — only shown when any game exceeds 35% of open-entry stake */}
+          {showConcentration && (
+            <div className="grid grid-cols-1 gap-4">
+              <div
+                className={`flex items-center gap-4 px-4 py-3 rounded-lg border font-mono cursor-default ${
+                  topGame!.concentrationPct >= 40
+                    ? "bg-amber-500/10 border-amber-500/40 text-amber-300"
+                    : "bg-slate-900 border-slate-700 text-slate-300"
+                }`}
+              >
+                <Layers className={`w-5 h-5 shrink-0 ${topGame!.concentrationPct >= 40 ? "text-amber-400" : "text-slate-400"}`} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Game Concentration</div>
+                  <div className="text-sm font-bold truncate">{topGame!.label}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className={`text-xl font-bold ${topGame!.concentrationPct >= 40 ? "text-amber-400" : "text-slate-200"}`}>
+                    {topGame!.concentrationPct.toFixed(0)}%
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">${topGame!.stake} · {topGame!.entryCount} {topGame!.entryCount === 1 ? "entry" : "entries"}</div>
+                </div>
+                {topGame!.concentrationPct >= 40 && (
+                  <div className="text-[9px] text-amber-400/70 uppercase tracking-wider shrink-0">⚠ HIGH</div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* KPI row — model intelligence */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

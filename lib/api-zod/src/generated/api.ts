@@ -659,6 +659,9 @@ export const GetSlateResponseItem = zod.object({
   "recommendedSide": zod.string().nullish().describe('over | under — the side the EV is computed for.'),
   "bestTierInGroup": zod.boolean().optional().describe('True when this is the highest-EV tier among the player\'s standard\/demon\/goblin siblings.'),
   "formZScore": zod.number().nullish().describe('Z-score of last 5 games vs historical mean\/stddev. Positive = hot streak, negative = cold. Null when <5 games available.'),
+  "minutesAvg": zod.number().nullish().describe('Average minutes played over last 20 game appearances. Null when <5 appearances available.'),
+  "minutesStdDev": zod.number().nullish().describe('Std dev of minutes over last 20 game appearances. High values signal volatile role.'),
+  "roleStability": zod.string().nullish().describe('starter | rotation | volatile | bench_volatile. Volatile players get a risk score penalty.'),
   "isWatched": zod.boolean(),
   "watchlistId": zod.number().nullish(),
   "updatedAt": zod.coerce.date(),
@@ -766,6 +769,24 @@ export const GetSlateRowResponse = zod.object({
   "lineupConfirmation": zod.unknown().optional(),
   "isWatched": zod.boolean(),
   "watchlistId": zod.number().nullish()
+})
+
+
+/**
+ * @summary Per-game stake exposure across all pending (open) entries
+ */
+export const GetEntriesExposureResponse = zod.object({
+  "games": zod.array(zod.object({
+  "gameId": zod.number(),
+  "label": zod.string().describe('e.g. LAC @ LAL'),
+  "startTime": zod.coerce.date().nullish(),
+  "stake": zod.number(),
+  "entryCount": zod.number(),
+  "concentrationPct": zod.number().describe('% of total open stake on this game'),
+  "isHighConcentration": zod.boolean().describe('true when concentrationPct >= 40')
+})),
+  "totalStake": zod.number(),
+  "maxConcentrationPct": zod.number()
 })
 
 
@@ -887,6 +908,8 @@ export const GetEntryResponse = zod.object({
   "result": zod.string(),
   "closingLine": zod.number().nullish(),
   "clv": zod.number().nullish(),
+  "actualResult": zod.number().nullish().describe('The player\'s actual stat value for this pick (populated when graded)'),
+  "margin": zod.number().nullish().describe('actualResult minus lineValue — positive = cleared the line, negative = fell short'),
   "createdAt": zod.coerce.date()
 }))
 })
@@ -957,6 +980,8 @@ export const ListEntryPicksResponseItem = zod.object({
   "result": zod.string(),
   "closingLine": zod.number().nullish(),
   "clv": zod.number().nullish(),
+  "actualResult": zod.number().nullish().describe('The player\'s actual stat value for this pick (populated when graded)'),
+  "margin": zod.number().nullish().describe('actualResult minus lineValue — positive = cleared the line, negative = fell short'),
   "createdAt": zod.coerce.date()
 })
 export const ListEntryPicksResponse = zod.array(ListEntryPicksResponseItem)
@@ -995,7 +1020,8 @@ export const UpdateEntryPickParams = zod.object({
 export const UpdateEntryPickBody = zod.object({
   "result": zod.string().optional(),
   "closingLine": zod.number().nullish(),
-  "clv": zod.number().nullish()
+  "clv": zod.number().nullish(),
+  "actualResult": zod.number().nullish()
 })
 
 export const UpdateEntryPickResponse = zod.object({
@@ -1014,6 +1040,8 @@ export const UpdateEntryPickResponse = zod.object({
   "result": zod.string(),
   "closingLine": zod.number().nullish(),
   "clv": zod.number().nullish(),
+  "actualResult": zod.number().nullish().describe('The player\'s actual stat value for this pick (populated when graded)'),
+  "margin": zod.number().nullish().describe('actualResult minus lineValue — positive = cleared the line, negative = fell short'),
   "createdAt": zod.coerce.date()
 })
 
@@ -1366,7 +1394,8 @@ export const GetReviewStatsResponse = zod.object({
   "pickCount": zod.number(),
   "hitCount": zod.number(),
   "hitRate": zod.number().nullish(),
-  "avgEdge": zod.number().nullish()
+  "avgEdge": zod.number().nullish(),
+  "avgMargin": zod.number().nullish()
 })).optional()
 })
 

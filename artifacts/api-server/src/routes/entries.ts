@@ -4,7 +4,7 @@ import { db } from "@workspace/db";
 import {
   entriesTable, entryPicksTable, playersTable, ppLinesTable, clvRecordsTable,
   ppLineHistoryTable, ourProjectionsTable, propScoresTable,
-  behavioralLogsTable, userSettingsTable, type InsertEntry,
+  behavioralLogsTable, userSettingsTable, gamesTable, teamsTable, type InsertEntry,
 } from "@workspace/db/schema";
 import { eq, and, gte, lte, inArray, desc, type SQL } from "drizzle-orm";
 import { broadcast } from "../lib/sse";
@@ -194,7 +194,95 @@ const InlinePickSchema = z.object({
 const PickResultSchema = z.object({
   result: z.enum(["hit", "miss", "dnp"]),
   closingLine: z.number().positive().optional(),
+  actualResult: z.number().nullable().optional(),
 }).passthrough();
+
+// GET /api/entries/exposure
+// Returns per-game stake exposure across all pending (open) entries.
+// Used by Entry Builder and Command Center to surface same-game concentration risk.
+router.get("/entries/exposure", async (req, res): Promise<void> => {
+  try {
+    const pendingEntries = await db
+      .select({ id: entriesTable.id, stake: entriesTable.stake })
+      .from(entriesTable)
+      .where(eq(entriesTable.result, "pending"));
+
+    if (pendingEntries.length === 0) {
+      res.json({ games: [], totalStake: 0, maxConcentrationPct: 0 });
+      return;
+    }
+
+    const entryIds = pendingEntries.map(e => e.id);
+    const totalStake = pendingEntries.reduce((s, e) => s + Number(e.stake), 0);
+    const stakeByEntry = new Map(pendingEntries.map(e => [e.id, Number(e.stake)]));
+
+    // Picks for all pending entries (dedupe by entryId+gameId to avoid double-counting)
+    const picks = await db
+      .select({ entryId: entryPicksTable.entryId, gameId: entryPicksTable.gameId })
+      .from(entryPicksTable)
+      .where(inArray(entryPicksTable.entryId, entryIds));
+
+    // Collect unique gameIds (null gameId = manual entry, no game link)
+    const gameIds = [...new Set(picks.map(p => p.gameId).filter((g): g is number => g != null))];
+
+    // Load game + team info
+    const [games, teams] = gameIds.length > 0
+      ? await Promise.all([
+          db.select().from(gamesTable).where(inArray(gamesTable.id, gameIds)),
+          db.select().from(teamsTable),
+        ])
+      : [[], []];
+    const gameMap = new Map(games.map(g => [g.id, g]));
+    const teamMap = new Map(teams.map(t => [t.id, t]));
+
+    // Aggregate stake per game — track which entries touch each game (for entry count)
+    const gameStakeMap = new Map<number, { stake: number; entryIds: Set<number> }>();
+    for (const pick of picks) {
+      if (pick.gameId == null) continue;
+      // One entry = one stake unit per game (even if multiple picks in same game)
+      const entryAlreadyCountedKey = `${pick.entryId}:${pick.gameId}`;
+      if (!gameStakeMap.has(pick.gameId)) {
+        gameStakeMap.set(pick.gameId, { stake: 0, entryIds: new Set() });
+      }
+      const rec = gameStakeMap.get(pick.gameId)!;
+      if (!rec.entryIds.has(pick.entryId)) {
+        rec.entryIds.add(pick.entryId);
+        rec.stake += stakeByEntry.get(pick.entryId) ?? 0;
+      }
+      void entryAlreadyCountedKey;
+    }
+
+    const gamesList = [...gameStakeMap.entries()].map(([gameId, rec]) => {
+      const game = gameMap.get(gameId);
+      const homeTeam = game ? teamMap.get(game.homeTeamId) : null;
+      const awayTeam = game ? teamMap.get(game.awayTeamId) : null;
+      const label = homeTeam && awayTeam
+        ? `${awayTeam.abbreviation} @ ${homeTeam.abbreviation}`
+        : `Game #${gameId}`;
+      const concentrationPct = totalStake > 0
+        ? Math.round((rec.stake / totalStake) * 1000) / 10
+        : 0;
+      return {
+        gameId,
+        label,
+        startTime: game?.startTime?.toISOString() ?? null,
+        stake: Math.round(rec.stake * 100) / 100,
+        entryCount: rec.entryIds.size,
+        concentrationPct,
+        isHighConcentration: concentrationPct >= 40,
+      };
+    }).sort((a, b) => b.stake - a.stake);
+
+    const maxConcentrationPct = gamesList.length > 0
+      ? Math.max(...gamesList.map(g => g.concentrationPct))
+      : 0;
+
+    res.json({ games: gamesList, totalStake: Math.round(totalStake * 100) / 100, maxConcentrationPct });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 router.get("/entries/today-summary", async (req, res): Promise<void> => {
   try {
@@ -698,7 +786,12 @@ router.patch("/entries/:entryId/picks/:pickId", async (req, res): Promise<void> 
 
     await db.transaction(async (tx) => {
       const [pick] = await tx.update(entryPicksTable)
-        .set({ result: parsed.data.result, gradedBy: "manual", gradedAt: new Date() })
+        .set({
+          result: parsed.data.result,
+          gradedBy: "manual",
+          gradedAt: new Date(),
+          ...(parsed.data.actualResult != null ? { actualResult: String(parsed.data.actualResult) } : {}),
+        })
         .where(and(
           eq(entryPicksTable.id, pickId),
           eq(entryPicksTable.entryId, entryId),

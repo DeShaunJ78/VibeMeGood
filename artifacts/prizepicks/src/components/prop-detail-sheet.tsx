@@ -1243,15 +1243,32 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                   </div>
                   {data.propScore.reasoning && typeof data.propScore.reasoning === "object" && (
                     (() => {
-                      const summary = (data.propScore.reasoning as Record<string, unknown>).reasonSummary;
-                      if (typeof summary === "string") {
-                        return (
-                          <div className="mt-3 text-xs font-mono bg-slate-900 border border-slate-800 p-3 rounded">
-                            <div className="text-slate-400">• {summary}</div>
-                          </div>
-                        );
-                      }
-                      return null;
+                      const r = data.propScore.reasoning as Record<string, unknown>;
+                      const summary = r.reasonSummary;
+                      const rs = r.roleStability as string | null | undefined;
+                      const mAvg = r.minutesAvg as number | null | undefined;
+                      const mStd = r.minutesStdDev as number | null | undefined;
+                      return (
+                        <div className="mt-3 space-y-2">
+                          {typeof summary === "string" && (
+                            <div className="text-xs font-mono bg-slate-900 border border-slate-800 p-3 rounded">
+                              <div className="text-slate-400">• {summary}</div>
+                            </div>
+                          )}
+                          {rs && rs !== "starter" && rs !== "rotation" && mAvg != null && mStd != null && (
+                            <div className={`text-xs font-mono flex items-center gap-2 px-2 py-1.5 rounded border ${rs === "bench_volatile" ? "bg-orange-500/10 border-orange-500/30 text-orange-300" : "bg-amber-500/10 border-amber-500/30 text-amber-300"}`}>
+                              <span>{rs === "bench_volatile" ? "🪑" : "⚡"}</span>
+                              <span className="font-bold uppercase tracking-wide">{rs === "bench_volatile" ? "Bench / volatile" : "Volatile role"}</span>
+                              <span className="text-slate-400 ml-auto">{mAvg.toFixed(1)} min avg · ±{mStd.toFixed(1)}</span>
+                            </div>
+                          )}
+                          {rs && (rs === "starter" || rs === "rotation") && mAvg != null && (
+                            <div className="text-xs font-mono text-slate-500 px-1">
+                              {rs === "starter" ? "⬆ Starter" : "↔ Rotation"} · {mAvg.toFixed(1)} min avg
+                            </div>
+                          )}
+                        </div>
+                      );
                     })()
                   )}
                 </div>

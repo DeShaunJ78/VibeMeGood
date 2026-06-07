@@ -443,6 +443,7 @@ export async function recalcPropScores(): Promise<void> {
       statType: playerGameLogsTable.statType,
       value: playerGameLogsTable.value,
       gameDate: playerGameLogsTable.gameDate,
+      minutes: playerGameLogsTable.minutes,
     }).from(playerGameLogsTable)
       .where(inArray(playerGameLogsTable.playerId, uniquePlayerIds))
       .orderBy(desc(playerGameLogsTable.gameDate)),
@@ -454,6 +455,38 @@ export async function recalcPropScores(): Promise<void> {
     const key = `${gl.playerId}:${gl.statType}`;
     if (!gameLogsByKey.has(key)) gameLogsByKey.set(key, []);
     gameLogsByKey.get(key)!.push(Number(gl.value));
+  }
+
+  // Build per-player minutes list from game logs (last 20 unique game appearances).
+  // Each game log row carries a `minutes` column; dedupe by (playerId, gameDate) since
+  // a single game produces multiple statType rows with the same minutes value.
+  const seenPlayerDates = new Set<string>();
+  const minutesByPlayer = new Map<number, number[]>();
+  for (const gl of allGameLogs) {
+    const dateKey = `${gl.playerId}|${gl.gameDate}`;
+    if (seenPlayerDates.has(dateKey)) continue;
+    seenPlayerDates.add(dateKey);
+    if (gl.minutes == null) continue;
+    const mins = Number(gl.minutes);
+    if (mins <= 0) continue;
+    if (!minutesByPlayer.has(gl.playerId)) minutesByPlayer.set(gl.playerId, []);
+    const arr = minutesByPlayer.get(gl.playerId)!;
+    if (arr.length < 20) arr.push(mins);
+  }
+
+  type RoleStability = "starter" | "rotation" | "volatile" | "bench_volatile";
+  function computeRoleStability(mlist: number[]): {
+    minutesAvg: number; minutesStdDev: number; roleStability: RoleStability;
+  } {
+    const avg = mlist.reduce((a, b) => a + b, 0) / mlist.length;
+    const variance = mlist.reduce((a, b) => a + (b - avg) ** 2, 0) / mlist.length;
+    const stdDev = Math.sqrt(variance);
+    let roleStability: RoleStability;
+    if (avg < 22 && stdDev > 6) roleStability = "bench_volatile";
+    else if (stdDev > 6) roleStability = "volatile";
+    else if (avg >= 30) roleStability = "starter";
+    else roleStability = "rotation";
+    return { minutesAvg: Math.round(avg * 10) / 10, minutesStdDev: Math.round(stdDev * 10) / 10, roleStability };
   }
 
   // Index for O(1) lookups
@@ -645,7 +678,25 @@ export async function recalcPropScores(): Promise<void> {
       const isGTD = noPlayReason === "game_time_decision";
       const stdDevNum = proj?.stdDev ? parseFloat(proj.stdDev.toString()) : 6;
       const volatilityRisk = Math.min(100, stdDevNum * 8);
-      const riskScore = Math.round((isGTD ? 50 : 0) + (volatilityRisk * 0.50));
+
+      // Role-stability penalty: players with erratic minutes carry extra lineup risk.
+      // bench_volatile (avg<22 & stdDev>6): +20; volatile (any, stdDev>6): +10.
+      // Only applied when we have ≥5 game appearances of minutes data.
+      const minutesList = minutesByPlayer.get(line.playerId) ?? [];
+      let minutesAvg: number | null = null;
+      let minutesStdDev: number | null = null;
+      let roleStability: string | null = null;
+      let roleRiskPenalty = 0;
+      if (minutesList.length >= 5) {
+        const stability = computeRoleStability(minutesList);
+        minutesAvg = stability.minutesAvg;
+        minutesStdDev = stability.minutesStdDev;
+        roleStability = stability.roleStability;
+        if (stability.roleStability === "bench_volatile") roleRiskPenalty = 20;
+        else if (stability.roleStability === "volatile") roleRiskPenalty = 10;
+      }
+
+      const riskScore = Math.min(100, Math.round((isGTD ? 50 : 0) + (volatilityRisk * 0.50) + roleRiskPenalty));
 
       // --- Final composite score ---
       const overallScore = Math.round(
@@ -696,6 +747,9 @@ export async function recalcPropScores(): Promise<void> {
           `E${Math.round(edgeScore)} S${Math.round(stabilityScore)} ` +
           `M${Math.round(marketSupportScore)} R${riskScore}`,
         biasDelta: appliedBiasDelta,
+        minutesAvg,
+        minutesStdDev,
+        roleStability,
       };
 
       const scorePayload = {

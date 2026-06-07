@@ -102,7 +102,12 @@ export async function gradePicksJob(): Promise<number> {
 
     await db
       .update(entryPicksTable)
-      .set({ result, gradedBy: "auto", gradedAt: new Date() })
+      .set({
+        result,
+        gradedBy: "auto",
+        gradedAt: new Date(),
+        actualResult: logValue != null ? String(logValue) : null,
+      })
       .where(eq(entryPicksTable.id, pick.pickId));
     graded++;
   }

@@ -559,6 +559,18 @@ paths:
               schema: { $ref: "#/components/schemas/PropDetail" }
 
   # ─── ENTRIES ──────────────────────────────────────────────────────
+  /entries/exposure:
+    get:
+      operationId: getEntriesExposure
+      tags: [entries]
+      summary: Per-game stake exposure across all pending (open) entries
+      responses:
+        "200":
+          description: Exposure breakdown
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExposureResponse" }
+
   /entries/export.csv:
     get:
       operationId: exportEntriesCsv
@@ -1803,6 +1815,9 @@ components:
         recommendedSide: { type: ["string", "null"], description: over | under — the side the EV is computed for. }
         bestTierInGroup: { type: boolean, description: True when this is the highest-EV tier among the player's standard/demon/goblin siblings. }
         formZScore: { type: ["number", "null"], description: "Z-score of last 5 games vs historical mean/stddev. Positive = hot streak, negative = cold. Null when <5 games available." }
+        minutesAvg: { type: ["number", "null"], description: "Average minutes played over last 20 game appearances. Null when <5 appearances available." }
+        minutesStdDev: { type: ["number", "null"], description: "Std dev of minutes over last 20 game appearances. High values signal volatile role." }
+        roleStability: { type: ["string", "null"], description: "starter | rotation | volatile | bench_volatile. Volatile players get a risk score penalty." }
         isWatched: { type: boolean }
         watchlistId: { type: ["integer", "null"] }
         updatedAt: { type: string, format: date-time }
@@ -1924,6 +1939,8 @@ components:
         result: { type: string }
         closingLine: { type: ["number", "null"] }
         clv: { type: ["number", "null"] }
+        actualResult: { type: ["number", "null"], description: "The player's actual stat value for this pick (populated when graded)" }
+        margin: { type: ["number", "null"], description: "actualResult minus lineValue — positive = cleared the line, negative = fell short" }
         createdAt: { type: string, format: date-time }
       required: [id, entryId, statType, direction, lineValue, lineType, result, createdAt]
 
@@ -1949,6 +1966,7 @@ components:
         result: { type: string }
         closingLine: { type: ["number", "null"] }
         clv: { type: ["number", "null"] }
+        actualResult: { type: ["number", "null"] }
 
     # ─── WATCHLIST ──────────────────────────────────────────────────
     WatchlistItem:
@@ -2077,6 +2095,26 @@ components:
         dataFreshness: {}
       required: [todaysGames, topInjuries, biggestLineMovements, topPlayProps, topProjProps, watchlistCount, activePropsCount, pendingEntriesCount, unreadAlertsCount]
 
+    ExposureGameRow:
+      type: object
+      properties:
+        gameId:            { type: integer }
+        label:             { type: string, description: "e.g. LAC @ LAL" }
+        startTime:         { type: ["string", "null"], format: date-time }
+        stake:             { type: number }
+        entryCount:        { type: integer }
+        concentrationPct:  { type: number, description: "% of total open stake on this game" }
+        isHighConcentration: { type: boolean, description: "true when concentrationPct >= 40" }
+      required: [gameId, label, stake, entryCount, concentrationPct, isHighConcentration]
+
+    ExposureResponse:
+      type: object
+      properties:
+        games:               { type: array, items: { $ref: "#/components/schemas/ExposureGameRow" } }
+        totalStake:          { type: number }
+        maxConcentrationPct: { type: number }
+      required: [games, totalStake, maxConcentrationPct]
+
     ReviewStats:
       type: object
       properties:
@@ -2131,6 +2169,7 @@ components:
               hitCount:  { type: integer }
               hitRate:   { type: ["number", "null"] }
               avgEdge:   { type: ["number", "null"] }
+              avgMargin: { type: ["number", "null"] }
             required: [statType, pickCount, hitCount]
       required: [totalEntries, totalPnl]
 

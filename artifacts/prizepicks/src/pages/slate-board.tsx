@@ -2088,6 +2088,14 @@ export default function SlateBoard() {
                       </TooltipContent>
                     </Tooltip>
                   </TableHead>
+                  <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-center">
+                    <Tooltip>
+                      <TooltipTrigger className="cursor-help">Role</TooltipTrigger>
+                      <TooltipContent className="text-xs max-w-xs">
+                        Minutes role stability. ⚡ VOL = volatile (std dev &gt; 6 min), 🪑 BENCH = bench + volatile. Volatile players receive a risk score penalty.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TableHead>
                   <TableHead className="hidden lg:table-cell w-20 font-mono text-xs text-center">Pace</TableHead>
                   {isNflSlate && <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-center">Snap%</TableHead>}
                   {isNflSlate && <TableHead className="hidden lg:table-cell w-20 font-mono text-xs text-center">Tgt Shr</TableHead>}
@@ -2483,6 +2491,36 @@ export default function SlateBoard() {
                                   <span className="text-slate-500 cursor-help">—</span>
                                 </TooltipTrigger>
                                 <TooltipContent className="text-xs">{z > 0 ? "+" : ""}{z.toFixed(2)}σ — within normal range</TooltipContent>
+                              </Tooltip>
+                            );
+                          })()}
+                        </TableCell>
+
+                        {/* Role stability badge */}
+                        <TableCell className="hidden lg:table-cell text-center">
+                          {(() => {
+                            const rs = (row as Record<string, unknown>).roleStability as string | null | undefined;
+                            if (!rs || rs === "starter" || rs === "rotation") return <span className="text-slate-600 text-xs">—</span>;
+                            const isBench = rs === "bench_volatile";
+                            const label = isBench ? "BENCH" : "VOL";
+                            const icon = isBench ? "🪑" : "⚡";
+                            const colorClass = isBench ? "text-orange-400 border-orange-500/30 bg-orange-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10";
+                            const mAvg = (row as Record<string, unknown>).minutesAvg as number | null | undefined;
+                            const mStd = (row as Record<string, unknown>).minutesStdDev as number | null | undefined;
+                            return (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className={`inline-flex items-center gap-0.5 text-[9px] font-mono font-bold px-1 py-0.5 rounded border cursor-help ${colorClass}`}>
+                                    {icon} {label}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-xs font-mono">
+                                  {isBench ? "Bench / volatile role" : "Volatile minutes role"}
+                                  {mAvg != null && mStd != null && (
+                                    <div className="text-slate-400 mt-0.5">{mAvg.toFixed(1)} avg min · ±{mStd.toFixed(1)} σ</div>
+                                  )}
+                                  <div className="text-rose-400/80 mt-0.5">+{isBench ? 20 : 10} risk penalty applied</div>
+                                </TooltipContent>
                               </Tooltip>
                             );
                           })()}

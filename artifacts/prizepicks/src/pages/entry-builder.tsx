@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useCreateEntry } from "@workspace/api-client-react";
+import { useCreateEntry, useGetEntriesExposure } from "@workspace/api-client-react";
 import type { EntryPickInput } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useUserSettings } from "@/hooks/use-user-settings";
 import { useEntry } from "@/lib/entry-context";
-import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown, ShieldAlert, AlertTriangle, ClipboardCheck, BarChart2, Shuffle, Loader2, DollarSign, ChevronDown, ChevronUp } from "lucide-react";
+import { Target, Save, Zap, TrendingUp, TrendingDown, X, Flame, Smile, Cpu, ArrowUp, ArrowDown, ShieldAlert, AlertTriangle, ClipboardCheck, BarChart2, Shuffle, Loader2, DollarSign, ChevronDown, ChevronUp, Layers } from "lucide-react";
 import { Link } from "wouter";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
 import {
@@ -265,6 +265,11 @@ export default function EntryBuilder() {
 
   const { data: userSettings } = useUserSettings();
   const dailyLossLimit = userSettings?.dailyLossLimit != null ? parseFloat(userSettings.dailyLossLimit as string) : null;
+
+  const { data: exposure } = useGetEntriesExposure({
+    query: { queryKey: ["/api/entries/exposure"], staleTime: 60_000 },
+  });
+  const [exposureOpen, setExposureOpen] = useState(true);
 
   const { data: todaySummary } = useQuery<{ todayStake: number; entryCount: number }>({
     queryKey: ["today-summary"],
@@ -1091,6 +1096,41 @@ export default function EntryBuilder() {
             </div>
           )}
         </div>
+
+        {/* Tonight's Exposure — open-entry game concentration */}
+        {exposure && exposure.games.length > 0 && (
+          <div className="border border-slate-800 rounded-lg bg-slate-950 shrink-0">
+            <button
+              onClick={() => setExposureOpen(o => !o)}
+              className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-slate-900/50 transition-colors rounded-lg"
+            >
+              <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                <Layers className="w-3.5 h-3.5 text-amber-400" />
+                Tonight's Exposure
+                <span className="text-slate-500">(${exposure.totalStake} open)</span>
+                {exposure.maxConcentrationPct >= 40 && (
+                  <span className="text-amber-400 font-bold">⚠ High concentration</span>
+                )}
+              </div>
+              {exposureOpen ? <ChevronUp className="w-3.5 h-3.5 text-slate-600" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-600" />}
+            </button>
+            {exposureOpen && (
+              <div className="px-3 pb-3 space-y-1">
+                {exposure.games.map(g => (
+                  <div key={g.gameId} className={`flex items-center gap-2 text-xs font-mono px-2 py-1.5 rounded ${g.isHighConcentration ? "bg-amber-500/10 border border-amber-500/20" : "bg-slate-900/50"}`}>
+                    <span className={`font-semibold truncate flex-1 ${g.isHighConcentration ? "text-amber-300" : "text-slate-300"}`}>{g.label}</span>
+                    <span className="text-muted-foreground shrink-0">{g.entryCount}×</span>
+                    <span className={`font-bold shrink-0 ${g.isHighConcentration ? "text-amber-400" : "text-slate-400"}`}>${g.stake}</span>
+                    <span className={`text-[10px] shrink-0 tabular-nums ${g.isHighConcentration ? "text-amber-400" : "text-slate-500"}`}>
+                      {g.concentrationPct.toFixed(0)}%
+                      {g.isHighConcentration && " ⚠"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Right: Config + Math */}
         <div className="flex flex-col gap-4">

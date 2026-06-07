@@ -364,6 +364,21 @@ export interface SlateRow {
      * @nullable
      */
   formZScore?: number | null;
+  /**
+     * Average minutes played over last 20 game appearances. Null when <5 appearances available.
+     * @nullable
+     */
+  minutesAvg?: number | null;
+  /**
+     * Std dev of minutes over last 20 game appearances. High values signal volatile role.
+     * @nullable
+     */
+  minutesStdDev?: number | null;
+  /**
+     * starter | rotation | volatile | bench_volatile. Volatile players get a risk score penalty.
+     * @nullable
+     */
+  roleStability?: string | null;
   isWatched: boolean;
   /** @nullable */
   watchlistId?: number | null;
@@ -516,6 +531,16 @@ export interface EntryPick {
   closingLine?: number | null;
   /** @nullable */
   clv?: number | null;
+  /**
+     * The player's actual stat value for this pick (populated when graded)
+     * @nullable
+     */
+  actualResult?: number | null;
+  /**
+     * actualResult minus lineValue — positive = cleared the line, negative = fell short
+     * @nullable
+     */
+  margin?: number | null;
   createdAt: string;
 }
 
@@ -530,6 +555,8 @@ export interface EntryPickUpdate {
   closingLine?: number | null;
   /** @nullable */
   clv?: number | null;
+  /** @nullable */
+  actualResult?: number | null;
 }
 
 export interface WatchlistItem {
@@ -658,6 +685,26 @@ export interface DashboardSummary {
   dataFreshness?: unknown;
 }
 
+export interface ExposureGameRow {
+  gameId: number;
+  /** e.g. LAC @ LAL */
+  label: string;
+  /** @nullable */
+  startTime?: string | null;
+  stake: number;
+  entryCount: number;
+  /** % of total open stake on this game */
+  concentrationPct: number;
+  /** true when concentrationPct >= 40 */
+  isHighConcentration: boolean;
+}
+
+export interface ExposureResponse {
+  games: ExposureGameRow[];
+  totalStake: number;
+  maxConcentrationPct: number;
+}
+
 export type ReviewStatsKellyAdherenceByMonthItem = {
   month: string;
   label: string;
@@ -686,6 +733,8 @@ export type ReviewStatsStatBreakdownItem = {
   hitRate?: number | null;
   /** @nullable */
   avgEdge?: number | null;
+  /** @nullable */
+  avgMargin?: number | null;
 };
 
 export interface ReviewStats {
