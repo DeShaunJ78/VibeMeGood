@@ -1,0 +1,262 @@
+Audit Current Sportsbook Coverage & Expand Market Intelligence Layer
+
+Objective
+
+Perform a complete audit of our current sportsbook/odds infrastructure and report exactly which bookmakers are currently being ingested, stored, and used by the application.
+
+I do not want assumptions. I want verified results from the actual codebase, APIs, database, and ingestion pipeline.
+
+⸻
+
+Phase 1: Current Bookmaker Audit
+
+Provide a report containing:
+
+1. Data Source Audit
+
+Identify:
+
+* Every odds provider currently connected
+* Every API currently used
+* Every bookmaker returned by each API
+* Which bookmakers are actively stored
+* Which bookmakers are filtered out
+* Which bookmakers are exposed to the frontend
+* Which bookmakers are used during projection calculations
+* Which bookmakers are used during consensus calculations
+
+⸻
+
+2. Bookmaker Inventory
+
+Generate a table containing:
+
+Bookmaker	Available from API	Stored in DB	Used in Calculations	Displayed to User
+
+Example:
+
+* DraftKings
+* FanDuel
+* BetMGM
+* Caesars
+* etc.
+
+⸻
+
+3. Coverage Score
+
+Tell me:
+
+Current Active Books: X
+
+Current Supported Books: X
+
+Current Consensus Books Used: X
+
+Current Sharp Books Used: X
+
+Current Market Coverage Grade:
+
+* Poor
+* Fair
+* Good
+* Excellent
+
+Provide justification.
+
+⸻
+
+Phase 2: Gap Analysis
+
+Compare our current sportsbook coverage against the following target list.
+
+Tier 1 (Highest Priority)
+
+These should be considered mandatory if available through our provider.
+
+* DraftKings
+* FanDuel
+* BetMGM
+* Caesars
+* bet365
+* Fanatics Sportsbook
+* ESPN BET
+* BetRivers
+
+⸻
+
+Tier 2 (High Value)
+
+* Hard Rock Bet
+* theScore Bet
+* Pinnacle
+* Unibet
+* Betfair
+* William Hill
+
+⸻
+
+Tier 3 (If Available)
+
+Any additional regulated sportsbook offered by the provider.
+
+⸻
+
+Phase 3: Consensus Market Engine
+
+I want to know whether we currently support:
+
+Market Consensus Line
+
+Example:
+
+DraftKings: 24.5
+
+FanDuel: 24.5
+
+BetMGM: 25.0
+
+Caesars: 24.5
+
+bet365: 24.5
+
+Consensus:
+
+24.6
+
+Questions:
+
+* Is this currently calculated?
+* If yes, where?
+* If no, estimate effort required.
+
+⸻
+
+Sharp Consensus Line
+
+Create a separate consensus using only sharp books.
+
+Preferred sharp books:
+
+* Pinnacle
+* Betfair Exchange
+* bet365
+* Circa (if available)
+* Other recognized sharp books
+
+Questions:
+
+* Is this currently supported?
+* If not, estimate implementation effort.
+
+⸻
+
+Phase 4: Historical Line Tracking
+
+Determine whether we currently store:
+
+* Opening Line
+* Current Line
+* Closing Line
+* Timestamped Updates
+* Bookmaker-Specific History
+
+Example:
+
+Player A Points
+
+9:00 AM DraftKings 24.5
+
+10:00 AM DraftKings 25.5
+
+11:00 AM DraftKings 26.5
+
+Questions:
+
+1. Do we currently store historical movement?
+2. Can we reconstruct line movement?
+3. Can we calculate steam moves?
+4. Can we calculate CLV?
+5. If not, what changes are required?
+
+⸻
+
+Phase 5: Outlier Detection Engine
+
+Evaluate whether we can detect pricing discrepancies.
+
+Example:
+
+Consensus:
+
+24.5
+
+One book:
+
+27.5
+
+System should flag:
+
+“Potential Market Outlier”
+
+Questions:
+
+* Is this currently possible?
+* What data is missing?
+* Estimated implementation effort?
+
+⸻
+
+Phase 6: Recommendation Report
+
+After auditing the codebase, provide:
+
+Current State
+
+* Number of books available
+* Number actively used
+* Number visible to users
+
+Missing Opportunities
+
+List every supported bookmaker not currently being utilized.
+
+Recommended Target
+
+Minimum:
+
+8 books
+
+Good:
+
+12 books
+
+Elite:
+
+15-20 books
+
+Development Roadmap
+
+Rank improvements by ROI:
+
+1. Highest ROI
+2. Medium ROI
+3. Nice-to-have
+
+⸻
+
+Final Deliverable
+
+Do not make changes yet.
+
+Provide a written audit showing:
+
+1. Current bookmaker coverage
+2. Missing bookmaker coverage
+3. Current consensus capabilities
+4. Historical line tracking capabilities
+5. Outlier detection capabilities
+6. Recommended implementation plan
+7. Estimated effort for each enhancement
+
+The goal is to evolve the platform from a simple odds consumer into a true market intelligence engine capable of identifying consensus lines, sharp market positions, steam moves, CLV opportunities, and sportsbook pricing inefficiencies.
