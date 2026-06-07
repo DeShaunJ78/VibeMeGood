@@ -36,6 +36,27 @@ function median(nums: number[]): number | null {
   return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
 }
 
+/**
+ * Convert an American moneyline price to its raw implied probability (with vig).
+ */
+function americanToImplied(american: number): number {
+  if (american > 0) return 100 / (american + 100);
+  return Math.abs(american) / (Math.abs(american) + 100);
+}
+
+/**
+ * Remove the two-way vig from a pair of American moneyline prices and return
+ * fair win probabilities. Returns null if either price is missing or invalid.
+ */
+function noVigWinProbs(homePrice: number, awayPrice: number): { home: number; away: number } | null {
+  if (!Number.isFinite(homePrice) || !Number.isFinite(awayPrice)) return null;
+  const rawHome = americanToImplied(homePrice);
+  const rawAway = americanToImplied(awayPrice);
+  const total = rawHome + rawAway;
+  if (total <= 0) return null;
+  return { home: rawHome / total, away: rawAway / total };
+}
+
 interface EspnTeam { abbreviation: string; displayName: string; shortDisplayName?: string; name?: string; location?: string }
 
 /**
@@ -94,10 +115,14 @@ async function recentlySynced(): Promise<boolean> {
 }
 
 /**
- * Pull consensus point spread + total for upcoming games and write them onto the
- * matching games rows (spread stored as the HOME spread: negative = home favored).
- * Uses the bulk /odds endpoint (markets=spreads,totals) — ~2 credits per sport
- * regardless of game count — and is credit-guarded by a 50-minute floor.
+ * Pull consensus point spread + total + moneyline for upcoming games and write
+ * them onto the matching games rows (spread stored as the HOME spread: negative
+ * = home favored). Also derives and stores:
+ *   - impliedHomeTotal / impliedAwayTotal  (from spread + total arithmetic)
+ *   - homeWinProb / awayWinProb            (no-vig moneyline probabilities)
+ *
+ * Uses the bulk /odds endpoint (markets=spreads,totals,h2h) — ~3 credits per
+ * sport regardless of game count — and is credit-guarded by a 350-minute floor.
  */
 export async function syncGameOdds(): Promise<number> {
   if (!ODDS_KEY) {
@@ -121,7 +146,7 @@ export async function syncGameOdds(): Promise<number> {
 
       const res = await fetch(
         `${ODDS_BASE}/sports/${oddsKey}/odds?` +
-        `apiKey=${ODDS_KEY}&regions=us&markets=spreads,totals&oddsFormat=american&dateFormat=iso`,
+        `apiKey=${ODDS_KEY}&regions=us&markets=spreads,totals,h2h&oddsFormat=american&dateFormat=iso`,
         { signal: AbortSignal.timeout(15_000) },
       );
       if (!res.ok) {
@@ -137,9 +162,12 @@ export async function syncGameOdds(): Promise<number> {
         const awayId = resolver.get(norm(ev.away_team ?? ""));
         if (!homeId || !awayId) continue;
 
-        // Consensus across books: home spread point + game total.
+        // Consensus across books: home spread point, game total, and moneyline prices.
         const homeSpreads: number[] = [];
         const totals: number[] = [];
+        const homeMoneylines: number[] = [];
+        const awayMoneylines: number[] = [];
+
         for (const bk of (ev.bookmakers ?? [])) {
           for (const mkt of (bk.markets ?? [])) {
             if (mkt.key === "spreads") {
@@ -152,13 +180,45 @@ export async function syncGameOdds(): Promise<number> {
                 (o: any) => (o.name ?? "").toLowerCase() === "over",
               );
               if (over?.point != null) totals.push(Number(over.point));
+            } else if (mkt.key === "h2h") {
+              const homeOutcome = (mkt.outcomes ?? []).find(
+                (o: any) => norm(o.name ?? "") === norm(ev.home_team ?? ""),
+              );
+              const awayOutcome = (mkt.outcomes ?? []).find(
+                (o: any) => norm(o.name ?? "") === norm(ev.away_team ?? ""),
+              );
+              if (homeOutcome?.price != null) homeMoneylines.push(Number(homeOutcome.price));
+              if (awayOutcome?.price != null) awayMoneylines.push(Number(awayOutcome.price));
             }
           }
         }
 
         const spread = median(homeSpreads);
         const total = median(totals);
+        const homeML = median(homeMoneylines);
+        const awayML = median(awayMoneylines);
+
         if (spread == null && total == null) continue;
+
+        // Derived: impliedHomeTotal = (total - spread) / 2
+        // Home spread is negative when home is favored, so subtracting it
+        // adds the margin to the home team's implied total correctly.
+        let impliedHomeTotal: string | undefined;
+        let impliedAwayTotal: string | undefined;
+        if (spread != null && total != null) {
+          impliedHomeTotal = ((total - spread) / 2).toFixed(2);
+          impliedAwayTotal = ((total + spread) / 2).toFixed(2);
+        }
+
+        let homeWinProb: string | undefined;
+        let awayWinProb: string | undefined;
+        if (homeML != null && awayML != null) {
+          const probs = noVigWinProbs(homeML, awayML);
+          if (probs) {
+            homeWinProb = probs.home.toFixed(6);
+            awayWinProb = probs.away.toFixed(6);
+          }
+        }
 
         const commence = new Date(ev.commence_time);
         const lo = new Date(commence.getTime() - MATCH_WINDOW_MS);
@@ -188,8 +248,12 @@ export async function syncGameOdds(): Promise<number> {
         await db
           .update(gamesTable)
           .set({
-            spread: spread != null ? spread.toString() : undefined,
-            total: total != null ? total.toString() : undefined,
+            spread:           spread != null ? spread.toString() : undefined,
+            total:            total != null ? total.toString() : undefined,
+            impliedHomeTotal,
+            impliedAwayTotal,
+            homeWinProb,
+            awayWinProb,
             updatedAt: new Date(),
           })
           .where(eq(gamesTable.id, game.id));

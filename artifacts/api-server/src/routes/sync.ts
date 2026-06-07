@@ -115,7 +115,7 @@ async function syncScoresImpl(): Promise<number> {
   // Scores are derived from game logs (backfillHistoricalStats) and prop score
   // recalculation (recalcPropScores). This endpoint triggers both.
   const { backfillHistoricalStats } = await import("../lib/sync/historical-stats");
-  const result = await backfillHistoricalStats({ nba: true, mlb: true, nhl: true, nfl: false });
+  const result = await backfillHistoricalStats({ nba: true, mlb: true, nhl: true, nfl: true });
   await recalcPropScores();
   return result.total;
 }

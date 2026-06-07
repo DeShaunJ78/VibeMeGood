@@ -273,10 +273,10 @@ export function startCronJobs() {
     logPull("nflverse", "nfl-advanced-metrics", syncNflAdvancedMetrics)
   );
 
-  // Nightly game log sync at 2 AM — pulls current season results for NBA/MLB/NHL
+  // Nightly game log sync at 2 AM — pulls current season results for NBA/MLB/NHL/NFL
   cron.schedule("0 2 * * *", () =>
     logPull("espn", "game-logs", async () => {
-      const r = await backfillHistoricalStats({ nba: true, mlb: true, nhl: true, nfl: false });
+      const r = await backfillHistoricalStats({ nba: true, mlb: true, nhl: true, nfl: true });
       return r.total;
     })
   );
@@ -306,10 +306,10 @@ export function startCronJobs() {
   // Nightly cleanup at 3 AM — prune transient tables, keep permanent data
   cron.schedule("0 3 * * *", async () => {
     try {
-      const day7  = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000);
+      const day90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
       const day30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-      await db.delete(lineMoveEventsTable).where(lt(lineMoveEventsTable.capturedAt, day7));
+      await db.delete(lineMoveEventsTable).where(lt(lineMoveEventsTable.capturedAt, day90));
       await db.delete(externalLinesTable).where(lt(externalLinesTable.pulledAt, day30));
       await db.delete(propScoresTable).where(lt(propScoresTable.scoredAt, day30));
       await db.delete(syncRunsTable).where(lt(syncRunsTable.startedAt, day30));

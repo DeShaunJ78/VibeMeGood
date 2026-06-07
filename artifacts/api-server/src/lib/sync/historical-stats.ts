@@ -819,15 +819,18 @@ async function backfillNFL(
         if (!week) continue;
         const gameDate = nflWeekToDate(season, week);
 
-        const rushYds = csvNum(row.rushing_yards);
-        const recYds  = csvNum(row.receiving_yards);
-        const passYds = csvNum(row.passing_yards);
-        const recs    = csvNum(row.receptions);
-        const rushTds = csvNum(row.rushing_tds);
-        const recTds  = csvNum(row.receiving_tds);
-        const passTds = csvNum(row.passing_tds);
-        const ints    = csvNum(row.interceptions);
-        const sacks   = csvNum(row.sacks);
+        const rushYds    = csvNum(row.rushing_yards);
+        const recYds     = csvNum(row.receiving_yards);
+        const passYds    = csvNum(row.passing_yards);
+        const recs       = csvNum(row.receptions);
+        const rushTds    = csvNum(row.rushing_tds);
+        const recTds     = csvNum(row.receiving_tds);
+        const passTds    = csvNum(row.passing_tds);
+        const ints       = csvNum(row.interceptions);
+        const sacks      = csvNum(row.sacks);
+        const completions = csvNum(row.completions);
+        const attempts   = csvNum(row.attempts);
+        const carries    = csvNum(row.carries);
 
         const logs: [string, number][] = [
           ["Rush Yards",      rushYds],
@@ -837,6 +840,9 @@ async function backfillNFL(
           ["Rush TDs",        rushTds],
           ["Rec TDs",         recTds],
           ["Pass TDs",        passTds],
+          ["Completions",     completions],
+          ["Pass Attempts",   attempts],
+          ["Rush Attempts",   carries],
         ];
 
         // Interceptions and sacks: write only when > 0 (not meaningful at 0 for most positions)

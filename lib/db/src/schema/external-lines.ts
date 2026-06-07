@@ -11,6 +11,7 @@ export const externalLinesTable = pgTable("external_lines", {
   statType: text("stat_type").notNull(),
   bookName: text("book_name").notNull(),
   lineValue: numeric("line_value"),
+  openingLine: numeric("opening_line"),
   overLine: numeric("over_line").notNull(),
   overOdds: integer("over_odds"),
   underLine: numeric("under_line").notNull(),
