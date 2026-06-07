@@ -412,7 +412,7 @@ export default function Settings() {
   async function fetchPPDirect() {
     setPpFetching("fetching");
     try {
-      const importRes = await fetch("/api/sync/pp-lines-fetch", { method: "POST" });
+      const importRes = await fetch("/api/sync/pp-lines-import", { method: "POST" });
       if (!importRes.ok) {
         const err = await importRes.json().catch(() => ({})) as { error?: string };
         throw new Error(err.error ?? `Sync failed: ${importRes.status}`);
