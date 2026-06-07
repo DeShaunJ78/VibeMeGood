@@ -688,6 +688,51 @@ export default function Settings() {
                     );
                   }
 
+                  if (job.endpoint === "/api/sync/external-odds") {
+                    const ODDS_COOLDOWN_MS = 170 * 60 * 1000;
+                    const oddsAgeMs = prov?.lastSuccessAt ? Date.now() - new Date(prov.lastSuccessAt).getTime() : null;
+                    const cooldownRemainingMs = oddsAgeMs !== null ? Math.max(0, ODDS_COOLDOWN_MS - oddsAgeMs) : null;
+                    const onCooldown = cooldownRemainingMs !== null && cooldownRemainingMs > 0;
+                    const cooldownMins = cooldownRemainingMs !== null ? Math.ceil(cooldownRemainingMs / 60000) : null;
+                    const oddsDot = isRunning ? "bg-amber-400 animate-pulse"
+                      : failed ? "bg-rose-400"
+                      : ok ? "bg-emerald-400"
+                      : "bg-slate-600";
+                    return (
+                      <div key={job.endpoint} className={`flex flex-col gap-1.5 p-3 bg-slate-950 border rounded ${failed ? "border-rose-500/30" : "border-slate-800"}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-2 h-2 rounded-full inline-block shrink-0 ${oddsDot}`} />
+                            <div>
+                              <span className="font-mono text-sm block">{job.label}</span>
+                              <span className={`text-[10px] font-mono ${failed ? "text-rose-400/80" : "text-muted-foreground"}`}>
+                                {prov?.lastSuccessAt
+                                  ? `${prov.recordsLastSync != null ? `${prov.recordsLastSync} lines · ` : ""}${formatDistanceToNow(new Date(prov.lastSuccessAt), { addSuffix: true })}`
+                                  : "Never run"}
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => triggerSync(job.endpoint, job.label)}
+                            disabled={isRunning || syncingAll}
+                            className={`h-7 font-mono text-xs ${isRunning ? "border-amber-600/50 bg-amber-600/10 text-amber-300" : "border-slate-700 bg-slate-800 hover:bg-slate-700"}`}
+                          >
+                            <RefreshCw className={`w-3 h-3 mr-1 ${isRunning ? "animate-spin" : ""}`} />
+                            {isRunning ? "Running" : "Sync"}
+                          </Button>
+                        </div>
+                        {onCooldown && !isRunning && (
+                          <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-400/80 bg-amber-900/20 border border-amber-700/30 rounded px-2 py-1">
+                            <AlertCircle className="w-3 h-3 shrink-0" />
+                            Auto-sync in {cooldownMins}m · Manual sync uses API credits
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
                   if (job.endpoint === "/api/sync/calibration") {
                     const calIsStale = calStatus?.isStale ?? isStale;
                     const calAge = calStatus?.lastUpdated

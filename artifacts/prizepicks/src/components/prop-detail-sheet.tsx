@@ -637,31 +637,40 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
               )}
 
               {/* Direction + Add to Entry */}
-              <div className="px-5 py-4 border-b border-slate-800/50 flex items-center gap-3">
-                <div className="flex bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex-1">
-                  <button
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-mono font-bold transition-colors ${direction === "more" ? "bg-emerald-900/50 text-emerald-300" : "text-muted-foreground hover:text-foreground"}`}
-                    onClick={() => { setDirection("more"); if (isPicked && ppLineId) updateDirection(ppLineId, "more"); }}
-                  >
-                    <TrendingUp className="w-3.5 h-3.5" /> MORE
-                  </button>
-                  {!lineLocked && (
+              <div className="px-5 pt-4 pb-3 border-b border-slate-800/50 space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex-1">
                     <button
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-mono font-bold transition-colors ${direction === "less" ? "bg-rose-900/50 text-rose-300" : "text-muted-foreground hover:text-foreground"}`}
-                      onClick={() => { setDirection("less"); if (isPicked && ppLineId) updateDirection(ppLineId, "less"); }}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-mono font-bold transition-colors ${direction === "more" ? "bg-emerald-900/50 text-emerald-300" : "text-muted-foreground hover:text-foreground"}`}
+                      onClick={() => { setDirection("more"); if (isPicked && ppLineId) updateDirection(ppLineId, "more"); }}
                     >
-                      <TrendingDown className="w-3.5 h-3.5" /> LESS
+                      <TrendingUp className="w-3.5 h-3.5" /> MORE
                     </button>
-                  )}
+                    {!lineLocked && (
+                      <button
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-mono font-bold transition-colors ${direction === "less" ? "bg-rose-900/50 text-rose-300" : "text-muted-foreground hover:text-foreground"}`}
+                        onClick={() => { setDirection("less"); if (isPicked && ppLineId) updateDirection(ppLineId, "less"); }}
+                      >
+                        <TrendingDown className="w-3.5 h-3.5" /> LESS
+                      </button>
+                    )}
+                  </div>
+                  <Button
+                    onClick={handleAddRemove}
+                    disabled={loading || !data || (!isPicked && (data?.ourProjection?.isStale ?? false))}
+                    title={(!isPicked && data?.ourProjection?.isStale) ? "Projection expired — run Projections sync first" : undefined}
+                    className={`font-mono text-xs shrink-0 ${isPicked ? "bg-rose-900/50 text-rose-300 border-rose-800 hover:bg-rose-900" : "bg-primary text-primary-foreground hover:bg-primary/90"}`}
+                    variant={isPicked ? "outline" : "default"}
+                  >
+                    {isPicked ? <><Minus className="w-3.5 h-3.5 mr-1" /> REMOVE</> : <><Plus className="w-3.5 h-3.5 mr-1" /> ADD TO ENTRY</>}
+                  </Button>
                 </div>
-                <Button
-                  onClick={handleAddRemove}
-                  disabled={loading || !data}
-                  className={`font-mono text-xs shrink-0 ${isPicked ? "bg-rose-900/50 text-rose-300 border-rose-800 hover:bg-rose-900" : "bg-primary text-primary-foreground hover:bg-primary/90"}`}
-                  variant={isPicked ? "outline" : "default"}
-                >
-                  {isPicked ? <><Minus className="w-3.5 h-3.5 mr-1" /> REMOVE</> : <><Plus className="w-3.5 h-3.5 mr-1" /> ADD TO ENTRY</>}
-                </Button>
+                {!isPicked && data?.ourProjection?.isStale && (
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-amber-400/80 bg-amber-900/20 border border-amber-700/30 rounded px-2 py-1">
+                    <span className="shrink-0">⚠</span>
+                    Projection expired — go to <strong>Settings → Projections sync</strong> to refresh before adding.
+                  </div>
+                )}
               </div>
 
               {/* ── Tier Ladder (standard/demon/goblin rungs for this stat) ── */}
