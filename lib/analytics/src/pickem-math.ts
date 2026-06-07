@@ -14,10 +14,20 @@ function binomCoeff(n: number, k: number): number {
   return Math.round(c);
 }
 
-// PrizePicks Flex exact-hit payouts: { hits: multiplier }
-// 3/6 pays 1× (stake return) — confirmed PrizePicks Flex rule, distinct from lineup-factory
-// which omits 3/6 because a 1× return is never lineup-worthy but IS a real payout.
-const FLEX_PAYOUTS: Record<number, Record<number, number>> = {
+/**
+ * PrizePicks Power payout multipliers by pick count.
+ * MUST stay in sync with POWER_PAYOUTS in
+ * artifacts/api-server/src/lib/payout/tables.ts (used by the lineup optimizer).
+ */
+export const POWER_PAYOUTS: Record<number, number> = { 2: 3, 3: 6, 4: 10, 5: 20, 6: 40 };
+
+/**
+ * PrizePicks Flex exact-hit payouts: { totalPicks: { hits: multiplier } }
+ * 3/6 pays 1× (stake return) — confirmed PrizePicks Flex rule.
+ * MUST stay in sync with FLEX_PAYOUTS in
+ * artifacts/api-server/src/lib/payout/tables.ts (used by the lineup optimizer).
+ */
+export const FLEX_PAYOUTS: Record<number, Record<number, number>> = {
   3: { 3: 5, 2: 1.25 },
   4: { 4: 10, 3: 2.5 },
   5: { 5: 20, 4: 4, 3: 1 },

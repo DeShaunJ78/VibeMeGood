@@ -10,19 +10,14 @@ import { eq, and, inArray, desc, isNotNull } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { pOverLine } from "../lib/projection/normal-dist";
 import { effectivePayoutMultiplier } from "../lib/payout/multiplier";
+import { POWER_PAYOUTS, flexPayout } from "../lib/payout/tables";
 import { z } from "zod";
 
 const router = Router();
 
-// ─── Payout tables ────────────────────────────────────────────────────────────
-const POWER_MULT: Record<number, number> = { 2: 3, 3: 6, 4: 10, 5: 20, 6: 40 };
-const FLEX_MULT: Record<string, number> = {
-  "2/2": 3,
-  "3/3": 5, "2/3": 1.25,
-  "4/4": 10, "3/4": 2.5,
-  "5/5": 20, "4/5": 4, "3/5": 1,
-  "6/6": 40, "5/6": 6, "4/6": 1.5, "3/6": 1,
-};
+// Payout tables are defined in lib/payout/tables.ts (single source of truth).
+// Use POWER_PAYOUTS for Power entries and flexPayout(hits, total) for Flex.
+const POWER_MULT = POWER_PAYOUTS;
 
 // ─── Config schema ────────────────────────────────────────────────────────────
 const configSchema = z.object({
@@ -112,7 +107,7 @@ type GeneratedLineup = {
 // ─── Math helpers ─────────────────────────────────────────────────────────────
 
 function getFlexMultiplier(hits: number, total: number): number {
-  return FLEX_MULT[`${hits}/${total}`] ?? 0;
+  return flexPayout(hits, total);
 }
 
 // payoutFactor scales the entry's payout by the product of any demon (>1) / goblin (<1)

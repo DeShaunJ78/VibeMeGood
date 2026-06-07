@@ -35,3 +35,8 @@
 - [GPP mode design](gpp-mode-design.md) — composite score, leverage formula, direction-aware sharp signal mapping, narrative filter gate, pace season dedup, ownership source, and backtest entry tagging.
 - [Role stability scoring](role-stability-scoring.md) — minutes computed from player_game_logs.minutes (existing col); dedupe by (playerId, gameDate); stored in prop_scores.reasoning JSONB; penalty applied in riskScore capped at 100.
 - [Exposure endpoint pattern](exposure-endpoint-pattern.md) — GET /api/entries/exposure aggregates pending-entry stake by gameId; dedupe entryId+gameId to avoid double-counting multi-pick games; load games/teams separately and join in-memory.
+- [edgeScore market formula](edgescore-market-formula.md) — marketEdge is a %; dividing by ppLine (raw line value) makes scores depend on line magnitude; correct formula is marketEdge*3 capped 0–100.
+- [GTD is not a hard block](gtd-soft-block.md) — GTD adds +20 riskScore (not +50); excluded from hardNoPlay; only player_out / insufficient_data / low_data_quality force NO-PLAY.
+- [Payout tables canonical location](payout-tables-canonical.md) — api-server: artifacts/api-server/src/lib/payout/tables.ts; frontend: lib/analytics/src/pickem-math.ts; both must stay in sync; lineup-factory imports from tables.ts.
+- [Sync in-flight guards](sync-in-flight-guards.md) — historical-stats, projections, calibration use module-level Promise|null guards; double-trigger returns {status:"skipped"}; external-odds has its own guard inside external-odds.ts.
+- [SHRINKAGE_K explore agent error](shrinkage-k-false-alarm.md) — compute.ts already imports SHRINKAGE_K from priors.ts (line 14); explore agent wrongly reported K=10 local constant; always verify with grep before acting on explore summaries.

@@ -667,9 +667,14 @@ export async function recalcPropScores(): Promise<void> {
       }
 
       // --- Gate 1: Edge Score ---
+      // Model contribution (0–100): pOver above 50% scaled to full range.
+      // Market contribution (0–100): marketEdge is already a % (e.g. 2.5 = 2.5% edge);
+      //   * 3 converts it to a 0-100 score (33%+ edge = max). Do NOT divide by ppLine —
+      //   that would make the scale depend on line magnitude, inflating scores for
+      //   low-line props (Home Runs, Goals) and deflating them for high-line props.
       const baseEdge =
         Math.max(0, (pOver !== null ? (pOver - 50) * 2 : 0)) * 0.6 +
-        Math.max(0, (marketEdge / Math.max(ppLine, 0.1)) * 150) * 0.4;
+        Math.max(0, Math.min(100, marketEdge * 3)) * 0.4;
       const rawEdge = Math.min(100, Math.max(0, baseEdge + formContribution));
 
       // Personal bias correction (optional, toggled per user setting).
@@ -716,7 +721,10 @@ export async function recalcPropScores(): Promise<void> {
         else if (stability.roleStability === "volatile") roleRiskPenalty = 10;
       }
 
-      const riskScore = Math.min(100, Math.round((isGTD ? 50 : 0) + (volatilityRisk * 0.50) + roleRiskPenalty));
+      // GTD penalty: 20 pts (not 50). GTD players often play; +20 reduces PLAY
+      // eligibility but keeps the prop visible as WATCH/ACTION rather than forcing
+      // an auto-NO-PLAY. The hardNoPlay gate below handles true disqualifications.
+      const riskScore = Math.min(100, Math.round((isGTD ? 20 : 0) + (volatilityRisk * 0.50) + roleRiskPenalty));
 
       // --- Final composite score ---
       const overallScore = Math.round(
@@ -727,7 +735,9 @@ export async function recalcPropScores(): Promise<void> {
       );
 
       // --- Action tag ---
-      const hardNoPlay = noPlayReason != null;
+      // GTD is NOT a hard disqualifier — the player may well play. Exclude only
+      // genuine no-play reasons (insufficient data, player confirmed OUT, DQ score).
+      const hardNoPlay = noPlayReason != null && noPlayReason !== "game_time_decision";
       let actionTag: string;
       if (hardNoPlay) {
         actionTag = "NO-PLAY";

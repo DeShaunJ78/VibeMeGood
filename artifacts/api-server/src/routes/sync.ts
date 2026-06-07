@@ -21,6 +21,13 @@ import { computeMatchupHistory } from "../lib/sync/matchup-history";
 
 const router = Router();
 
+// ─── In-flight guards ─────────────────────────────────────────────────────────
+// Prevent duplicate concurrent runs of expensive long-running jobs.
+// Pattern: module-level nullable promise; caller joins existing run or starts new.
+let historicalStatsInFlight: Promise<void> | null = null;
+let projectionsInFlight: Promise<void> | null = null;
+let calibrationInFlight: Promise<void> | null = null;
+
 /**
  * Mark any data_pull_logs / sync_runs rows that are stuck in "running" for
  * more than 10 minutes as "error". Called at module load (server startup) so
@@ -148,35 +155,43 @@ async function syncScoresImpl(): Promise<number> {
 }
 
 router.post("/sync/historical-stats", async (req, res) => {
+  if (historicalStatsInFlight) {
+    res.json({ status: "skipped", reason: "already running" });
+    return;
+  }
   const { nba = true, mlb = true, nhl = true, nfl = true } =
     (req.body ?? {}) as { nba?: boolean; mlb?: boolean; nhl?: boolean; nfl?: boolean };
   res.json({ status: "started", sports: { nba, mlb, nhl, nfl } });
-  try {
-    const { backfillHistoricalStats } = await import("../lib/sync/historical-stats");
-    const result = await backfillHistoricalStats({ nba, mlb, nhl, nfl });
-    logger.info(result, "Historical backfill complete");
-    broadcastSyncStatus("historical-stats", "success", `${result.total} records`);
-    // Auto-chain NFL advanced metrics when NFL logs were synced
-    if (nfl && result.nfl > 0) {
-      logger.info("Auto-triggering NFL advanced metrics after backfill");
-      syncNflAdvancedMetrics()
-        .then(n => broadcastSyncStatus("nfl-advanced-metrics", "success", `${n} records (auto)`))
-        .catch(err => {
-          logger.warn({ err }, "NFL advanced auto-chain failed (non-critical)");
-          broadcastSyncStatus("nfl-advanced-metrics", "error",
-            err instanceof Error ? err.message : "Auto-chain failed");
-        });
+  historicalStatsInFlight = (async () => {
+    try {
+      const { backfillHistoricalStats } = await import("../lib/sync/historical-stats");
+      const result = await backfillHistoricalStats({ nba, mlb, nhl, nfl });
+      logger.info(result, "Historical backfill complete");
+      broadcastSyncStatus("historical-stats", "success", `${result.total} records`);
+      // Auto-chain NFL advanced metrics when NFL logs were synced
+      if (nfl && result.nfl > 0) {
+        logger.info("Auto-triggering NFL advanced metrics after backfill");
+        syncNflAdvancedMetrics()
+          .then(n => broadcastSyncStatus("nfl-advanced-metrics", "success", `${n} records (auto)`))
+          .catch(err => {
+            logger.warn({ err }, "NFL advanced auto-chain failed (non-critical)");
+            broadcastSyncStatus("nfl-advanced-metrics", "error",
+              err instanceof Error ? err.message : "Auto-chain failed");
+          });
+      }
+      // Auto-chain calibration — only when new records were written (skip if 0)
+      if (result.total > 0) {
+        runAutoCalibration("Auto-started after historical-stats sync").catch(() => {});
+      } else {
+        logger.info("Skipping calibration auto-chain — no new game log records");
+      }
+    } catch (e) {
+      logger.error({ err: e }, "Historical backfill failed");
+      broadcastSyncStatus("historical-stats", "error", e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      historicalStatsInFlight = null;
     }
-    // Auto-chain calibration — only when new records were written (skip if 0)
-    if (result.total > 0) {
-      runAutoCalibration("Auto-started after historical-stats sync").catch(() => {});
-    } else {
-      logger.info("Skipping calibration auto-chain — no new game log records");
-    }
-  } catch (e) {
-    logger.error({ err: e }, "Historical backfill failed");
-    broadcastSyncStatus("historical-stats", "error", e instanceof Error ? e.message : "Unknown error");
-  }
+  })();
 });
 
 // Fix 1 — Backfill gameId on historical PP lines
@@ -281,17 +296,25 @@ router.post("/sync/game-logs", async (req, res) => {
 });
 
 router.post("/sync/calibration", async (req, res) => {
+  if (calibrationInFlight) {
+    res.json({ status: "skipped", reason: "already running" });
+    return;
+  }
   const limit = Number((req.body as { limit?: number } | undefined)?.limit ?? 5000);
   res.json({ status: "started", limit });
-  try {
-    const { calibrationJob } = await import("../scripts/calibration-job");
-    const result = await calibrationJob.runHistoricalCalibration(limit);
-    logger.info(result, "Calibration complete");
-    broadcastSyncStatus("calibration", "success", "Calibration complete");
-  } catch (e) {
-    logger.error({ err: e }, "Calibration failed");
-    broadcastSyncStatus("calibration", "error", e instanceof Error ? e.message : "Unknown error");
-  }
+  calibrationInFlight = (async () => {
+    try {
+      const { calibrationJob } = await import("../scripts/calibration-job");
+      const result = await calibrationJob.runHistoricalCalibration(limit);
+      logger.info(result, "Calibration complete");
+      broadcastSyncStatus("calibration", "success", "Calibration complete");
+    } catch (e) {
+      logger.error({ err: e }, "Calibration failed");
+      broadcastSyncStatus("calibration", "error", e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      calibrationInFlight = null;
+    }
+  })();
 });
 
 router.post("/sync/game-schedule", async (req, res) => {
@@ -425,7 +448,12 @@ router.post("/sync/pre-lock", async (req, res) => {
 });
 
 router.post("/sync/projections", async (req, res) => {
-  await runSync("nba-stats", "projections", syncProjectionsImpl, res);
+  if (projectionsInFlight) {
+    res.json({ status: "skipped", reason: "already running" });
+    return;
+  }
+  projectionsInFlight = runSync("nba-stats", "projections", syncProjectionsImpl, res)
+    .finally(() => { projectionsInFlight = null; });
 });
 
 // Rescore props only — recalculates edge/action scores from existing projections.
