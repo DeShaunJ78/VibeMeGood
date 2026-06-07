@@ -138,29 +138,30 @@ function computeKellyResult(
     return { fullKelly, halfKelly: fullKelly / 2, pWin, effectiveMult, hasAllData, missingPicks };
   }
 
-  // Flex: DP across all outcome tiers using only the picks with known probability.
-  // The DP dimension is the count of known-prob legs (partial if some missing).
+  // Flex: DP across all outcome tiers.
+  // Picks with known probability use their actual p. Picks with NO probability
+  // data are assigned p=0.5 (conservative coin-flip) rather than extrapolating
+  // from the known legs — this gives a conservative EV estimate and avoids
+  // inflating the EV display when the model has no signal on some legs.
   const flexKeys = Object.keys(flexPayouts);
   if (flexKeys.length === 0) return null;
-  const m = knownProbs.length;         // legs used in DP (≤ picks.length)
-  const nTotal = picks.length;          // total legs (for payout key lookup)
-  let dp = new Array(m + 1).fill(0) as number[];
+  const allProbs = picks.map(p => legPHit(p) ?? 0.5);
+  const nTotal = allProbs.length;
+  let dp = new Array(nTotal + 1).fill(0) as number[];
   dp[0] = 1;
-  for (let i = 0; i < m; i++) {
-    const p = knownProbs[i];
-    const next = new Array(m + 1).fill(0) as number[];
+  for (let i = 0; i < nTotal; i++) {
+    const p = allProbs[i];
+    const next = new Array(nTotal + 1).fill(0) as number[];
     for (let k = 0; k <= i; k++) {
       next[k]     += dp[k] * (1 - p);
       next[k + 1] += dp[k] * p;
     }
     dp = next;
   }
-  // Map DP outcomes onto full-entry payout keys (scale k proportionally when partial)
   let expectedGross = 0;
   let pWin = 0;
-  for (let k = 0; k <= m; k++) {
-    const scaledK = m < nTotal ? Math.round(k * nTotal / m) : k;
-    const mult = flexPayouts[`${scaledK}/${nTotal}`] ?? 0;
+  for (let k = 0; k <= nTotal; k++) {
+    const mult = flexPayouts[`${k}/${nTotal}`] ?? 0;
     if (mult > 0) { expectedGross += dp[k] * mult; pWin += dp[k]; }
   }
   if (pWin <= 0) return null;

@@ -10,6 +10,7 @@ import { twoWayHold, noVigProbs } from "../analytics/odds-math";
 import { pOverLine } from "../projection/normal-dist";
 import { calibratePOver, loadCalibrationMap } from "../projection/calibration";
 import { effectivePayoutMultiplier } from "../payout/multiplier";
+import { normalizeStatType } from "../stat-type";
 
 const ODDS_BASE = process.env.ODDS_API_BASE || "https://api.the-odds-api.com/v4";
 const ODDS_KEY = process.env.ODDS_API_KEY || "";
@@ -499,7 +500,8 @@ export async function recalcPropScores(): Promise<void> {
 
   const projByPlayerStat = new Map<string, typeof allProjections[0]>();
   for (const p of allProjections) {
-    projByPlayerStat.set(`${p.playerId}:${p.statType}`, p);
+    // Normalize the stat type key so lookups using pp_lines.statType always match.
+    projByPlayerStat.set(`${p.playerId}:${normalizeStatType(p.statType)}`, p);
   }
 
   // Calibration table loaded once — used to temper each line's raw P(over).
@@ -513,14 +515,14 @@ export async function recalcPropScores(): Promise<void> {
   const standardPOverByPlayerStat = new Map<string, number>();
   for (const { line, player } of lines) {
     if (line.lineType !== "standard") continue;
-    const proj = projByPlayerStat.get(`${line.playerId}:${line.statType}`);
+    const nStat = normalizeStatType(line.statType);
+    const proj = projByPlayerStat.get(`${line.playerId}:${nStat}`);
     if (!proj?.projectedValue || !proj?.stdDev) continue;
+    if (proj.sourceLabel === "prior_only") continue; // no real signal — skip
     const sLine = parseFloat((line.lineValueOverride ?? line.lineValue).toString());
     const sRaw = pOverLine(parseFloat(proj.projectedValue.toString()), parseFloat(proj.stdDev.toString()), sLine);
-    const sCal = proj.sourceLabel && proj.sourceLabel !== "prior_only"
-      ? calibratePOver(sRaw, player.sport, line.statType, line.lineType, calibrationMap).pOver
-      : sRaw;
-    standardPOverByPlayerStat.set(`${line.playerId}:${line.statType}`, sCal / 100);
+    const sCal = calibratePOver(sRaw, player.sport, nStat, line.lineType, calibrationMap).pOver;
+    standardPOverByPlayerStat.set(`${line.playerId}:${nStat}`, sCal / 100);
   }
 
   // Active tier count per player+stat group — a "best value" recommendation is only
@@ -567,7 +569,10 @@ export async function recalcPropScores(): Promise<void> {
       }
 
       // --- Projection data ---
-      const proj = projByPlayerStat.get(`${line.playerId}:${line.statType}`) ?? null;
+      // Normalize stat type so lookups survive minor naming differences (e.g.
+      // "Pts+Ast" vs "Pts+Asts") without falling through to DEFAULT_PRIOR.
+      const normalizedStat = normalizeStatType(line.statType);
+      const proj = projByPlayerStat.get(`${line.playerId}:${normalizedStat}`) ?? null;
 
       const noPlayReason = proj?.noPlayReason ?? null;
       // Probability is tier-specific: evaluate the projection distribution against
@@ -580,13 +585,28 @@ export async function recalcPropScores(): Promise<void> {
       const sourceLabel = proj?.sourceLabel ?? "prior_only";
       const ppLine = parseFloat(line.lineValue.toString());
       // Raw distribution probability for THIS line, then calibrated toward the
-      // empirical bucket hit rate (skip prior-only — no real model signal).
+      // empirical bucket hit rate.
+      // IMPORTANT: prior_only means no real game-log data — the projection was
+      // driven entirely by the population prior. Treat as null (no model signal)
+      // rather than serving a DEFAULT_PRIOR-inflated pOver (often 90–99% for
+      // low-line stats like Home Runs or Blocked Shots).
       const pOverRaw = (projMean !== null && projStdDev !== null)
         ? pOverLine(projMean, projStdDev, ppLine)
         : null;
-      const pOver = (pOverRaw !== null && sourceLabel !== "prior_only")
-        ? calibratePOver(pOverRaw, player.sport, line.statType, line.lineType, calibrationMap).pOver
-        : pOverRaw;
+      let pOver: number | null = (pOverRaw !== null && sourceLabel !== "prior_only")
+        ? calibratePOver(pOverRaw, player.sport, normalizedStat, line.lineType, calibrationMap).pOver
+        : null;
+      // Thin-data sanity gate: fewer than 5 game logs AND an extreme probability
+      // (>92% or <8%) signals that the prior is overwhelming a near-empty sample.
+      // Null it out so the prop is tagged NO-PLAY rather than a false high-confidence PLAY.
+      const logCount = (gameLogsByKey.get(`${line.playerId}:${normalizedStat}`) ?? []).length;
+      if (pOver !== null && logCount < 5 && (pOver > 92 || pOver < 8)) {
+        logger.warn(
+          { playerId: line.playerId, statType: normalizedStat, pOver, logCount },
+          "recalcPropScores: extreme pOver with thin data — nulling to prevent false PLAY",
+        );
+        pOver = null;
+      }
 
       // --- Cross-tier expected value ---
       // EV = P(hit of recommended side) × payout multiplier (standard = 1.0).
@@ -594,7 +614,7 @@ export async function recalcPropScores(): Promise<void> {
       // applies to the over; standard lines take whichever side is more likely at 1.0.
       // Comparing EV across a player's tiers reveals when a demon/goblin's payout
       // outweighs its lower hit rate — i.e. the genuine best-value play.
-      const stdPOver = standardPOverByPlayerStat.get(`${line.playerId}:${line.statType}`) ?? null;
+      const stdPOver = standardPOverByPlayerStat.get(`${line.playerId}:${normalizedStat}`) ?? null;
       const payoutMult = effectivePayoutMultiplier(
         line.payoutMultiplier != null ? Number(line.payoutMultiplier) : null,
         line.lineType,

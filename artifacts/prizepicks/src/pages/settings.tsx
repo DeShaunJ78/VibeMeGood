@@ -365,6 +365,11 @@ export default function Settings() {
     const es = new EventSource(`${base}/api/events`);
     es.addEventListener("sync_status", (e) => {
       const d = JSON.parse(e.data) as { job: string; status: string };
+      // Refresh data health whenever ANY job reaches a terminal state so the
+      // status dots and timestamps update without requiring a manual page reload.
+      if (d.status === "success" || d.status === "error") {
+        qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
+      }
       if (d.status === "success" && (d.job === "game-logs" || d.job === "historical-stats")) {
         setCalibrationNudge(true);
       }
@@ -380,14 +385,17 @@ export default function Settings() {
     setSyncingJob(endpoint);
     try {
       const r = await fetch(endpoint, { method: "POST" });
-      if (!r.ok) throw new Error();
-      toast({ title: `Sync started`, description: `${label} sync initiated.` });
-      setTimeout(() => {
-        qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
-        refetch();
-      }, 1500);
-    } catch {
-      toast({ title: "Sync failed", description: `Could not start ${label} sync.`, variant: "destructive" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      toast({ title: `${label} started`, description: "Running in background — status updates automatically." });
+      // Fallback polls: SSE drives the primary completion signal, but if the
+      // SSE connection drops these ensure the UI eventually catches up.
+      [4_000, 15_000, 45_000].forEach(delay =>
+        setTimeout(() => {
+          qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
+        }, delay)
+      );
+    } catch (e) {
+      toast({ title: "Sync failed", description: e instanceof Error ? e.message : `Could not start ${label}.`, variant: "destructive" });
     } finally {
       setSyncingJob(null);
     }

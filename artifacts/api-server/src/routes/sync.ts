@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { dataPullLogsTable, alertsTable, syncRunsTable, playersTable, injuriesTable, ppLinesTable, gamesTable, playerGameLogsTable, probabilityCalibrationTable, entryPicksTable, entriesTable } from "@workspace/db/schema";
-import { eq, and, isNull, isNotNull, or, gte, lte, sql, inArray } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, or, gte, lte, lt, sql, inArray } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { broadcastSyncStatus, broadcast } from "../lib/sse";
 import { gradePicksJob, getAutoGradeStats } from "../lib/sync/auto-grade";
@@ -20,6 +20,35 @@ import { syncWeather } from "../lib/sync/weather";
 import { computeMatchupHistory } from "../lib/sync/matchup-history";
 
 const router = Router();
+
+/**
+ * Mark any data_pull_logs / sync_runs rows that are stuck in "running" for
+ * more than 10 minutes as "error". Called at module load (server startup) so
+ * a crash or SIGKILL never leaves permanent spinning indicators in the UI.
+ */
+async function cleanupStaleRuns(): Promise<void> {
+  const cutoff = new Date(Date.now() - 10 * 60 * 1000);
+  try {
+    const [logs, runs] = await Promise.all([
+      db.update(dataPullLogsTable)
+        .set({ status: "error", errorMessage: "interrupted (server restarted)", finishedAt: new Date() })
+        .where(and(eq(dataPullLogsTable.status, "running"), lt(dataPullLogsTable.startedAt, cutoff)))
+        .returning({ id: dataPullLogsTable.id }),
+      db.update(syncRunsTable)
+        .set({ status: "error", errorMessage: "interrupted (server restarted)", finishedAt: new Date() })
+        .where(and(eq(syncRunsTable.status, "running"), lt(syncRunsTable.startedAt, cutoff)))
+        .returning({ id: syncRunsTable.id }),
+    ]);
+    if (logs.length > 0 || runs.length > 0) {
+      logger.info({ logs: logs.length, runs: runs.length }, "cleanupStaleRuns: cleared zombie entries");
+    }
+  } catch (err) {
+    logger.warn({ err }, "cleanupStaleRuns: failed (non-critical)");
+  }
+}
+// Run immediately on module load so the first data-health poll after a
+// server restart never shows phantom "running" jobs.
+void cleanupStaleRuns();
 
 async function runSync(
   provider: string,
