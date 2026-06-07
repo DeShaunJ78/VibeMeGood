@@ -233,7 +233,7 @@ async function runSyncExternalOdds(force = false): Promise<number> {
 
         const oddsRes = await fetch(
           `${ODDS_BASE}/sports/${sportKey}/events/${evMeta.id}/odds?` +
-          `apiKey=${ODDS_KEY}&regions=us&markets=${marketsParam}&oddsFormat=american`,
+          `apiKey=${ODDS_KEY}&regions=us,eu&markets=${marketsParam}&oddsFormat=american`,
         );
         if (!oddsRes.ok) {
           logger.warn({ sport, eventId: evMeta.id, status: oddsRes.status }, "external-odds event odds failed");

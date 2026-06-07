@@ -146,7 +146,7 @@ export async function syncGameOdds(): Promise<number> {
 
       const res = await fetch(
         `${ODDS_BASE}/sports/${oddsKey}/odds?` +
-        `apiKey=${ODDS_KEY}&regions=us&markets=spreads,totals,h2h&oddsFormat=american&dateFormat=iso`,
+        `apiKey=${ODDS_KEY}&regions=us,eu&markets=spreads,totals,h2h&oddsFormat=american&dateFormat=iso`,
         { signal: AbortSignal.timeout(15_000) },
       );
       if (!res.ok) {
