@@ -335,10 +335,29 @@ router.post("/sync/pp-lines-import", async (req, res) => {
   }
 });
 
+/**
+ * Parse PP_PROXY_URL — a comma-separated list of "ip:port:user:pass" entries
+ * (rotating residential proxy pool format). Returns a random entry split into
+ * the bare proxy URI and a pre-built Basic auth token for the Proxy-Authorization
+ * header. undici's ProxyAgent needs auth passed via `token` (not in the URI)
+ * for HTTPS CONNECT tunneling — embedding credentials in the URL produces 407.
+ */
+function pickProxy(): { uri: string; token: string } | null {
+  const raw = process.env.PP_PROXY_URL;
+  if (!raw) return null;
+  const entries = raw.split(",").map(s => s.trim()).filter(Boolean);
+  if (!entries.length) return null;
+  const entry = entries[Math.floor(Math.random() * entries.length)];
+  const parts = entry.split(":");
+  if (parts.length < 4) return null;
+  const [ip, port, user, pass] = parts;
+  const token = `Basic ${Buffer.from(`${user}:${pass}`).toString("base64")}`;
+  return { uri: `http://${ip}:${port}`, token };
+}
+
 // Server-side PP fetch: eliminates CORS issues from browser-direct approach.
-// Uses PP_PROXY_URL (residential proxy) if set; falls back to direct.
+// Uses PP_PROXY_URL (rotating residential proxy pool) if set; falls back to direct.
 router.post("/sync/pp-lines-fetch", async (req, res) => {
-  const proxyUrl = process.env.PP_PROXY_URL;
   const ppApiUrl = "https://api.prizepicks.com/projections?per_page=25000&single_stat=true&include=new_player,league";
   const ppHeaders = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -356,15 +375,19 @@ router.post("/sync/pp-lines-fetch", async (req, res) => {
   }).returning();
 
   try {
-    let ppRes: Response;
-    if (proxyUrl) {
-      const { ProxyAgent } = await import("undici");
-      const dispatcher = new ProxyAgent(proxyUrl);
-      // @ts-ignore — undici dispatcher is not in the standard fetch types
-      ppRes = await fetch(ppApiUrl, { headers: ppHeaders, dispatcher, signal: AbortSignal.timeout(30_000) });
-    } else {
-      ppRes = await fetch(ppApiUrl, { headers: ppHeaders, signal: AbortSignal.timeout(30_000) });
-    }
+    const proxy = pickProxy();
+    // Use undici's own fetch so ProxyAgent and fetch share the same undici instance.
+    // Node 24's global fetch is a different internal undici build and rejects
+    // a ProxyAgent created from the installed undici package.
+    const { fetch: undiciFetch, ProxyAgent } = await import("undici");
+    const dispatcher = proxy
+      ? new ProxyAgent({ uri: proxy.uri, token: proxy.token })
+      : undefined;
+    const ppRes = await undiciFetch(ppApiUrl, {
+      headers: ppHeaders,
+      ...(dispatcher ? { dispatcher } : {}),
+      signal: AbortSignal.timeout(30_000),
+    }) as unknown as Response;
 
     if (!ppRes.ok) {
       throw new Error(`PrizePicks returned ${ppRes.status} — ${ppRes.statusText || "blocked"}`);
@@ -381,7 +404,7 @@ router.post("/sync/pp-lines-fetch", async (req, res) => {
       .set({ status: "success", recordsProcessed, finishedAt: new Date() })
       .where(eq(dataPullLogsTable.id, log.id));
     broadcastSyncStatus("pp-lines", "success", `${recordsProcessed} records`);
-    req.log.info({ recordsProcessed, proxy: !!proxyUrl }, "PP server fetch complete");
+    req.log.info({ recordsProcessed, proxy: !!proxy }, "PP server fetch complete");
     res.json({ status: "success", recordsProcessed });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
@@ -389,7 +412,7 @@ router.post("/sync/pp-lines-fetch", async (req, res) => {
       .set({ status: "error", errorMessage, finishedAt: new Date() })
       .where(eq(dataPullLogsTable.id, log.id));
     broadcastSyncStatus("pp-lines", "error", errorMessage);
-    req.log.error({ err, proxy: !!proxyUrl }, "PP server fetch failed");
+    req.log.error({ err }, "PP server fetch failed");
     res.status(502).json({ error: errorMessage });
   }
 });
