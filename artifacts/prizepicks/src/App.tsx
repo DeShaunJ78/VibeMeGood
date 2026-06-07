@@ -48,7 +48,7 @@ function SSEListener() {
     es.addEventListener("sync_status", (e) => {
       const data = JSON.parse(e.data) as { job: string; status: string };
       if (data.status === "success") {
-        qc.invalidateQueries();
+        void qc.invalidateQueries();
       }
     });
 
@@ -80,7 +80,7 @@ function SSEListener() {
         variant: data.severity === "critical" ? "destructive" : "default",
         duration: 12000,
       });
-      qc.invalidateQueries({ queryKey: ["injuries"] });
+      void qc.invalidateQueries({ queryKey: ["injuries"] });
     });
 
     es.addEventListener("heartbeat", () => { /* keep-alive */ });

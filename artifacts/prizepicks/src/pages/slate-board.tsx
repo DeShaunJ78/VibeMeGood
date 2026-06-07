@@ -774,7 +774,7 @@ export default function SlateBoard() {
     (ppLineId: number, patch: { lineValueOverride?: number | null; payoutMultiplier?: number | null }) => {
       setOverride.mutate(
         { id: ppLineId, data: patch },
-        { onSuccess: () => { qc.invalidateQueries({ queryKey: getGetSlateQueryKey(slateParams) }); } },
+        { onSuccess: () => { void qc.invalidateQueries({ queryKey: getGetSlateQueryKey(slateParams) }); } },
       );
     },
     [setOverride, qc, slateParams],

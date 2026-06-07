@@ -368,14 +368,14 @@ export default function Settings() {
       // Refresh data health whenever ANY job reaches a terminal state so the
       // status dots and timestamps update without requiring a manual page reload.
       if (d.status === "success" || d.status === "error") {
-        qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
+        void qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
       }
       if (d.status === "success" && (d.job === "game-logs" || d.job === "historical-stats")) {
         setCalibrationNudge(true);
       }
       if (d.status === "success" && d.job === "calibration") {
         setCalibrationNudge(false);
-        qc.invalidateQueries({ queryKey: ["calibration-status"] });
+        void qc.invalidateQueries({ queryKey: ["calibration-status"] });
       }
     });
     return () => es.close();
@@ -391,7 +391,7 @@ export default function Settings() {
       // SSE connection drops these ensure the UI eventually catches up.
       [4_000, 15_000, 45_000].forEach(delay =>
         setTimeout(() => {
-          qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
+          void qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
         }, delay)
       );
     } catch (e) {
@@ -411,8 +411,8 @@ export default function Settings() {
     }
     toast({ title: "All syncs started", description: "All data providers refreshed." });
     setTimeout(() => {
-      qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
-      refetch();
+      void qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
+      void refetch();
     }, 2000);
     setSyncingAll(false);
   }
@@ -430,8 +430,8 @@ export default function Settings() {
       toast({ title: "PrizePicks synced", description: `${result.recordsProcessed} lines imported.` });
       setTimeout(() => {
         setPpFetching("idle");
-        qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
-        refetch();
+        void qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
+        void refetch();
       }, 2000);
     } catch (e) {
       setPpFetching("error");
@@ -449,8 +449,8 @@ export default function Settings() {
       await fetch("/api/sync/pre-lock", { method: "POST" });
       toast({ title: "Pre-lock sync started", description: "Lines, injuries, and odds refreshing now." });
       setTimeout(() => {
-        qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
-        refetch();
+        void qc.invalidateQueries({ queryKey: getGetDataHealthQueryKey() });
+        void refetch();
       }, 2000);
     } catch {
       toast({ title: "Pre-lock sync failed", variant: "destructive" });
@@ -670,7 +670,7 @@ export default function Settings() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => { triggerSync(job.endpoint, job.label); setTimeout(() => refetchGradeStats(), 3000); }}
+                            onClick={() => { void triggerSync(job.endpoint, job.label); setTimeout(() => void refetchGradeStats(), 3000); }}
                             disabled={gradeRunning || syncingAll}
                             className={`h-7 font-mono text-xs ${pendingCount > 0 ? "border-amber-600/50 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20" : "border-slate-700 bg-slate-800 hover:bg-slate-700"}`}
                           >
@@ -765,7 +765,7 @@ export default function Settings() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => { triggerSync(job.endpoint, job.label); setCalibrationNudge(false); }}
+                            onClick={() => { void triggerSync(job.endpoint, job.label); setCalibrationNudge(false); }}
                             disabled={isRunning || syncingAll}
                             className={`h-7 font-mono text-xs ${calIsStale || calibrationNudge
                               ? "border-amber-600/50 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20"

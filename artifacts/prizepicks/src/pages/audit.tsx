@@ -147,7 +147,7 @@ export default function ModelAudit() {
   const runMutation = useRunAudit({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getGetAuditLatestQueryKey() });
+        void qc.invalidateQueries({ queryKey: getGetAuditLatestQueryKey() });
       },
     },
   });

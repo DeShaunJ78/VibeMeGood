@@ -123,7 +123,6 @@ function MarkResultPanel({ entry, onDone }: { entry: any; onDone: () => void }) 
     if (allPicksGraded && confirmResult === null && picksSummary) {
       setConfirmResult(picksSummary.suggested);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allPicksGraded, entry.entryType]);
 
   if (confirmResult) {
@@ -1297,7 +1296,7 @@ export default function Journal() {
         open={newOpen}
         onClose={() => {
           setNewOpen(false);
-          qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
+          void qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
         }}
       />
     </div>

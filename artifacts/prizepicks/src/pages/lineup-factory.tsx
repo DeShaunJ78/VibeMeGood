@@ -900,7 +900,6 @@ function ScoredPropsTable({ props, pinnedIds, biasWeight, isGppMode, isStoryMode
       ...pinned.slice().sort((a, b) => adj(b) - adj(a)),
       ...rest.slice().sort((a, b) => adj(b) - adj(a)),
     ];
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, pinnedIds, biasWeight, biasDeltaMap, isGppMode]);
 
   const displayed = sorted.slice(0, 100);
@@ -1638,7 +1637,6 @@ export default function LineupFactory() {
       saveResult(generate.data);
       setCachedResult(generate.data);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generate.data]);
 
   // Keep history in sync if another tab modifies it

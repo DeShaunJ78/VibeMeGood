@@ -254,7 +254,7 @@ export default function SystemHealth() {
     toastRef.current(ok
       ? { title: "Sync complete", description: `${p.label} finished successfully` }
       : { title: "Sync failed", description: `${p.label} returned an error — check server logs`, variant: "destructive" });
-    refetchRef.current();
+    void refetchRef.current();
   };
   const settleFixRef = useRef(settleFix);
   settleFixRef.current = settleFix;
@@ -278,13 +278,13 @@ export default function SystemHealth() {
       title: "Still working",
       description: `${p.label} is taking longer than expected — this row updates automatically when it finishes.`,
     });
-    refetchRef.current();
+    void refetchRef.current();
   };
   const fixTimedOutRef = useRef(fixTimedOut);
   fixTimedOutRef.current = fixTimedOut;
 
   useEffect(() => {
-    refetch();
+    void refetch();
   }, []);
 
   // Live job completion — auto-reconnecting SSE so a network blip doesn't
@@ -300,7 +300,7 @@ export default function SystemHealth() {
       let d: { job?: string; status?: string };
       try { d = JSON.parse((e as MessageEvent).data); } catch { return; }
       if (d.status !== "success" && d.status !== "error") return;
-      refetchRef.current();
+      void refetchRef.current();
       const p = pendingFix.current;
       if (p && p.jobName !== null && p.jobName === d.job) {
         settleFixRef.current(d.status === "success");

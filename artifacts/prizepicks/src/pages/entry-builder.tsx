@@ -328,7 +328,6 @@ export default function EntryBuilder() {
     if (!simMode || picks.length < 2) { setSimResult(null); return; }
     const mult = playstyle === "power" ? (POWER_MULTIPLIERS[picks.length] ?? 0) : 0;
     void runSimulation(picks, simRuns, mult || 1, playstyle);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [simMode, picks, simRuns, playstyle]);
 
   // Demon & goblin picks are strictly "More" on PrizePicks — force it.
