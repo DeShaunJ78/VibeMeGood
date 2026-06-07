@@ -238,7 +238,7 @@ router.post("/sync/game-logs", async (req, res) => {
   res.json({ status: "started" });
   try {
     const { backfillHistoricalStats } = await import("../lib/sync/historical-stats");
-    const result = await backfillHistoricalStats({ nba: true, mlb: true, nhl: true, nfl: false });
+    const result = await backfillHistoricalStats({ nba: true, mlb: true, nhl: true, nfl: true });
     logger.info(result, "Incremental game log sync done");
     broadcastSyncStatus("game-logs", "success", `${result.total} records`);
     // Auto-chain calibration — only when new records were written (skip if 0)

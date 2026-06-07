@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { playerGameLogsTable, playersTable, teamsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { logger } from "../logger";
 import { normalizeName } from "../projections/name-match";
 // CSV helpers (mirrors nfl-advanced.ts — kept local to avoid cross-module coupling)
@@ -840,9 +840,9 @@ async function backfillNFL(
           ["Rush TDs",        rushTds],
           ["Rec TDs",         recTds],
           ["Pass TDs",        passTds],
-          ["Completions",     completions],
-          ["Pass Attempts",   attempts],
-          ["Rush Attempts",   carries],
+          ["Completions",      completions],
+          ["Passing Attempts", attempts],
+          ["Rush Attempts",    carries],
         ];
 
         // Interceptions and sacks: write only when > 0 (not meaningful at 0 for most positions)
@@ -878,6 +878,65 @@ function lev(a: string, b: string): number {
   return dp[m][n];
 }
 
+// ─── Derived combo stat: Blks+Stls ───────────────────────────────────────────
+// Computes the per-game sum of "Blocked Shots" + "Steals" and writes it as
+// "Blks+Stls" so calibration + projection can train on that PP stat type.
+// Idempotent: upserts via onConflictDoNothing so re-runs are safe.
+async function deriveBlksStls(): Promise<number> {
+  const [stealsRows, blocksRows] = await Promise.all([
+    db
+      .select({
+        playerId: playerGameLogsTable.playerId,
+        gameDate: playerGameLogsTable.gameDate,
+        value: playerGameLogsTable.value,
+      })
+      .from(playerGameLogsTable)
+      .where(eq(playerGameLogsTable.statType, "Steals")),
+    db
+      .select({
+        playerId: playerGameLogsTable.playerId,
+        gameDate: playerGameLogsTable.gameDate,
+        value: playerGameLogsTable.value,
+      })
+      .from(playerGameLogsTable)
+      .where(eq(playerGameLogsTable.statType, "Blocked Shots")),
+  ]);
+
+  // Index blocks by "playerId:gameDate" for O(1) lookup
+  const blocksMap = new Map<string, number>();
+  for (const r of blocksRows) {
+    blocksMap.set(`${r.playerId}:${r.gameDate}`, Number(r.value));
+  }
+
+  const toInsert: (typeof playerGameLogsTable.$inferInsert)[] = [];
+  for (const s of stealsRows) {
+    const key = `${s.playerId}:${s.gameDate}`;
+    const blks = blocksMap.get(key);
+    if (blks == null) continue;
+    toInsert.push({
+      playerId: s.playerId,
+      gameDate: s.gameDate,
+      statType: "Blks+Stls",
+      value: (Number(s.value) + blks).toString(),
+      source: "derived_blks_stls",
+    });
+  }
+
+  if (toInsert.length === 0) return 0;
+
+  let written = 0;
+  for (let i = 0; i < toInsert.length; i += 500) {
+    await db
+      .insert(playerGameLogsTable)
+      .values(toInsert.slice(i, i + 500))
+      .onConflictDoNothing();
+    written += toInsert.slice(i, i + 500).length;
+  }
+
+  logger.info({ derived: toInsert.length, written }, "Blks+Stls derivation complete");
+  return toInsert.length;
+}
+
 // ─── Main export ─────────────────────────────────────────────────────────────
 
 export async function backfillHistoricalStats(
@@ -891,6 +950,10 @@ export async function backfillHistoricalStats(
   if (options.nba !== false) {
     // season param = ending year of season: 2026 = 2025-26, 2025 = 2024-25, 2024 = 2023-24
     results.nba = await backfillNBA(allPlayers, [2024, 2025, 2026]);
+    // Derive Blks+Stls combined stat after NBA logs are updated (idempotent)
+    await deriveBlksStls().catch(err =>
+      logger.warn({ err }, "Blks+Stls derivation failed (non-critical)"),
+    );
   }
 
   if (options.mlb !== false) {
