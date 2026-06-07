@@ -1,0 +1,208 @@
+You are not doing a quick patch. You are performing a full data-integrity, projection-accuracy, sync-flow, and calculation audit of this app.
+
+The current issue is that the app keeps getting patched component-by-component instead of receiving permanent root-cause fixes. Every time one thing gets fixed, another thing breaks. That stops now.
+
+Review the relevant codebase deeply and walk through the full data lifecycle:
+
+1. API ingestion
+2. Sync buttons and sync jobs
+3. Data normalization
+4. Storage/database writes
+5. Projection generation
+6. Calibration buckets
+7. Edge scoring
+8. Math formulas and calculations
+9. UI display of projections, scores, lines, and results
+10. Error handling, loading states, and retry behavior
+
+The app was supposed to generate accurate projections based on real data from multiple API sources, calibration buckets, and supporting calculations. Currently, it does not work reliably.
+
+Known problems to investigate:
+- Sync buttons are messy, disorganized, and unclear.
+- Sync buttons often spin forever or fail silently.
+- Data does not always complete syncing.
+- Data displayed in the UI appears inaccurate.
+- Projection logic is unreliable.
+- Calibration buckets may not be applied correctly.
+- Some areas of the app do not make logical sense.
+- Fixes are being patched in one component instead of solving the underlying system problem.
+- One fix often breaks another feature.
+- Math and calculations may be wrong, inconsistent, duplicated, or stale.
+- Loading states, failure states, and success states are not trustworthy.
+- The app needs accurate math because inaccurate data creates bad projections.
+
+Your job:
+
+First, audit before changing anything.
+
+Do not immediately patch random components.
+
+Map the current system:
+- Which APIs are being used?
+- Where does each data source enter the app?
+- Where is the data transformed?
+- Where is it stored?
+- Which tables/collections are involved?
+- Which services calculate projections?
+- Which files calculate calibration, edge score, confidence, probability, expected value, or recommendation tiers?
+- Which frontend components display those values?
+- Which sync buttons call which backend routes?
+- Which backend routes call which services?
+- Which functions can fail silently?
+- Which functions can hang indefinitely?
+- Which calculations are duplicated across files?
+- Which values are being recomputed instead of stored as snapshots?
+- Which values are stale, missing, nullable, or being assumed incorrectly?
+
+Then verify the math.
+
+For every projection-related calculation, identify:
+- Formula name
+- File path
+- Inputs
+- Output
+- Expected behavior
+- Current behavior
+- Whether the formula is correct
+- Whether the formula is used consistently
+- Whether the frontend and backend agree
+- Whether values are rounded too early
+- Whether percentages, decimals, odds, probabilities, and multipliers are mixed incorrectly
+- Whether null/undefined data creates false confidence
+- Whether fallback values are hiding bad data
+
+Pay special attention to:
+- Projection gap
+- Edge score
+- Confidence score
+- Calibration bucket assignment
+- Historical hit rate
+- Expected value
+- CLV
+- Closing line comparison
+- Recommended stake
+- Tier assignment
+- Source weighting
+- Market consensus
+- Any “model projection vs market line” comparison
+
+Then audit sync behavior.
+
+For each sync button:
+- Identify its frontend component.
+- Identify the function it calls.
+- Identify the API route it hits.
+- Identify the backend service that runs.
+- Identify what data it is supposed to fetch.
+- Identify where the data should be saved.
+- Identify what success means.
+- Identify what failure means.
+- Identify what the UI should show during loading, success, partial success, and failure.
+- Identify why it may spin forever.
+- Identify whether the button can be clicked repeatedly and cause duplicate jobs.
+- Identify whether sync jobs need deduplication, locking, timeout handling, or job status tracking.
+
+Then audit UI logic.
+
+Identify areas where the app does not make logical sense:
+- Buttons in confusing places
+- Duplicate sync controls
+- Missing explanations
+- Misleading labels
+- Values shown without source transparency
+- Projections shown without confidence/context
+- Scores shown without enough data
+- Empty states that look like bugs
+- Loading states that never resolve
+- Error states that do not explain what failed
+
+Required output before coding:
+
+Provide a written audit report with these sections:
+
+1. Executive Summary
+Explain the real root problems in plain English.
+
+2. Data Flow Map
+Show how data moves from APIs → backend → database → calculation layer → frontend.
+
+3. Sync System Diagnosis
+List every sync button/job, what it does, what is broken, and how to fix it.
+
+4. Math & Calculation Audit
+List every important formula, where it lives, whether it is correct, and what must change.
+
+5. Projection Accuracy Risks
+Explain what currently makes projections inaccurate or unreliable.
+
+6. Root-Cause Fix Plan
+Prioritized plan to fix the system permanently instead of patching symptoms.
+
+7. Files to Change
+List exact files likely needing edits and why.
+
+8. Database / Schema Concerns
+Identify missing fields, bad field types, missing indexes, stale snapshots, or unsafe nullable data.
+
+9. Testing Plan
+Provide tests that prove sync, projections, calibration, math, and UI states work.
+
+10. Regression Protection
+Explain how you will prevent future fixes from breaking existing features.
+
+Implementation rules:
+
+- Do not remove working features unless absolutely necessary.
+- Do not fake data to make the UI look fixed.
+- Do not hide errors behind fallback values.
+- Do not silently swallow API failures.
+- Do not duplicate formulas in multiple places.
+- Do not calculate critical values differently on frontend and backend.
+- Do not let sync buttons spin forever.
+- Do not allow multiple sync jobs to corrupt data.
+- Do not make cosmetic fixes before root-cause fixes.
+- Do not claim the app is fixed unless tests prove it.
+
+Required improvements:
+
+- Centralize all projection math into one reliable calculation service.
+- Centralize sync job handling into a clean service layer.
+- Add clear sync status: idle, running, success, partial failure, failed.
+- Add timeout handling for every sync job.
+- Add useful error messages.
+- Add source transparency for projections.
+- Add validation before projections are generated.
+- Add safeguards when required data is missing.
+- Add logging for API calls, failed syncs, bad records, and calculation errors.
+- Add tests for core formulas.
+- Add tests for sync routes.
+- Add tests for projection generation.
+- Add tests for calibration bucket logic.
+- Add regression tests for any bug fixed during this audit.
+
+Before making code changes, present the audit and plan.
+
+After approval, implement in phases:
+
+Phase 1: Stabilize sync system
+Phase 2: Fix data normalization and storage
+Phase 3: Centralize and verify math
+Phase 4: Fix projection/calibration logic
+Phase 5: Clean up confusing UI and sync buttons
+Phase 6: Add tests and regression protection
+Phase 7: Final verification with real data
+
+Final acceptance criteria:
+
+- Sync buttons complete or fail clearly.
+- No endless spinners.
+- Projection math is centralized and tested.
+- Calibration buckets work correctly.
+- Data shown in UI matches backend calculations.
+- Missing/incomplete data does not produce fake confidence.
+- API failures are visible and logged.
+- The app does not break one feature when another is fixed.
+- The system produces projections only when the required data is valid.
+- The app becomes trustworthy enough to make decisions from.
+
+Start by auditing the codebase. Do not patch first. Diagnose first. Then provide the full actionable fix plan.
