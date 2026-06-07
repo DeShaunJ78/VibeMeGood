@@ -294,6 +294,7 @@ const SYNC_JOB_GROUPS: Array<{ label: string; jobs: SyncJob[] }> = [
     jobs: [
       { label: "Grade Pending Picks", endpoint: "/api/sync/auto-grade-picks" },
       { label: "Backfill History",    endpoint: "/api/sync/historical-stats" },
+      { label: "Derive Blks+Stls",    endpoint: "/api/sync/derive-blks-stls" },
       { label: "Run Calibration",     endpoint: "/api/sync/calibration", staleDays: 7 },
     ],
   },

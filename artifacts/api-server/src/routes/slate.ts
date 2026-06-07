@@ -4,7 +4,7 @@ import {
   ppLinesTable, propScoresTable, playersTable,
   teamsTable, gamesTable, watchlistItemsTable, externalLinesTable,
   ppLineHistoryTable, injuriesTable, lineupConfirmationsTable,
-  ourProjectionsTable, playerGameLogsTable,
+  ourProjectionsTable, playerGameLogsTable, lineMoveEventsTable,
 } from "@workspace/db/schema";
 import { eq, and, inArray, desc, gte } from "drizzle-orm";
 import { pOverLineDist, percentileAtLineDist } from "../lib/projection/distributions";
@@ -250,8 +250,14 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
         .limit(10),
     ]);
 
-    const watchlistRows = await db.select().from(watchlistItemsTable)
-      .where(and(eq(watchlistItemsTable.playerId, line.playerId), eq(watchlistItemsTable.statType, line.statType)));
+    const [watchlistRows, lineMoveEvents] = await Promise.all([
+      db.select().from(watchlistItemsTable)
+        .where(and(eq(watchlistItemsTable.playerId, line.playerId), eq(watchlistItemsTable.statType, line.statType))),
+      db.select().from(lineMoveEventsTable)
+        .where(eq(lineMoveEventsTable.ppLineId, lineId))
+        .orderBy(desc(lineMoveEventsTable.capturedAt))
+        .limit(10),
+    ]);
 
     const game = line.gameId
       ? (await db.select().from(gamesTable).where(eq(gamesTable.id, line.gameId)))[0] ?? null
@@ -300,12 +306,34 @@ router.get("/slate/:ppLineId", async (req, res): Promise<void> => {
       })
       .sort((a, b) => a.effectiveLine - b.effectiveLine);
 
+    // Consensus opening line — median across all books that recorded one.
+    // Set on first insert and never overwritten, so this is the true open.
+    const openingLineVals = externalLines
+      .filter(el => el.openingLine != null)
+      .map(el => Number(el.openingLine))
+      .sort((a, b) => a - b);
+    const openingLine = openingLineVals.length > 0
+      ? openingLineVals[Math.floor(openingLineVals.length / 2)]
+      : null;
+
     res.json({
       siblingTiers,
       ppLine: line,
       player,
       game,
       lineHistory,
+      lineMoveEvents: lineMoveEvents.map(e => ({
+        bookName: e.bookName,
+        prevLine: e.prevLine != null ? Number(e.prevLine) : null,
+        newLine: e.newLine != null ? Number(e.newLine) : null,
+        moveSize: e.moveSize != null ? Number(e.moveSize) : null,
+        moveDirection: e.moveDirection,
+        sharpSignal: e.sharpSignal,
+        sharpConfidence: e.sharpConfidence,
+        sharpExplanation: e.sharpExplanation,
+        capturedAt: e.capturedAt,
+      })),
+      openingLine,
       projection: null,
       ourProjection: op ? {
         value: parseFloat(op.projectedValue.toString()),

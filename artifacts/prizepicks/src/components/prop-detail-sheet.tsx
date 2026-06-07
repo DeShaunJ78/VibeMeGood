@@ -115,6 +115,18 @@ interface FormData {
   trend: "hot" | "cold" | "neutral";
 }
 
+interface LineMoveEvent {
+  bookName: string | null;
+  prevLine: number | null;
+  newLine: number | null;
+  moveSize: number | null;
+  moveDirection: string | null;
+  sharpSignal: string | null;
+  sharpConfidence: string | null;
+  sharpExplanation: string | null;
+  capturedAt: string | null;
+}
+
 interface PropDetail {
   siblingTiers?: TierRung[];
   ppLine: any;
@@ -130,6 +142,8 @@ interface PropDetail {
   injuries: any[];
   lineupConfirmation: any | null;
   isWatched: boolean;
+  lineMoveEvents?: LineMoveEvent[];
+  openingLine?: number | null;
 }
 
 function pOverColor(pct: number | null): string {
@@ -733,6 +747,58 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                 </div>
               )}
 
+              {/* ── Game Context ── */}
+              {data.game && (data.game.impliedHomeTotal != null || data.game.homeWinProb != null) && (() => {
+                const playerTeamId = data.player?.teamId;
+                const isHome = playerTeamId != null && data.game.homeTeamId === playerTeamId;
+                const teamImplied: number | null = isHome ? data.game.impliedHomeTotal : data.game.impliedAwayTotal;
+                const oppImplied: number | null = isHome ? data.game.impliedAwayTotal : data.game.impliedHomeTotal;
+                const teamWinProb: number | null = isHome ? data.game.homeWinProb : data.game.awayWinProb;
+                const gameTotal: number | null = data.game.total ?? null;
+                return (
+                  <div className="px-5 py-4 border-b border-slate-800/50">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-sky-400 text-[11px] leading-none">⚾</span>
+                      <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Game Context</div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {teamImplied != null && (
+                        <div className="bg-slate-900 border border-slate-800 rounded p-2.5 text-center">
+                          <div className="text-[9px] font-mono text-slate-500 mb-0.5">Team Implied</div>
+                          <div className="text-lg font-mono font-bold text-sky-300">{Number(teamImplied).toFixed(1)}</div>
+                        </div>
+                      )}
+                      {oppImplied != null && (
+                        <div className="bg-slate-900 border border-slate-800 rounded p-2.5 text-center">
+                          <div className="text-[9px] font-mono text-slate-500 mb-0.5">Opp Implied</div>
+                          <div className="text-lg font-mono font-bold text-slate-400">{Number(oppImplied).toFixed(1)}</div>
+                        </div>
+                      )}
+                      {gameTotal != null && (
+                        <div className="bg-slate-900 border border-slate-800 rounded p-2.5 text-center">
+                          <div className="text-[9px] font-mono text-slate-500 mb-0.5">Game Total</div>
+                          <div className="text-lg font-mono font-bold text-slate-300">{Number(gameTotal).toFixed(1)}</div>
+                        </div>
+                      )}
+                    </div>
+                    {teamWinProb != null && (
+                      <div className="mt-2.5">
+                        <div className="flex justify-between text-[9px] font-mono text-slate-500 mb-1">
+                          <span>{isHome ? "Home" : "Away"} win prob</span>
+                          <span className="text-sky-400 font-bold">{(Number(teamWinProb) * 100).toFixed(0)}%</span>
+                        </div>
+                        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-sky-500/70 rounded-full"
+                            style={{ width: `${Math.max(2, Number(teamWinProb) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* ── Model Distribution Panel ── */}
               {op && (
                 <div className="px-5 py-4 border-b border-slate-800/50">
@@ -1167,6 +1233,80 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                   })()}
                 </div>
               )}
+
+              {/* ── Market Movement / CLV ── */}
+              {(() => {
+                const moves = data.lineMoveEvents ?? [];
+                const openLine = data.openingLine ?? null;
+                const currentPpLine = Number(data.ppLine?.lineValueOverride ?? data.ppLine?.lineValue ?? 0);
+                const hasOpeningLine = openLine != null;
+                const hasMoves = moves.length > 0;
+                if (!hasOpeningLine && !hasMoves) return null;
+                const clvDiff = hasOpeningLine ? (currentPpLine - openLine!) : null;
+                const clvDirection = clvDiff == null ? null : clvDiff > 0 ? "up" : clvDiff < 0 ? "down" : "flat";
+                return (
+                  <div className="px-5 py-4 border-b border-slate-800/50">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-violet-400 text-[11px] leading-none">📈</span>
+                      <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Market Movement</div>
+                    </div>
+
+                    {hasOpeningLine && (
+                      <div className="flex items-center gap-3 mb-3 bg-slate-900 border border-slate-800 rounded p-2.5">
+                        <div className="text-center">
+                          <div className="text-[9px] font-mono text-slate-500 mb-0.5">Opening</div>
+                          <div className="text-base font-mono font-bold text-slate-300">{openLine!.toFixed(1)}</div>
+                        </div>
+                        <div className="flex-1 flex justify-center">
+                          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                            clvDirection === "up"   ? "text-rose-400 bg-rose-950/40"   :
+                            clvDirection === "down" ? "text-emerald-400 bg-emerald-950/40" :
+                            "text-slate-400 bg-slate-800"
+                          }`}>
+                            {clvDiff != null && clvDiff !== 0
+                              ? `${clvDiff > 0 ? "↑" : "↓"} ${Math.abs(clvDiff).toFixed(1)}`
+                              : "—"}
+                          </span>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-[9px] font-mono text-slate-500 mb-0.5">Current PP</div>
+                          <div className="text-base font-mono font-bold text-sky-300">{currentPpLine.toFixed(1)}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {hasMoves && (
+                      <div className="space-y-1.5">
+                        <div className="text-[9px] font-mono text-slate-500 uppercase tracking-wider mb-1">
+                          Recent moves ({moves.length})
+                        </div>
+                        {moves.slice(0, 5).map((mv, i) => {
+                          const dir = mv.moveDirection ?? "";
+                          const isUp = dir === "up";
+                          const isDown = dir === "down";
+                          const dirColor = isUp ? "text-rose-400" : isDown ? "text-emerald-400" : "text-slate-400";
+                          const ts = mv.capturedAt
+                            ? new Date(mv.capturedAt).toLocaleString([], { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
+                            : null;
+                          return (
+                            <div key={i} className="flex items-center gap-2 text-[10px] font-mono text-slate-400">
+                              <span className={`w-3 shrink-0 ${dirColor}`}>{isUp ? "↑" : isDown ? "↓" : "—"}</span>
+                              <span className="text-slate-300">
+                                {mv.prevLine?.toFixed(1) ?? "?"} → {mv.newLine?.toFixed(1) ?? "?"}
+                              </span>
+                              {mv.bookName && <span className="text-slate-600 text-[9px]">{mv.bookName}</span>}
+                              {mv.sharpSignal && mv.sharpSignal !== "none" && (
+                                <span className="text-amber-400 text-[9px] ml-auto shrink-0">⚡ {mv.sharpSignal}</span>
+                              )}
+                              {ts && <span className="text-slate-600 text-[9px] ml-auto shrink-0">{ts}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* ── Sharp Signal ── */}
               {sharpSignal && sharpSignal !== "neutral" && (

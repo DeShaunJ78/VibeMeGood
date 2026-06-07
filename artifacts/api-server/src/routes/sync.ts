@@ -194,6 +194,20 @@ router.post("/sync/historical-stats", async (req, res) => {
   })();
 });
 
+// #167 — Derive Blks+Stls combined game-log rows without a full NBA backfill.
+// Fast (one SQL join + batch upsert), so no in-flight guard needed.
+router.post("/sync/derive-blks-stls", async (req, res) => {
+  res.json({ status: "started" });
+  try {
+    const { deriveBlksStls } = await import("../lib/sync/historical-stats");
+    const n = await deriveBlksStls();
+    broadcastSyncStatus("derive-blks-stls", "success", `${n} Blks+Stls rows derived`);
+  } catch (e) {
+    req.log.error({ err: e }, "Blks+Stls derivation failed");
+    broadcastSyncStatus("derive-blks-stls", "error", e instanceof Error ? e.message : "Unknown error");
+  }
+});
+
 // Fix 1 — Backfill gameId on historical PP lines
 router.post("/sync/backfill-game-ids", async (req, res) => {
   res.json({ status: "started" });

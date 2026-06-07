@@ -882,7 +882,7 @@ function lev(a: string, b: string): number {
 // Computes the per-game sum of "Blocked Shots" + "Steals" and writes it as
 // "Blks+Stls" so calibration + projection can train on that PP stat type.
 // Idempotent: upserts via onConflictDoNothing so re-runs are safe.
-async function deriveBlksStls(): Promise<number> {
+export async function deriveBlksStls(): Promise<number> {
   const [stealsRows, blocksRows] = await Promise.all([
     db
       .select({
