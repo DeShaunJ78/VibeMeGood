@@ -247,6 +247,8 @@ function getFlexMultiplier(hits: number, total: number): number {
 
 // payoutFactor scales the entry's payout by the product of any demon (>1) / goblin (<1)
 // per-pick multipliers, so the EV reflects PrizePicks' boosted/discounted payouts.
+// NOTE: kept for reference / unit tests but no longer used in the main Flex path —
+// use calcFlexEVFromSim instead so correlated probabilities drive each payout tier.
 function calcFlexEV(probs: number[], stake: number, payoutFactor = 1): number {
   const n = probs.length;
   let ev = -stake;
@@ -259,6 +261,28 @@ function calcFlexEV(probs: number[], stake: number, payoutFactor = 1): number {
     }
     const mult = getFlexMultiplier(hits, n);
     if (mult > 0) ev += stateProb * mult * payoutFactor * stake;
+  }
+  return ev;
+}
+
+/**
+ * Flex EV using correlated hit-count probabilities from simulateEntry.
+ *
+ * hitCountProbs[k] = P(exactly k legs hit) under the Cholesky correlation model.
+ * Each payout tier's probability is drawn from the simulation rather than
+ * independent multiplication, so stacked players properly increase bust risk
+ * (0-hit tier) and reduce the diversification benefit assumed by the naive model.
+ */
+function calcFlexEVFromSim(
+  hitCountProbs: number[],
+  n: number,
+  stake: number,
+  payoutFactor = 1,
+): number {
+  let ev = -stake;
+  for (let k = 0; k <= n; k++) {
+    const mult = getFlexMultiplier(k, n);
+    if (mult > 0) ev += (hitCountProbs[k] ?? 0) * mult * payoutFactor * stake;
   }
   return ev;
 }
@@ -1091,10 +1115,39 @@ router.post("/lineup-factory/generate", async (req, res) => {
       let correlationNote: string | null = null;
 
       if (cfg.format === "flex") {
-        ev = calcFlexEV(picks.map(p => p.hitProbability), stake, payoutFactor);
-        pHit = picks.reduce((acc, p) => acc * p.hitProbability, 1);
+        // Use the same Cholesky-based Monte Carlo model as Power entries so
+        // stacked players increase bust risk and every partial payout tier is
+        // weighted with correlated (not independent) probabilities.
+        const flexSim = simulateEntry({
+          legs: picks.map(p => ({
+            playerName: p.playerName,
+            statType:   p.statType,
+            line:       p.ppLine,
+            side:       p.direction === "more" ? ("over" as const) : ("under" as const),
+            modelProb:  p.hitProbability,
+            sport:      p.sport,
+            team:       String(p.teamId ?? ""),
+            gameId:     String(p.gameId ?? ""),
+            mean:       p.projMean ?? p.ppLine,
+            stdDev:     p.projStdDev ?? 1.0,
+          })),
+          runs:       5000,
+          // multiplier is unused for Flex EV (each tier has its own multiplier),
+          // but simulateEntry still needs it for the entryEV field; pass all-hit mult.
+          multiplier: getFlexMultiplier(picks.length, picks.length),
+        });
+        ev = calcFlexEVFromSim(flexSim.hitCountProbabilities, picks.length, stake, payoutFactor);
+        pHit = Math.min(0.97, Math.max(0.005, flexSim.trueJointProbability));
         grossPayout = (getFlexMultiplier(picks.length, picks.length) || 1) * payoutFactor * stake;
-        correlationAdjusted = picks.some((p, i) => picks.slice(i + 1).some(q => q.playerId === p.playerId));
+        correlationAdjusted = flexSim.correlationAdjustment !== 0;
+        const corrPct = (flexSim.correlationAdjustment * 100).toFixed(1);
+        const bustPct = (flexSim.bustProbability * 100).toFixed(1);
+        if (Math.abs(flexSim.correlationAdjustment) > 0.005) {
+          const sign = flexSim.correlationAdjustment > 0 ? "+" : "";
+          correlationNote = `Correlated legs (${sign}${corrPct}% all-hit vs naive). Bust risk: ${bustPct}%.`;
+        } else {
+          correlationNote = `Bust risk: ${bustPct}%.`;
+        }
       } else {
         const result = calcPowerEV(picks, stake, picks.length);
         ev = result.ev;

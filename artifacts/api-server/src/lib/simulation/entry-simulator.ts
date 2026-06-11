@@ -32,6 +32,15 @@ export interface SimResult {
   entryEV: number;
   adjustedEV: number;
   runCount: number;
+  /**
+   * hitCountProbabilities[k] = P(exactly k legs hit) under the correlated model.
+   * Length = legs.length + 1.  Used by the Flex EV calculator to weight each
+   * partial-payout tier with correlated joint probabilities instead of naive
+   * independent multiplication.
+   */
+  hitCountProbabilities: number[];
+  /** P(0 legs hit) — convenience alias for bust-risk display. */
+  bustProbability: number;
   correlationDetails: {
     hasPositiveCorrelation: boolean;
     hasNegativeCorrelation: boolean;
@@ -56,6 +65,8 @@ export function simulateEntry(config: {
       entryEV: -1,
       adjustedEV: -1,
       runCount: 0,
+      hitCountProbabilities: [],
+      bustProbability: 1,
       correlationDetails: { hasPositiveCorrelation: false, hasNegativeCorrelation: false, dominantPairs: [] },
     };
   }
@@ -76,11 +87,14 @@ export function simulateEntry(config: {
   const L = choleskyDecompose(corrMatrix);
 
   const n = legs.length;
-  let allHit = 0;
+  // hitCounts[k] = number of simulation runs where exactly k legs hit.
+  // Tracking all hit counts (not just allHit) lets us compute correlated
+  // partial-payout probabilities for Flex entries.
+  const hitCounts = new Array<number>(n + 1).fill(0);
 
   for (let r = 0; r < runs; r++) {
     const correlated = correlatedNormals(L);
-    let runHit = true;
+    let runHits = 0;
 
     for (let i = 0; i < n; i++) {
       const leg = legs[i];
@@ -92,13 +106,15 @@ export function simulateEntry(config: {
       );
       const hit =
         leg.side === "over" ? sample > leg.line : sample < leg.line;
-      if (!hit) { runHit = false; break; }
+      if (hit) runHits++;
     }
 
-    if (runHit) allHit++;
+    hitCounts[runHits]++;
   }
 
-  const trueJointProbability = allHit / runs;
+  const hitCountProbabilities = hitCounts.map(c => c / runs);
+  const trueJointProbability = hitCountProbabilities[n] ?? 0;
+  const bustProbability = hitCountProbabilities[0] ?? 0;
   const correlationAdjustment = trueJointProbability - naiveProbability;
   const entryEV = trueJointProbability * multiplier - 1;
 
@@ -119,6 +135,8 @@ export function simulateEntry(config: {
     entryEV,
     adjustedEV: entryEV,
     runCount: runs,
+    hitCountProbabilities,
+    bustProbability,
     correlationDetails: { hasPositiveCorrelation, hasNegativeCorrelation, dominantPairs },
   };
 }
