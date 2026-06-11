@@ -1281,6 +1281,8 @@ export interface GeneratedLineup {
   correlationAdjusted: boolean;
   /** @nullable */
   correlationNote?: string | null;
+  /** Top 2–3 dominant correlated player pairs in this lineup (e.g. 'LeBron James + Anthony Davis (+40%)'). Null when no meaningful correlation exists. */
+  correlationPairs?: string[] | null;
   diversificationScore: number;
   /**
      * Story template id assigned to this lineup (e.g. 'shootout', 'pace_exploit'). Null when storyMode is off.

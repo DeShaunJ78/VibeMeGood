@@ -110,6 +110,7 @@ type GeneratedLineup = {
   stake: number;
   correlationAdjusted: boolean;
   correlationNote: string | null;
+  correlationPairs: string[] | null;
   diversificationScore: number;
   // Story mode fields — null when storyMode is off
   storyTemplate: string | null;
@@ -317,7 +318,10 @@ function calcPowerEV(picks: ScoredProp[], stake: number, n: number) {
   const corrFactor = simResult.naiveProbability > 0
     ? pHit / simResult.naiveProbability
     : 1.0;
-  return { ev: pHit * mult * stake - stake, pHit, corrFactor };
+  const correlationPairs = simResult.correlationDetails.dominantPairs.length > 0
+    ? simResult.correlationDetails.dominantPairs.slice(0, 3)
+    : null;
+  return { ev: pHit * mult * stake - stake, pHit, corrFactor, correlationPairs };
 }
 
 function pairwiseOverlap(a: ScoredProp[], b: ScoredProp[]): number {
@@ -1113,6 +1117,7 @@ router.post("/lineup-factory/generate", async (req, res) => {
       let ev: number, pHit: number, grossPayout: number;
       let correlationAdjusted = false;
       let correlationNote: string | null = null;
+      let correlationPairs: string[] | null = null;
 
       if (cfg.format === "flex") {
         // Use the same Cholesky-based Monte Carlo model as Power entries so
@@ -1148,6 +1153,9 @@ router.post("/lineup-factory/generate", async (req, res) => {
         } else {
           correlationNote = `Bust risk: ${bustPct}%.`;
         }
+        correlationPairs = flexSim.correlationDetails.dominantPairs.length > 0
+          ? flexSim.correlationDetails.dominantPairs.slice(0, 3)
+          : null;
       } else {
         const result = calcPowerEV(picks, stake, picks.length);
         ev = result.ev;
@@ -1157,6 +1165,7 @@ router.post("/lineup-factory/generate", async (req, res) => {
         if (result.corrFactor > 1.01) {
           correlationNote = `Positive correlation detected (+${((result.corrFactor - 1) * 100).toFixed(1)}% joint-prob). Estimate is approximate.`;
         }
+        correlationPairs = result.correlationPairs;
       }
 
       const diversificationScore = lineups.length > 0
@@ -1174,6 +1183,7 @@ router.post("/lineup-factory/generate", async (req, res) => {
         stake,
         correlationAdjusted,
         correlationNote,
+        correlationPairs,
         diversificationScore,
         storyTemplate:       assignedTemplate?.id ?? null,
         anchorPickId,

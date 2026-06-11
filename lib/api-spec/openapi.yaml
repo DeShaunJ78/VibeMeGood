@@ -2590,6 +2590,7 @@ components:
         stake: { type: number }
         correlationAdjusted: { type: boolean }
         correlationNote: { type: ["string", "null"] }
+        correlationPairs: { type: array, items: { type: string }, nullable: true, description: "Top 2–3 dominant correlated player pairs in this lineup (e.g. 'LeBron James + Anthony Davis (+40%)'). Null when no meaningful correlation exists." }
         diversificationScore: { type: number }
         storyTemplate: { type: ["string", "null"], description: "Story template id assigned to this lineup (e.g. 'shootout', 'pace_exploit'). Null when storyMode is off." }
         anchorPickId: { type: ["integer", "null"], description: "ppLineId of the anchor pick — the pick with highest narrative fit × ceiling / ownership for the assigned story." }

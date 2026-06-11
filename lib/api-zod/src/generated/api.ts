@@ -1982,6 +1982,7 @@ export const GenerateLineupFactoryResponse = zod.object({
   "stake": zod.number(),
   "correlationAdjusted": zod.boolean(),
   "correlationNote": zod.string().nullish(),
+  "correlationPairs": zod.array(zod.string()).nullish().describe('Top 2–3 dominant correlated player pairs in this lineup (e.g. \'LeBron James + Anthony Davis (+40%)\'). Null when no meaningful correlation exists.'),
   "diversificationScore": zod.number(),
   "storyTemplate": zod.string().nullish().describe('Story template id assigned to this lineup (e.g. \'shootout\', \'pace_exploit\'). Null when storyMode is off.'),
   "anchorPickId": zod.number().nullish().describe('ppLineId of the anchor pick — the pick with highest narrative fit × ceiling \/ ownership for the assigned story.')

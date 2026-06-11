@@ -805,6 +805,24 @@ function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap }:
             <span>{lineup.correlationNote}</span>
           </div>
         )}
+        {lineup.correlationPairs && lineup.correlationPairs.length > 0 && (
+          <div className="mt-1.5 pt-1.5 border-t border-slate-800">
+            <div className="flex items-center gap-1 mb-1">
+              <ArrowLeftRight className="h-2.5 w-2.5 text-cyan-500/70 shrink-0" />
+              <span className="text-[9px] font-mono text-cyan-500/70 uppercase tracking-wide">Correlated pairs</span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {lineup.correlationPairs.map((pair, i) => (
+                <span
+                  key={i}
+                  className="text-[9px] font-mono bg-cyan-950/40 border border-cyan-800/30 text-cyan-300/80 px-1.5 py-0.5 rounded"
+                >
+                  {pair}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
