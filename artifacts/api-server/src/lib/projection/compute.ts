@@ -2,7 +2,7 @@ import { db } from "@workspace/db";
 import {
   playerGameLogsTable, ourProjectionsTable, ppLinesTable, playersTable,
   injuriesTable, matchupHistoryTable, gamesTable, teamsTable,
-  fatigueDataTable, teamPaceRatingsTable,
+  fatigueDataTable, teamPaceRatingsTable, lineupConfirmationsTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray, isNotNull, sql } from "drizzle-orm";
 import { getNflUsageMap } from "../sync/nfl-advanced";
@@ -18,11 +18,27 @@ import { calibratePOver, loadCalibrationMap, type CalibrationMap } from "./calib
 import {
   restFactor, paceFactor, dvpFactor, impliedTotalFactor, weatherFactor,
   nflAdvancedFactor, snapFactor, parkFactor, combineFactors,
+  minutesFactor, usageRateFactor, threePointDefenseFactor,
+  isNBACountingStat, is3PTStat,
   impliedTeamTotal, SPORT_IMPLIED_BASELINE,
   type FactorResult,
 } from "./factors";
 import { logger } from "../logger";
 import { normalizeStatType } from "../stat-type";
+
+/**
+ * NBA/WNBA per-minute value baselines by position + stat type.
+ * Used to compute a usage-rate index: (player val/min) / (baseline val/min).
+ * Values represent typical production per minute for an average starter at
+ * each position (2024-25 season averages, ~30 min/game starters).
+ */
+const NBA_USAGE_BASELINE_VPM: Record<string, Record<string, number>> = {
+  PG: { "Points": 0.60, "Assists": 0.22, "Rebounds": 0.14, "3-PT Made": 0.07, "Blocked Shots": 0.02, "Steals": 0.04 },
+  SG: { "Points": 0.55, "Assists": 0.13, "Rebounds": 0.14, "3-PT Made": 0.07, "Blocked Shots": 0.02, "Steals": 0.03 },
+  SF: { "Points": 0.50, "Assists": 0.11, "Rebounds": 0.18, "3-PT Made": 0.05, "Blocked Shots": 0.03, "Steals": 0.03 },
+  PF: { "Points": 0.47, "Assists": 0.09, "Rebounds": 0.23, "3-PT Made": 0.03, "Blocked Shots": 0.04, "Steals": 0.02 },
+  C:  { "Points": 0.43, "Assists": 0.07, "Rebounds": 0.28, "3-PT Made": 0.02, "Blocked Shots": 0.07, "Steals": 0.02 },
+};
 
 export interface ProjectionOutput {
   mean: number;
@@ -420,7 +436,7 @@ export async function computeAllProjections(): Promise<number> {
   const teamAbbrMap = new Map(teams.map(t => [t.id, t.abbreviation]));
 
   // --- Batch-load all factor context in parallel ---
-  const [fatigueRows, paceRows, nflUsageMap, dvpRows] = await Promise.all([
+  const [fatigueRows, paceRows, nflUsageMap, dvpRows, lineupConfirmRows] = await Promise.all([
     // Latest fatigue row per player (ordered desc; we keep the first seen).
     playerIds.length
       ? db.select().from(fatigueDataTable)
@@ -445,6 +461,12 @@ export async function computeAllProjections(): Promise<number> {
       .innerJoin(playersTable, eq(playersTable.id, playerGameLogsTable.playerId))
       .where(and(isNotNull(playerGameLogsTable.opponentTeamId), isNotNull(playersTable.position)))
       .groupBy(playerGameLogsTable.opponentTeamId, playersTable.sport, playersTable.position, playerGameLogsTable.statType),
+    // Lineup confirmations for NBA/WNBA minutes projection factor.
+    playerIds.length
+      ? db.select().from(lineupConfirmationsTable)
+          .where(inArray(lineupConfirmationsTable.playerId, playerIds))
+          .orderBy(desc(lineupConfirmationsTable.confirmedAt))
+      : Promise.resolve([] as (typeof lineupConfirmationsTable.$inferSelect)[]),
   ]);
 
   // Index fatigue (first row per player = latest).
@@ -476,6 +498,34 @@ export async function computeAllProjections(): Promise<number> {
     leagueAgg.set(lk, cur);
   }
 
+  // Build team-wide 3PM allowed map from the DvP data (all positions aggregated).
+  // Used by threePointDefenseFactor() as a cleaner signal than position-specific DvP.
+  const team3PMAllowed = new Map<number, { sum: number; cnt: number }>();
+  for (const r of dvpRows) {
+    if (!r.opponentTeamId) continue;
+    const st = (r.statType ?? "").toLowerCase();
+    if (!st.includes("3-pt") && !st.includes("3pt") && !st.includes("three")) continue;
+    const avg = parseFloat(r.avgValue);
+    const cnt = parseInt(r.games, 10);
+    const cur = team3PMAllowed.get(r.opponentTeamId) ?? { sum: 0, cnt: 0 };
+    cur.sum += avg * cnt;
+    cur.cnt += cnt;
+    team3PMAllowed.set(r.opponentTeamId, cur);
+  }
+  let league3PMTotalSum = 0, league3PMTotalCnt = 0;
+  for (const v of team3PMAllowed.values()) {
+    league3PMTotalSum += v.sum;
+    league3PMTotalCnt += v.cnt;
+  }
+  const league3PMAvg = league3PMTotalCnt > 0 ? league3PMTotalSum / league3PMTotalCnt : null;
+
+  // Index lineup confirmations: most recent per (playerId, gameId).
+  const lineupByPlayerGame = new Map<string, typeof lineupConfirmationsTable.$inferSelect>();
+  for (const lc of lineupConfirmRows) {
+    const k = `${lc.playerId}:${lc.gameId}`;
+    if (!lineupByPlayerGame.has(k)) lineupByPlayerGame.set(k, lc);
+  }
+
   // Load the calibration table once and reuse it for every projection this run.
   const calibrationMap = await loadCalibrationMap();
 
@@ -497,6 +547,37 @@ export async function computeAllProjections(): Promise<number> {
     const pArr = allLogsByPlayer.get(log.playerId) ?? [];
     pArr.push(log);
     allLogsByPlayer.set(log.playerId, pArr);
+  }
+
+  // ── NBA/WNBA Saber Sim pre-computations ────────────────────────────────────
+
+  // Season-average minutes per player (deduplicated by gameDate to avoid
+  // counting the same game multiple times across stat-type rows).
+  const avgMinutesByPlayer = new Map<number, number>();
+  for (const [playerId, logs] of allLogsByPlayer) {
+    const gameMins = new Map<string, number>(); // gameDate → minutes
+    for (const log of logs) {
+      if (log.minutes != null && !gameMins.has(log.gameDate)) {
+        const m = parseFloat(log.minutes.toString());
+        if (m > 0) gameMins.set(log.gameDate, m);
+      }
+    }
+    if (gameMins.size === 0) continue;
+    const arr = [...gameMins.values()].slice(0, 20);
+    avgMinutesByPlayer.set(playerId, arr.reduce((a, b) => a + b, 0) / arr.length);
+  }
+
+  // Per-minute production rate per (player, statType) for the usage rate factor.
+  // Requires ≥3 recent games with minutes recorded to emit a signal.
+  const valPerMinByKey = new Map<string, number>(); // `${playerId}:${statType}` → val/min
+  for (const [key, logs] of gameLogsByKey) {
+    const playerId = parseInt(key.split(":")[0], 10);
+    const avgMins = avgMinutesByPlayer.get(playerId);
+    if (!avgMins || avgMins <= 0) continue;
+    const recent = logs.slice(0, 20).filter(l => l.minutes != null && parseFloat(l.minutes.toString()) > 0);
+    if (recent.length < 3) continue;
+    const avgVal = recent.reduce((s, l) => s + parseFloat(l.value.toString()), 0) / recent.length;
+    if (avgVal > 0) valPerMinByKey.set(key, avgVal / avgMins);
   }
 
   const opponentIds = [...new Set(
@@ -650,6 +731,39 @@ export async function computeAllProjections(): Promise<number> {
         }
       }
 
+      // ── NBA/WNBA Saber Sim factors ─────────────────────────────────────────
+      let usageRateIdx: number | null = null;
+      if (sport === "NBA" || sport === "WNBA") {
+        // 1. Minutes projection factor
+        const lcKey = line.gameId != null ? `${line.playerId}:${line.gameId}` : null;
+        const lc = lcKey ? lineupByPlayerGame.get(lcKey) : null;
+        const expMin = lc?.expectedMinutes != null ? parseFloat(lc.expectedMinutes.toString()) : null;
+        const seasonAvgMin = avgMinutesByPlayer.get(line.playerId) ?? null;
+        factors.push(minutesFactor(expMin, seasonAvgMin, line.statType));
+
+        // 2. Usage rate factor (per-minute production vs position baseline)
+        if (isNBACountingStat(line.statType)) {
+          const vpm = valPerMinByKey.get(`${line.playerId}:${line.statType}`) ?? null;
+          const posBaseline = NBA_USAGE_BASELINE_VPM[player.position ?? ""]?.[line.statType] ?? null;
+          const uf = usageRateFactor(vpm, posBaseline, line.statType);
+          factors.push(uf);
+          if (uf != null && vpm != null && posBaseline != null) {
+            usageRateIdx = Math.round((vpm / posBaseline) * 100) / 100;
+          }
+        }
+
+        // 3. 3-point defense factor (team-wide 3PM allowed vs league avg)
+        if (is3PTStat(line.statType) && opponentTeamId != null) {
+          const t3pm = team3PMAllowed.get(opponentTeamId);
+          const allowed3PM = t3pm && t3pm.cnt > 0 ? t3pm.sum / t3pm.cnt : null;
+          factors.push(threePointDefenseFactor({
+            allowed3PM,
+            league3PM: league3PMAvg,
+            games: t3pm?.cnt ?? null,
+          }));
+        }
+      }
+
       const { combinedFactor, applied } = combineFactors(factors);
       const adjustedMean = Math.round(result.mean * combinedFactor * 100) / 100;
 
@@ -682,6 +796,7 @@ export async function computeAllProjections(): Promise<number> {
         adjustments: applied,
         ensembleBlendPct: result.ensembleBlendPct,
         vor: result.vor != null ? result.vor.toString() : null,
+        usageRate: usageRateIdx != null ? usageRateIdx.toString() : null,
         expiresAt: result.expiresAt,
         generatedAt: new Date(),
       };
@@ -720,6 +835,7 @@ export async function computeAllProjections(): Promise<number> {
           adjustments:      sql`excluded.adjustments`,
           ensembleBlendPct: sql`excluded.ensemble_blend_pct`,
           vor:              sql`excluded.vor`,
+          usageRate:        sql`excluded.usage_rate`,
           expiresAt:        sql`excluded.expires_at`,
           generatedAt:      sql`excluded.generated_at`,
         },

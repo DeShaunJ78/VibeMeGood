@@ -46,6 +46,9 @@ export const ourProjectionsTable = pgTable("our_projections", {
   // Value Over Replacement (Addition 13)
   vor: numeric("vor"),                                               // (mean − line) / σ
 
+  // NBA/WNBA Saber Sim: usage rate index (player val/min ÷ position baseline val/min)
+  usageRate: numeric("usage_rate"),
+
   // Lifecycle
   modelVersion: varchar("model_version", { length: 20 }).default("v2"),
   expiresAt: timestamp("expires_at"),

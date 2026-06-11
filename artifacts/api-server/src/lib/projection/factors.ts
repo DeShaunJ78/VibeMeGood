@@ -69,6 +69,18 @@ export const FACTOR_CONFIG = {
   snap: {
     clamp: { min: 0.9, max: 1.0 },
   },
+  minutes: {
+    clamp: { min: 0.70, max: 1.40 },
+  },
+  usageRate: {
+    weight: 0.7,
+    clamp: { min: 0.80, max: 1.25 },
+  },
+  threePointDefense: {
+    weight: 0.35,
+    clamp: { min: 0.80, max: 1.20 },
+    minGames: 20,
+  },
 } as const;
 
 /** Baseline team total (points/runs/goals) per sport, used to scale implied-total. */
@@ -127,6 +139,20 @@ const RECEIVING_KEYWORDS = ["receiving", "reception", "rec yard"];
 export function isReceivingStat(statType: string): boolean {
   const s = statType.toLowerCase();
   return RECEIVING_KEYWORDS.some((k) => s.includes(k));
+}
+
+const NBA_COUNTING_KEYWORDS = ["point", "pts", "rebound", "reb", "assist", "ast", "3-pt", "three", "block", "steal"];
+/** NBA/WNBA single-stat counting props eligible for minutes/usage adjustment. Excludes combos. */
+export function isNBACountingStat(statType: string): boolean {
+  const s = statType.toLowerCase();
+  if (s.includes("+")) return false; // exclude combo stats
+  return NBA_COUNTING_KEYWORDS.some((k) => s.includes(k));
+}
+
+/** Matches 3-point made/attempted stat types. */
+export function is3PTStat(statType: string): boolean {
+  const s = statType.toLowerCase();
+  return s.includes("3-pt") || s.includes("3pt") || s.includes("3pm") || s.includes("three");
 }
 
 // ── individual factor builders ───────────────────────────────────────────────
@@ -355,6 +381,88 @@ export function parkFactor(park: number | null, abbr: string | null): FactorResu
     label: "Ballpark",
     factor: round3(park),
     explain: `${abbr ?? "park"} factor ×${park.toFixed(2)}`,
+  };
+}
+
+/**
+ * NBA/WNBA minutes projection factor.
+ * Scales counting stats proportionally to projected vs. season-average minutes.
+ * Only fires when a lineup confirmation provides expectedMinutes.
+ */
+export function minutesFactor(
+  expectedMinutes: number | null,
+  seasonAvgMinutes: number | null,
+  statType: string,
+): FactorResult | null {
+  if (expectedMinutes == null || seasonAvgMinutes == null || seasonAvgMinutes <= 0) return null;
+  if (!isNBACountingStat(statType)) return null;
+  const c = FACTOR_CONFIG.minutes;
+  const ratio = expectedMinutes / seasonAvgMinutes;
+  if (Math.abs(ratio - 1) < 0.04) return null; // skip trivial adjustments
+  const factor = clamp(ratio, c.clamp.min, c.clamp.max);
+  const dir = ratio > 1 ? "↑" : "↓";
+  return {
+    key: "minutes",
+    label: "Projected minutes",
+    factor: round3(factor),
+    explain: `${dir}${expectedMinutes.toFixed(1)} min projected vs ${seasonAvgMinutes.toFixed(1)} avg → ×${factor.toFixed(3)}`,
+  };
+}
+
+/**
+ * NBA/WNBA usage rate factor.
+ * Adjusts projected mean when a player's per-minute production rate
+ * deviates meaningfully from the position baseline.
+ */
+export function usageRateFactor(
+  playerValPerMin: number | null,
+  positionBaselineValPerMin: number | null,
+  statType: string,
+): FactorResult | null {
+  if (playerValPerMin == null || positionBaselineValPerMin == null || positionBaselineValPerMin <= 0) return null;
+  if (!isNBACountingStat(statType)) return null;
+  const c = FACTOR_CONFIG.usageRate;
+  const ratio = playerValPerMin / positionBaselineValPerMin;
+  const adj = (ratio - 1) * c.weight;
+  if (Math.abs(adj) < 0.03) return null; // skip trivial deviations
+  const factor = clamp(1 + adj, c.clamp.min, c.clamp.max);
+  const dir = ratio > 1 ? "high" : "low";
+  return {
+    key: "usageRate",
+    label: "Usage rate",
+    factor: round3(factor),
+    explain: `${dir}-usage: ${(playerValPerMin * 40).toFixed(1)}/40 min vs baseline ${(positionBaselineValPerMin * 40).toFixed(1)}/40 → ×${factor.toFixed(3)}`,
+  };
+}
+
+/**
+ * NBA/WNBA 3-point defense factor.
+ * Uses team-wide (all-position) 3PM allowed per game vs. league average.
+ * Provides a dedicated signal for 3PM/3PA props separate from generic DvP.
+ */
+export function threePointDefenseFactor(input: {
+  allowed3PM: number | null;
+  league3PM: number | null;
+  games: number | null;
+}): FactorResult | null {
+  const c = FACTOR_CONFIG.threePointDefense;
+  if (
+    input.allowed3PM == null ||
+    input.league3PM == null ||
+    input.league3PM <= 0 ||
+    (input.games ?? 0) < c.minGames
+  ) {
+    return null;
+  }
+  const ratio = input.allowed3PM / input.league3PM;
+  const factor = clamp(1 + (ratio - 1) * c.weight, c.clamp.min, c.clamp.max);
+  if (Math.abs(factor - 1) < 0.003) return null;
+  const dir = ratio > 1 ? "soft 3P-D" : "tough 3P-D";
+  return {
+    key: "3pDefense",
+    label: "3P defense",
+    factor: round3(factor),
+    explain: `Opp allows ${input.allowed3PM.toFixed(1)} 3PM/game vs league ${input.league3PM.toFixed(1)} (${dir}) → ×${factor.toFixed(3)}`,
   };
 }
 
