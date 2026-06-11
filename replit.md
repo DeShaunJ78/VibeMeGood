@@ -56,8 +56,8 @@ Private full-stack analytics workstation for evaluating PrizePicks props. Dark t
 
 ## Payout Multipliers
 
-- Power: 2=3×, 3=6×, 4=10×, 5=20×, 6=40×
-- Flex: 3/3=5×, 2/3=1.25×, 4/4=10×, 3/4=2.5×, 5/5=20×, 4/5=4×, 3/5=1×, 6/6=40×, 5/6=6×, 4/6=1.5×
+- Power: 2=3×, 3=6×, 4=10×, 5=20×, 6=37.5×
+- Flex: 3/3=3×, 2/3=1×, 4/4=6×, 3/4=1.5×, 5/5=10×, 4/5=2×, 3/5=0.4×, 6/6=25×, 5/6=2×, 4/6=0.4×
 
 ## Gotchas
 

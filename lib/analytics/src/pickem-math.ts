@@ -19,19 +19,19 @@ function binomCoeff(n: number, k: number): number {
  * MUST stay in sync with POWER_PAYOUTS in
  * artifacts/api-server/src/lib/payout/tables.ts (used by the lineup optimizer).
  */
-export const POWER_PAYOUTS: Record<number, number> = { 2: 3, 3: 6, 4: 10, 5: 20, 6: 40 };
+export const POWER_PAYOUTS: Record<number, number> = { 2: 3, 3: 6, 4: 10, 5: 20, 6: 37.5 }; // 6-pick was 40 — PrizePicks updated April 2026
 
 /**
  * PrizePicks Flex exact-hit payouts: { totalPicks: { hits: multiplier } }
- * 3/6 pays 1× (stake return) — confirmed PrizePicks Flex rule.
+ * 3/6 no longer pays out (removed April 2026 — PrizePicks dropped that tier).
  * MUST stay in sync with FLEX_PAYOUTS in
  * artifacts/api-server/src/lib/payout/tables.ts (used by the lineup optimizer).
  */
 export const FLEX_PAYOUTS: Record<number, Record<number, number>> = {
-  3: { 3: 5, 2: 1.25 },
-  4: { 4: 10, 3: 2.5 },
-  5: { 5: 20, 4: 4, 3: 1 },
-  6: { 6: 40, 5: 6, 4: 1.5, 3: 1 },
+  3: { 3: 3,  2: 1.0 },           // was { 3:5, 2:1.25 }
+  4: { 4: 6,  3: 1.5 },           // was { 4:10, 3:2.5 }
+  5: { 5: 10, 4: 2,   3: 0.4 },  // was { 5:20, 4:4, 3:1 }
+  6: { 6: 25, 5: 2,   4: 0.4 },  // was { 6:40, 5:6, 4:1.5, 3:1 } — 3/6 removed
 };
 
 export function flexExpectedReturn(n: number, p: number): number {
@@ -61,9 +61,9 @@ export const ENTRY_TYPES: Record<string, { multiplier: number; breakEven: number
   "3-pick-power": { multiplier: 6,  breakEven: 0.5503 },
   "4-pick-power": { multiplier: 10, breakEven: 0.5623 },
   "5-pick-power": { multiplier: 20, breakEven: 0.5493 }, // (1/20)^(1/5)
-  "5-pick-flex":  { multiplier: 8,  breakEven: flexBreakEven(5) }, // ~43.8% via partial-credit payout table
-  "6-pick-power": { multiplier: 40, breakEven: 0.5408 }, // (1/40)^(1/6)
-  "6-pick-flex":  { multiplier: 15, breakEven: flexBreakEven(6) }, // ~45.2% via partial-credit payout table
+  "5-pick-flex":  { multiplier: 10, breakEven: flexBreakEven(5) }, // all-hit 10×; was 20×
+  "6-pick-power": { multiplier: 37.5, breakEven: Math.pow(1 / 37.5, 1 / 6) }, // ≈0.5416; was 40×
+  "6-pick-flex":  { multiplier: 25,   breakEven: flexBreakEven(6) },          // all-hit 25×; was 40×
 };
 
 /**
