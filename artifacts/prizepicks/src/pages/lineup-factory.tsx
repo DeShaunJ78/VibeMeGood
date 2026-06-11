@@ -812,14 +812,23 @@ function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap }:
               <span className="text-[9px] font-mono text-cyan-500/70 uppercase tracking-wide">Correlated pairs</span>
             </div>
             <div className="flex flex-wrap gap-1">
-              {lineup.correlationPairs.map((pair, i) => (
-                <span
-                  key={i}
-                  className="text-[9px] font-mono bg-cyan-950/40 border border-cyan-800/30 text-cyan-300/80 px-1.5 py-0.5 rounded"
-                >
-                  {pair}
-                </span>
-              ))}
+              {lineup.correlationPairs.map((pair, i) => {
+                const isPositive = /\(\+/.test(pair);
+                const isNegative = /\(-/.test(pair);
+                const cls = isPositive
+                  ? "bg-emerald-950/40 border-emerald-800/30 text-emerald-300/90"
+                  : isNegative
+                  ? "bg-rose-950/40 border-rose-800/30 text-rose-300/90"
+                  : "bg-cyan-950/40 border-cyan-800/30 text-cyan-300/80";
+                return (
+                  <span
+                    key={i}
+                    className={`text-[9px] font-mono border px-1.5 py-0.5 rounded ${cls}`}
+                  >
+                    {pair}
+                  </span>
+                );
+              })}
             </div>
           </div>
         )}
