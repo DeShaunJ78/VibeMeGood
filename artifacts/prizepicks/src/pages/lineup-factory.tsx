@@ -810,6 +810,10 @@ function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap }:
             <div className="flex items-center gap-1 mb-1">
               <ArrowLeftRight className="h-2.5 w-2.5 text-cyan-500/70 shrink-0" />
               <span className="text-[9px] font-mono text-cyan-500/70 uppercase tracking-wide">Correlated pairs</span>
+              <span className="text-[8px] font-mono text-slate-600">·</span>
+              <span className="text-[8px] font-mono text-emerald-500/60" title="Positive correlation — these players tend to win together, stacking your lineup's ceiling">green=stacks</span>
+              <span className="text-[8px] font-mono text-slate-600">·</span>
+              <span className="text-[8px] font-mono text-rose-500/60" title="Negative correlation — these players tend to cancel out, reducing the lineup's ceiling">red=counters</span>
             </div>
             <div className="flex flex-wrap gap-1">
               {lineup.correlationPairs.map((pair, i) => {
@@ -820,10 +824,16 @@ function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap }:
                   : isNegative
                   ? "bg-rose-950/40 border-rose-800/30 text-rose-300/90"
                   : "bg-cyan-950/40 border-cyan-800/30 text-cyan-300/80";
+                const chipTitle = isPositive
+                  ? "Positive correlation — these players stack your lineup's ceiling"
+                  : isNegative
+                  ? "Negative correlation — these players tend to cancel each other out"
+                  : "Correlation direction unknown";
                 return (
                   <span
                     key={i}
-                    className={`text-[9px] font-mono border px-1.5 py-0.5 rounded ${cls}`}
+                    title={chipTitle}
+                    className={`text-[9px] font-mono border px-1.5 py-0.5 rounded cursor-help ${cls}`}
                   >
                     {pair}
                   </span>
