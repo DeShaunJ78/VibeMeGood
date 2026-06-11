@@ -12,6 +12,7 @@ import { pOverLine } from "../lib/projection/normal-dist";
 import { effectivePayoutMultiplier } from "../lib/payout/multiplier";
 import { POWER_PAYOUTS, flexPayout } from "../lib/payout/tables";
 import { z } from "zod";
+import { simulateEntry } from "../lib/simulation/entry-simulator";
 
 const router = Router();
 
@@ -93,6 +94,9 @@ type ScoredProp = {
   gameTotal: number | null;
   // Story mode field — populated after all lineups are generated
   crowdingFreq: number | null;
+  // Projection stats fed into the Cholesky sim (null when no projection row exists)
+  projMean: number | null;
+  projStdDev: number | null;
 };
 
 type GeneratedLineup = {
@@ -264,26 +268,31 @@ function lineupPayoutFactor(picks: ScoredProp[]): number {
   return picks.reduce((acc, p) => acc * (p.payoutMultiplier || 1), 1);
 }
 
-function calcCorrelationFactor(picks: ScoredProp[]): number {
-  let factor = 1.0;
-  for (let i = 0; i < picks.length; i++) {
-    for (let j = i + 1; j < picks.length; j++) {
-      const a = picks[i], b = picks[j];
-      if (a.playerId === b.playerId) {
-        factor *= 1.10;
-      } else if (a.gameId && b.gameId && a.gameId === b.gameId && a.direction === b.direction) {
-        factor *= 1.03;
-      }
-    }
-  }
-  return Math.min(factor, 1.30);
-}
-
 function calcPowerEV(picks: ScoredProp[], stake: number, n: number) {
   const mult = (POWER_MULT[n] ?? 10) * lineupPayoutFactor(picks);
-  const rawPHit = picks.reduce((acc, p) => acc * p.hitProbability, 1);
-  const corrFactor = calcCorrelationFactor(picks);
-  const pHit = Math.min(0.97, Math.max(0.005, rawPHit * corrFactor));
+  // Use the Cholesky-based Monte Carlo model (sport/position-aware pair correlations)
+  // instead of the old flat inline factor. Runs once per finalized lineup — 25 × 5 000
+  // iterations ≈ 20–50 ms total, which is acceptable.
+  const simResult = simulateEntry({
+    legs: picks.map(p => ({
+      playerName: p.playerName,
+      statType:   p.statType,
+      line:       p.ppLine,
+      side:       p.direction === "more" ? ("over" as const) : ("under" as const),
+      modelProb:  p.hitProbability,
+      sport:      p.sport,
+      team:       String(p.teamId ?? ""),
+      gameId:     String(p.gameId ?? ""),
+      mean:       p.projMean ?? p.ppLine,
+      stdDev:     p.projStdDev ?? 1.0,
+    })),
+    runs:       5000,
+    multiplier: POWER_PAYOUTS[n] ?? 10,
+  });
+  const pHit = Math.min(0.97, Math.max(0.005, simResult.trueJointProbability));
+  const corrFactor = simResult.naiveProbability > 0
+    ? pHit / simResult.naiveProbability
+    : 1.0;
   return { ev: pHit * mult * stake - stake, pHit, corrFactor };
 }
 
@@ -294,14 +303,23 @@ function pairwiseOverlap(a: ScoredProp[], b: ScoredProp[]): number {
   return shared / Math.max(a.length, b.length, 1);
 }
 
-function calcCompositeScore(prop: ScoredProp, objective: string): number {
+function calcCompositeScore(prop: ScoredProp, objective: string, stake: number): number {
   const { expectedValue: ev, hitProbability: prob, edgeScore, volatilityRating, lineType } = prop;
   const edge = edgeScore ?? 0;
   switch (objective) {
-    case "max_ev":          return ev + edge * 0.05;
+    case "max_ev": {
+      // Normalize EV to % of stake so it's on the same scale as edge (percentage points)
+      const evScore = (ev / stake) * 100;
+      const edgeScore2 = Math.max(0, edge);
+      return evScore * 0.70 + edgeScore2 * 0.30;
+    }
     case "max_profit_prob": return prob * 100;
     case "min_drawdown":    return prob * 100 - (volatilityRating === "high" ? 15 : volatilityRating === "medium" ? 5 : 0);
-    case "balanced_growth": return ev * 0.5 + prob * 50;
+    case "balanced_growth": {
+      // Normalize EV to same scale as prob*100 before blending
+      const evNorm = (ev / stake) * 100;
+      return evNorm * 0.50 + prob * 100 * 0.50;
+    }
     case "high_ceiling":    return ev * (lineType === "demon" ? 1.5 : 1.0);
     case "gpp_mode": {
       // GPP: ceiling × (1/ownership) × edge  — rewards high-ceiling low-owned props with edge
@@ -353,17 +371,34 @@ function applyProfile(cfg: FactoryConfig): FactoryConfig {
   return c;
 }
 
-function monteCarloPortfolio(lineups: GeneratedLineup[], totalStake: number, iterations = 10000) {
+function monteCarloPortfolio(
+  lineups: GeneratedLineup[],
+  totalStake: number,
+  scoredProps: ScoredProp[],
+  iterations = 10000,
+) {
+  // Draw one outcome per unique prop and share it across all lineups that contain it.
+  // This correctly models bust-risk for concentrated portfolios — if Player A appears
+  // in 5/10 lineups, all 5 lineups win or lose together, not independently.
+  const allPickIds = [...new Set(lineups.flatMap(lu => lu.picks.map(p => p.ppLineId)))];
   let breakEven = 0, profitable = 0;
   for (let i = 0; i < iterations; i++) {
+    const hitMap = new Map(allPickIds.map(id => {
+      const prop = scoredProps.find(p => p.ppLineId === id);
+      return [id, Math.random() < (prop?.hitProbability ?? 0.5)] as [number, boolean];
+    }));
     let payout = 0;
     for (const lu of lineups) {
-      if (Math.random() < lu.hitProbability) payout += lu.grossPayout;
+      const allHit = lu.picks.every(p => hitMap.get(p.ppLineId));
+      if (allHit) payout += lu.grossPayout;
     }
     if (payout >= totalStake) breakEven++;
     if (payout > totalStake) profitable++;
   }
-  return { probBreakEven: breakEven / iterations, probProfitable: profitable / iterations };
+  return {
+    probBreakEven: breakEven / iterations,
+    probProfitable: profitable / iterations,
+  };
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────────
@@ -755,6 +790,8 @@ router.post("/lineup-factory/generate", async (req, res) => {
         sharpSignal,
         gameTotal,
         crowdingFreq:  null, // populated after all lineups are generated
+        projMean:      pMean,
+        projStdDev:    pStd,
       });
     }
 
@@ -762,7 +799,7 @@ router.post("/lineup-factory/generate", async (req, res) => {
     // gppMode is an overlay: when true, use GPP scoring regardless of the base objective.
     const effectiveObjective = cfg.gppMode ? "gpp_mode" : cfg.optimizationObjective;
     for (const sp of allScoredProps) {
-      sp.compositeScore = Math.round(calcCompositeScore(sp, effectiveObjective) * 100) / 100;
+      sp.compositeScore = Math.round(calcCompositeScore(sp, effectiveObjective, cfg.stakePerEntry) * 100) / 100;
       // Leverage = ceiling EV / ownership — how much ceiling-adjusted value per unit of ownership taken on
       // ceiling EV = (ceilingRating / 100) * expectedValue; divide by ownershipEst to get per-ownership value
       const own = Math.max(1, sp.ownershipEst ?? 20);
@@ -1113,7 +1150,7 @@ router.post("/lineup-factory/generate", async (req, res) => {
     const pNoneCash = lineups.reduce((acc, lu) => acc * (1 - lu.hitProbability), 1);
     const probAtLeastOneCashes = 1 - pNoneCash;
     const maxPayout = lineups.reduce((acc, lu) => acc + lu.grossPayout, 0);
-    const { probBreakEven, probProfitable } = monteCarloPortfolio(lineups, totalStake, cfg.monteCarloIterations ?? 10000);
+    const { probBreakEven, probProfitable } = monteCarloPortfolio(lineups, totalStake, allScoredProps, cfg.monteCarloIterations ?? 10000);
 
     const playerExposure: Record<string, number> = {};
     const pickExposure: Record<string, number> = {};
