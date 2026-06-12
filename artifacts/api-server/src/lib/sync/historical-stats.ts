@@ -72,31 +72,35 @@ async function getJson(url: string, timeoutMs = 15000): Promise<any> {
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
 // Resolve the opposing starting pitcher's handedness for a batter game log.
-// Fetches the MLB Stats API boxscore for the given gamePk (cached per run so
-// each unique game is only fetched once).  Returns null when unavailable.
+// Fetches the MLB Stats API boxscore once per gamePk and caches BOTH home and
+// away starter hands together — avoids fetching twice and prevents the bug
+// where keying on gamePk alone would return the wrong side's hand.
+type GamePitcherHands = { home: "L" | "R" | null; away: "L" | "R" | null };
 async function resolveGamePitcherHand(
   gamePk: number,
   batterIsHome: boolean,
   pitcherHandLookup: Map<string, "L" | "R">,
-  cache: Map<number, "L" | "R" | null>,
+  cache: Map<number, GamePitcherHands>,
 ): Promise<"L" | "R" | null> {
-  if (cache.has(gamePk)) return cache.get(gamePk)!;
-  try {
-    const box = await getJson(`https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`);
-    // Batter team is home → they face the away pitcher, and vice versa
-    const side = batterIsHome ? "away" : "home";
-    const pitcherIds: number[] = box?.teams?.[side]?.pitchers ?? [];
-    if (pitcherIds.length === 0) { cache.set(gamePk, null); return null; }
-    const spKey = `ID${pitcherIds[0]}`;
-    const fullName: string | undefined = box?.teams?.[side]?.players?.[spKey]?.person?.fullName;
-    if (!fullName) { cache.set(gamePk, null); return null; }
-    const hand = pitcherHandLookup.get(fullName.toLowerCase()) ?? null;
-    cache.set(gamePk, hand);
-    return hand;
-  } catch {
-    cache.set(gamePk, null);
-    return null;
+  if (!cache.has(gamePk)) {
+    const resolveSide = (box: any, side: "home" | "away"): "L" | "R" | null => {
+      const pitcherIds: number[] = box?.teams?.[side]?.pitchers ?? [];
+      if (pitcherIds.length === 0) return null;
+      const spKey = `ID${pitcherIds[0]}`;
+      const fullName: string | undefined = box?.teams?.[side]?.players?.[spKey]?.person?.fullName;
+      if (!fullName) return null;
+      return pitcherHandLookup.get(fullName.toLowerCase()) ?? null;
+    };
+    try {
+      const box = await getJson(`https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`);
+      cache.set(gamePk, { home: resolveSide(box, "home"), away: resolveSide(box, "away") });
+    } catch {
+      cache.set(gamePk, { home: null, away: null });
+    }
   }
+  const entry = cache.get(gamePk)!;
+  // Home batters face the AWAY starting pitcher, and vice versa
+  return batterIsHome ? entry.away : entry.home;
 }
 
 // Upsert game log. Any context fields (opponentTeamId, minutes, homeAway) present
@@ -421,8 +425,8 @@ async function backfillMLB(
   const pitcherHandLookup = new Map<string, "L" | "R">(
     pitcherProfileRows.map(p => [p.playerName.toLowerCase(), p.hand as "L" | "R"]),
   );
-  // Per-run gamePk → pitcher hand cache (avoids duplicate boxscore API calls)
-  const gamePkPitcherCache = new Map<number, "L" | "R" | null>();
+  // Per-run gamePk → {home, away} pitcher hands cache (one boxscore fetch per game)
+  const gamePkPitcherCache = new Map<number, GamePitcherHands>();
 
   // Track which normalised names already exist across all seasons
   const existingNorm = new Set(
@@ -1064,7 +1068,6 @@ export async function backfillMlbPitcherHand(): Promise<number> {
     WHERE bp.sport = 'MLB'
       AND bgl.game_date = ps.game_date
       AND bgl.opponent_team_id = ps.pitcher_team_id
-      AND bgl.pitcher_hand IS NULL
   `);
   const updated = (result as any)?.rowCount ?? 0;
   logger.info({ updated }, "MLB pitcher hand backfill complete");
