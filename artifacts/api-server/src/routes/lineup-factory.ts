@@ -97,6 +97,9 @@ type ScoredProp = {
   // Projection stats fed into the Cholesky sim (null when no projection row exists)
   projMean: number | null;
   projStdDev: number | null;
+  // MLB Saber Sim matchup multiplier — product of platoon + K-matchup + pitcher-form
+  // factors that fired for this prop.  null = no MLB factors fired (non-MLB or missing data).
+  mlbSaberMultiplier: number | null;
 };
 
 type GeneratedLineup = {
@@ -357,7 +360,17 @@ function calcCompositeScore(prop: ScoredProp, objective: string, stake: number):
       // Negative-edge props can still offer contrarian leverage value; the floor
       // prevents division-by-near-zero distortion without completely excluding them.
       const safeEdge = Math.max(0.1, edge);
-      return (ceiling / own) * safeEdge;
+      const base = (ceiling / own) * safeEdge;
+      // MLB Saber Sim: directly scale GPP score by the combined matchup multiplier
+      // (platoon split + K-rate matchup + pitcher form) when it fired.
+      // A favorable matchup (e.g. 1.15) boosts the prop up the pool; an unfavorable
+      // one (e.g. 0.85) suppresses it — both changes are proportional to the
+      // underlying factor strength so the ranking signal is crisp.
+      // Clamp to [0.5, 1.5] to prevent a single extreme factor from dominating.
+      const saberMult = prop.mlbSaberMultiplier !== null
+        ? Math.min(1.5, Math.max(0.5, prop.mlbSaberMultiplier))
+        : 1;
+      return base * saberMult;
     }
     default:                return ev;
   }
@@ -784,6 +797,30 @@ router.post("/lineup-factory/generate", async (req, res) => {
       // Ceiling rating for GPP composite score
       const ceilingRating = row.variance?.ceilingRating ?? null;
 
+      // MLB Saber Sim matchup multiplier — read from our_projections.adjustments JSONB.
+      // The projection engine stores each factor as { key, factor, label } in the
+      // adjustments array.  Multiply the three MLB-specific factors that fired:
+      //   "mlbPlatoon"       — platoon split vs opposing pitcher hand
+      //   "strikeoutMatchup" — batter K% × pitcher K% relative to league average
+      //   "pitcherForm"      — pitcher recent ERA vs season FIP (struggling = batter boost)
+      // null is returned when this prop is not MLB or no factor data is available.
+      let mlbSaberMultiplier: number | null = null;
+      if (row.player.sport === "MLB") {
+        const MLB_SABER_KEYS = new Set(["mlbPlatoon", "strikeoutMatchup", "pitcherForm"]);
+        const adjustments = row.proj?.adjustments as Array<{ key: string; factor: number }> | null | undefined;
+        if (Array.isArray(adjustments)) {
+          let product = 1;
+          let fired = false;
+          for (const adj of adjustments) {
+            if (MLB_SABER_KEYS.has(adj.key) && typeof adj.factor === "number") {
+              product *= adj.factor;
+              fired = true;
+            }
+          }
+          if (fired) mlbSaberMultiplier = Math.round(product * 1000) / 1000;
+        }
+      }
+
       allScoredProps.push({
         ppLineId:          row.line.id,
         playerId:          row.player.id,
@@ -817,9 +854,10 @@ router.post("/lineup-factory/generate", async (req, res) => {
         paceTier,
         sharpSignal,
         gameTotal,
-        crowdingFreq:  null, // populated after all lineups are generated
-        projMean:      pMean,
-        projStdDev:    pStd,
+        crowdingFreq:       null, // populated after all lineups are generated
+        projMean:           pMean,
+        projStdDev:         pStd,
+        mlbSaberMultiplier,
       });
     }
 
