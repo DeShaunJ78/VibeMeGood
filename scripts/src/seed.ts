@@ -92,6 +92,11 @@ async function seed() {
     { sport: "MLB", fullName: "Spencer Strider",  firstName: "Spencer",  lastName: "Strider",  teamId: teamsByAbbr["ATL"].id, position: "SP", status: "active" },
     { sport: "MLB", fullName: "Max Fried",        firstName: "Max",      lastName: "Fried",    teamId: teamsByAbbr["ATL"].id, position: "SP", status: "active" },
     { sport: "MLB", fullName: "Chris Sale",       firstName: "Chris",    lastName: "Sale",     teamId: teamsByAbbr["ATL"].id, position: "SP", status: "active" },
+    { sport: "MLB", fullName: "Yoshinobu Yamamoto", firstName: "Yoshinobu", lastName: "Yamamoto", teamId: teamsByAbbr["LAD"].id, position: "SP", status: "active" },
+    { sport: "MLB", fullName: "Clarke Schmidt",    firstName: "Clarke",    lastName: "Schmidt",  teamId: teamsByAbbr["NYY"].id, position: "SP", status: "active" },
+    { sport: "MLB", fullName: "Marcus Stroman",    firstName: "Marcus",    lastName: "Stroman",  teamId: teamsByAbbr["NYY"].id, position: "SP", status: "active" },
+    { sport: "MLB", fullName: "Cristian Javier",   firstName: "Cristian",  lastName: "Javier",   teamId: teamsByAbbr["HOU"].id, position: "SP", status: "active" },
+    { sport: "MLB", fullName: "Charlie Morton",    firstName: "Charlie",   lastName: "Morton",   teamId: teamsByAbbr["ATL"].id, position: "SP", status: "active" },
     // ---- NHL players ----
     { sport: "NHL", fullName: "Connor McDavid",   firstName: "Connor",   lastName: "McDavid",   teamId: teamsByAbbr["EDM"].id, position: "C",  status: "active" },
     { sport: "NHL", fullName: "Leon Draisaitl",   firstName: "Leon",     lastName: "Draisaitl", teamId: teamsByAbbr["EDM"].id, position: "C",  status: "active" },

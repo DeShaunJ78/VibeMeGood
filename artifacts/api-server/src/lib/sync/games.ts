@@ -183,11 +183,16 @@ async function syncMlbProbableStarters(): Promise<number> {
   const games: any[] = (data?.dates ?? []).flatMap((d: any) => d.games ?? []);
   if (games.length === 0) return 0;
 
-  // Day window for matching our DB game rows (same calendar day UTC)
+  // Day window for matching our DB game rows.
+  // MLB games are scheduled by US local date, but the latest West Coast night
+  // starts (~10 PM PT) fall at ~05:00 UTC the next calendar day. To avoid
+  // missing those games we open the window from 00:00 UTC today through
+  // 12:00 UTC tomorrow — this covers the full US game day regardless of coast.
   const dayStart = new Date(today);
   dayStart.setUTCHours(0, 0, 0, 0);
   const dayEnd = new Date(today);
-  dayEnd.setUTCHours(23, 59, 59, 999);
+  dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+  dayEnd.setUTCHours(12, 0, 0, 0);
 
   // Load today's MLB games from DB indexed by home team abbreviation (upper)
   const mlbTeamRows = await db
