@@ -812,9 +812,14 @@ function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap, o
               onKeyDown={onOpenProp ? (e) => { if (e.key === "Enter" || e.key === " ") onOpenProp(pick.ppLineId); } : undefined}
               title={onOpenProp ? `Open ${pick.playerName} prop details` : undefined}
             >{pick.ppLine}</span>
-            <span className={cn("font-mono text-xs shrink-0 uppercase", pick.direction === "more" ? "text-emerald-400" : "text-red-400")}>
-              {pick.direction === "more" ? "▲" : "▼"} {pct(pick.hitProbability)}
-            </span>
+            <span
+              className={cn("font-mono text-xs shrink-0 uppercase", pick.direction === "more" ? "text-emerald-400" : "text-red-400", onOpenProp && "cursor-pointer hover:text-cyan-300 transition-colors")}
+              role={onOpenProp ? "button" : undefined}
+              tabIndex={onOpenProp ? 0 : undefined}
+              onClick={onOpenProp ? () => onOpenProp(pick.ppLineId) : undefined}
+              onKeyDown={onOpenProp ? (e) => { if (e.key === "Enter" || e.key === " ") onOpenProp(pick.ppLineId); } : undefined}
+              title={onOpenProp ? `Open ${pick.playerName} prop details` : undefined}
+            >{pick.direction === "more" ? "▲" : "▼"} {pct(pick.hitProbability)}</span>
             {isGppMode && sp && (
               <span
                 className={cn("font-mono text-[10px] shrink-0", sp.ownershipSource === "real" ? "text-cyan-400/90" : "text-amber-400/80")}
