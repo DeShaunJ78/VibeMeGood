@@ -127,18 +127,29 @@ async function ingestPlayerStats(season: number): Promise<number> {
   let upserted = 0;
   const BATCH = 200;
   for (let i = 0; i < rows.length; i += BATCH) {
-    const batch = dedup(rows.slice(i, i + BATCH).map(r => ({
-      playerName:    r["player_display_name"] ?? r["player_name"] ?? r["player"] ?? "",
-      team:          r["recent_team"] ?? r["team"] ?? "",
-      season,
-      week:          int(r["week"]),
-      targetShare:   num(r["target_share"]) != null ? String(num(r["target_share"])!) : null,
-      airYards:      num(r["receiving_air_yards"]) != null ? String(num(r["receiving_air_yards"])!) : null,
-      airYardsShare: num(r["air_yards_share"]) != null ? String(num(r["air_yards_share"])!) : null,
-      wopr:          num(r["wopr"]) != null ? String(num(r["wopr"])!) : null,
-      racr:          num(r["racr"]) != null ? String(num(r["racr"])!) : null,
-      targets:       int(r["targets"]),
-    })).filter(r => r.playerName && r.team));
+    const batch = dedup(rows.slice(i, i + BATCH).map(r => {
+      const ayNum  = num(r["receiving_air_yards"]);
+      const tgtNum = int(r["targets"]);
+      const aDotVal = ayNum != null && tgtNum != null && tgtNum > 0
+        ? ayNum / tgtNum : null;
+      const rzTargetShare = num(r["red_zone_target_share"] ?? r["rz_target_share"]);
+      const rzCarryShare  = num(r["red_zone_carry_share"]  ?? r["rz_carry_share"]);
+      return {
+        playerName:         r["player_display_name"] ?? r["player_name"] ?? r["player"] ?? "",
+        team:               r["recent_team"] ?? r["team"] ?? "",
+        season,
+        week:               int(r["week"]),
+        targetShare:        num(r["target_share"]) != null ? String(num(r["target_share"])!) : null,
+        airYards:           ayNum != null ? String(ayNum) : null,
+        airYardsShare:      num(r["air_yards_share"]) != null ? String(num(r["air_yards_share"])!) : null,
+        wopr:               num(r["wopr"]) != null ? String(num(r["wopr"])!) : null,
+        racr:               num(r["racr"]) != null ? String(num(r["racr"])!) : null,
+        targets:            tgtNum,
+        aDot:               aDotVal != null ? String(aDotVal) : null,
+        redZoneTargetShare: rzTargetShare != null ? String(rzTargetShare) : null,
+        redZoneCarryShare:  rzCarryShare  != null ? String(rzCarryShare)  : null,
+      };
+    }).filter(r => r.playerName && r.team));
 
     if (batch.length === 0) continue;
 
@@ -152,13 +163,16 @@ async function ingestPlayerStats(season: number): Promise<number> {
           nflAdvancedMetricsTable.week,
         ],
         set: {
-          targetShare:    sql`excluded.target_share`,
-          airYards:       sql`excluded.air_yards`,
-          airYardsShare:  sql`excluded.air_yards_share`,
-          wopr:           sql`excluded.wopr`,
-          racr:           sql`excluded.racr`,
-          targets:        sql`excluded.targets`,
-          computedAt:     sql`now()`,
+          targetShare:        sql`excluded.target_share`,
+          airYards:           sql`excluded.air_yards`,
+          airYardsShare:      sql`excluded.air_yards_share`,
+          wopr:               sql`excluded.wopr`,
+          racr:               sql`excluded.racr`,
+          targets:            sql`excluded.targets`,
+          aDot:               sql`excluded.a_dot`,
+          redZoneTargetShare: sql`excluded.red_zone_target_share`,
+          redZoneCarryShare:  sql`excluded.red_zone_carry_share`,
+          computedAt:         sql`now()`,
         },
       });
     upserted += batch.length;
@@ -183,7 +197,11 @@ export async function syncNflAdvancedMetrics(): Promise<number> {
 export interface NflUsage {
   snapPct: number | null;
   targetShare: number | null;
+  airYardsShare: number | null;
   wopr: number | null;
+  aDot: number | null;
+  redZoneTargetShare: number | null;
+  redZoneCarryShare: number | null;
 }
 
 /**
@@ -200,10 +218,14 @@ export async function getNflUsageMap(playerNames: string[]): Promise<Map<string,
   // DISTINCT ON keeps the latest row per player by (season desc, week desc).
   const rows = await db
     .select({
-      playerName: nflAdvancedMetricsTable.playerName,
-      snapPct: nflAdvancedMetricsTable.snapPct,
-      targetShare: nflAdvancedMetricsTable.targetShare,
-      wopr: nflAdvancedMetricsTable.wopr,
+      playerName:         nflAdvancedMetricsTable.playerName,
+      snapPct:            nflAdvancedMetricsTable.snapPct,
+      targetShare:        nflAdvancedMetricsTable.targetShare,
+      airYardsShare:      nflAdvancedMetricsTable.airYardsShare,
+      wopr:               nflAdvancedMetricsTable.wopr,
+      aDot:               nflAdvancedMetricsTable.aDot,
+      redZoneTargetShare: nflAdvancedMetricsTable.redZoneTargetShare,
+      redZoneCarryShare:  nflAdvancedMetricsTable.redZoneCarryShare,
     })
     .from(nflAdvancedMetricsTable)
     .where(sql`lower(player_name) = ANY(ARRAY[${sql.join(lowered.map((n) => sql`${n}`), sql`, `)}]) and week is not null`)
@@ -212,10 +234,15 @@ export async function getNflUsageMap(playerNames: string[]): Promise<Map<string,
   for (const r of rows) {
     const key = r.playerName.toLowerCase();
     if (result.has(key)) continue; // first row per name is the latest
+    const pf = (v: unknown) => v != null ? parseFloat(String(v)) : null;
     result.set(key, {
-      snapPct: r.snapPct != null ? parseFloat(r.snapPct.toString()) : null,
-      targetShare: r.targetShare != null ? parseFloat(r.targetShare.toString()) : null,
-      wopr: r.wopr != null ? parseFloat(r.wopr.toString()) : null,
+      snapPct:            pf(r.snapPct),
+      targetShare:        pf(r.targetShare),
+      airYardsShare:      pf(r.airYardsShare),
+      wopr:               pf(r.wopr),
+      aDot:               pf(r.aDot),
+      redZoneTargetShare: pf(r.redZoneTargetShare),
+      redZoneCarryShare:  pf(r.redZoneCarryShare),
     });
   }
   return result;

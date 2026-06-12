@@ -14,10 +14,13 @@ export const nflAdvancedMetricsTable = pgTable("nfl_advanced_metrics", {
   targetShare:  numeric("target_share", { precision: 5, scale: 4 }),
   airYards:     numeric("air_yards", { precision: 7, scale: 2 }),
   airYardsShare: numeric("air_yards_share", { precision: 8, scale: 4 }),
-  wopr:         numeric("wopr", { precision: 8, scale: 4 }),
-  racr:         numeric("racr", { precision: 8, scale: 4 }),
-  targets:      integer("targets"),
-  computedAt:   timestamp("computed_at").defaultNow().notNull(),
+  wopr:               numeric("wopr", { precision: 8, scale: 4 }),
+  racr:               numeric("racr", { precision: 8, scale: 4 }),
+  targets:            integer("targets"),
+  aDot:               numeric("a_dot", { precision: 6, scale: 2 }),
+  redZoneTargetShare: numeric("red_zone_target_share", { precision: 6, scale: 4 }),
+  redZoneCarryShare:  numeric("red_zone_carry_share", { precision: 6, scale: 4 }),
+  computedAt:         timestamp("computed_at").defaultNow().notNull(),
 }, (table) => [
   unique("nfl_adv_unique").on(table.playerName, table.team, table.season, table.week),
 ]);

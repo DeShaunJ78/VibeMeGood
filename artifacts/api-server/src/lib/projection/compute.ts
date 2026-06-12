@@ -19,6 +19,7 @@ import {
   restFactor, paceFactor, dvpFactor, impliedTotalFactor, weatherFactor,
   nflAdvancedFactor, snapFactor, parkFactor, combineFactors,
   minutesFactor, usageRateFactor, threePointDefenseFactor,
+  redZoneFactor, isNFLTDStat,
   isNBACountingStat, is3PTStat,
   impliedTeamTotal, SPORT_IMPLIED_BASELINE,
   type FactorResult,
@@ -738,16 +739,26 @@ export async function computeAllProjections(): Promise<number> {
         }
       }
 
-      // NFL advanced usage + snap
+      // NFL advanced usage + snap + red zone
       if (sport === "NFL") {
         const usage = nflUsageMap.get(player.fullName.toLowerCase());
         if (usage) {
           factors.push(nflAdvancedFactor({
-            targetShare: usage.targetShare,
-            wopr: usage.wopr,
-            statType: line.statType,
+            targetShare:   usage.targetShare,
+            airYardsShare: usage.airYardsShare,
+            wopr:          usage.wopr,
+            aDot:          usage.aDot,
+            statType:      line.statType,
           }));
           factors.push(snapFactor(usage.snapPct));
+          if (isNFLTDStat(line.statType)) {
+            factors.push(redZoneFactor({
+              redZoneTargetShare: usage.redZoneTargetShare,
+              redZoneCarryShare:  usage.redZoneCarryShare,
+              position:           player.position,
+              statType:           line.statType,
+            }));
+          }
         }
       }
 
@@ -795,6 +806,11 @@ export async function computeAllProjections(): Promise<number> {
       const { combinedFactor, applied } = combineFactors(factors);
       const adjustedMean = Math.round(result.mean * combinedFactor * 100) / 100;
 
+      // aDOT stdDev variance modifier — widens/narrows stored stdDev for deep/short routes
+      const nflAdvApplied = applied.find(f => f.key === "nflAdvanced");
+      const stdDevMultiplier = nflAdvApplied?.stdMultiplier ?? 1;
+      const adjustedStdDev = result.stdDev * stdDevMultiplier;
+
       const factorVal = (key: string): string =>
         (applied.find(f => f.key === key)?.factor ?? 1).toString();
 
@@ -809,7 +825,7 @@ export async function computeAllProjections(): Promise<number> {
           : result.pOver >= 52 && result.dataQualityScore >= 50 ? "medium"
           : "low",
         modelVersion: "v3",
-        stdDev: result.stdDev.toString(),
+        stdDev: adjustedStdDev.toString(),
         p99: result.p99 != null ? result.p99.toString() : null,
         pOver: result.pOver.toString(),
         percentileAtLine: result.percentileAtLine.toString(),

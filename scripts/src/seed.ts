@@ -8,7 +8,8 @@ import {
   teamsTable, playersTable, gamesTable, ppLinesTable, ppLineHistoryTable,
   externalLinesTable, projectionsTable, injuriesTable, lineupConfirmationsTable,
   propScoresTable, entriesTable, entryPicksTable, watchlistItemsTable,
-  alertsTable, payoutConfigTable, gameEnvironmentTable, lineMoveEventsTable
+  alertsTable, payoutConfigTable, gameEnvironmentTable, lineMoveEventsTable,
+  nflAdvancedMetricsTable,
 } from "@workspace/db/schema";
 import { sql } from "drizzle-orm";
 
@@ -462,6 +463,38 @@ async function seed() {
     { entryId: entries[10].id, playerId: playersByName["Stephen Curry"].id,         statType: "Points",    direction: "more", lineValue: "26.5", lineType: "standard", yourProjection: "29.3", projectionGap: "2.8",  result: "pending" },
   ]);
   console.log("Inserted 33 entry picks (6 historical Mar/Apr + 15 May + 3 pending May)");
+
+  // ---- NFL Advanced Metrics (Saber Sim: airYardsShare, aDOT, red zone) ----
+  // Clear any existing rows first (not in the main TRUNCATE, no FK deps).
+  await db.delete(nflAdvancedMetricsTable);
+  await db.insert(nflAdvancedMetricsTable).values([
+    // Travis Kelce — high-volume TE, deep threat, dominant red zone target
+    { playerName: "Travis Kelce", team: "KC", position: "TE", season: 2024, week: 18,
+      snapCount: 64, snapPct: "0.8900", targetShare: "0.2800", airYards: "89.0",
+      airYardsShare: "0.3500", wopr: "0.7200", racr: "1.45", targets: 8,
+      aDot: "11.13", redZoneTargetShare: "0.2500", redZoneCarryShare: null },
+    // CeeDee Lamb — WR1, elite volume, moderate depth
+    { playerName: "CeeDee Lamb", team: "DAL", position: "WR", season: 2024, week: 18,
+      snapCount: 70, snapPct: "0.9500", targetShare: "0.3000", airYards: "97.0",
+      airYardsShare: "0.3800", wopr: "0.7800", racr: "1.52", targets: 9,
+      aDot: "10.78", redZoneTargetShare: "0.2200", redZoneCarryShare: null },
+    // Christian McCaffrey — hybrid RB, short routes, heavy red zone carrier
+    { playerName: "Christian McCaffrey", team: "SF", position: "RB", season: 2024, week: 18,
+      snapCount: 58, snapPct: "0.7800", targetShare: "0.1800", airYards: "21.0",
+      airYardsShare: "0.1000", wopr: "0.3800", racr: "0.62", targets: 5,
+      aDot: "4.20", redZoneTargetShare: "0.0800", redZoneCarryShare: "0.2800" },
+    // Patrick Mahomes — QB, no receiving metrics applicable
+    { playerName: "Patrick Mahomes", team: "KC", position: "QB", season: 2024, week: 18,
+      snapCount: 72, snapPct: "1.0000", targetShare: null, airYards: null,
+      airYardsShare: null, wopr: null, racr: null, targets: null,
+      aDot: null, redZoneTargetShare: null, redZoneCarryShare: null },
+    // Josh Allen — QB, scrambler; no receiving factor needed
+    { playerName: "Josh Allen", team: "BUF", position: "QB", season: 2024, week: 18,
+      snapCount: 71, snapPct: "1.0000", targetShare: null, airYards: null,
+      airYardsShare: null, wopr: null, racr: null, targets: null,
+      aDot: null, redZoneTargetShare: null, redZoneCarryShare: null },
+  ]);
+  console.log("Inserted 5 NFL advanced metrics rows");
 
   // ---- Payout Config (Power + Flex — actual PrizePicks multipliers) ----
   await db.insert(payoutConfigTable).values([

@@ -19,6 +19,8 @@ export interface FactorResult {
   label: string;
   factor: number; // multiplier on the projected mean
   explain: string;
+  /** Optional stdDev multiplier (e.g. aDOT variance widening/narrowing). */
+  stdMultiplier?: number;
 }
 
 /** All tunable coefficients and caps. Edit here to retune the model. */
@@ -62,9 +64,16 @@ export const FACTOR_CONFIG = {
     clamp: { min: 0.97, max: 1.03 },
   },
   nflAdvanced: {
-    targetShareWeight: 0.6, // (targetShare - posBaseline) * weight
-    woprWeight: 0.25,
+    airYardsShareWeight: 0.4,  // (airYardsShare - 0.20) * weight
+    targetShareWeight:   0.35, // (targetShare - posBaseline) * weight
+    woprWeight:          0.25, // (wopr - 0.45) * weight
     clamp: { min: 0.94, max: 1.08 },
+  },
+  redZone: {
+    weight: 0.5,
+    clamp: { min: 0.94, max: 1.08 },
+    rbRzCarryBaseline:   0.22, // RB red zone carry share league average
+    wrTeRzTargetBaseline: 0.12, // WR/TE red zone target share league average
   },
   snap: {
     clamp: { min: 0.9, max: 1.0 },
@@ -139,6 +148,13 @@ const RECEIVING_KEYWORDS = ["receiving", "reception", "rec yard"];
 export function isReceivingStat(statType: string): boolean {
   const s = statType.toLowerCase();
   return RECEIVING_KEYWORDS.some((k) => s.includes(k));
+}
+
+const NFL_TD_KEYWORDS = ["td scored", "tds scored", "rush td", "rec td"];
+/** Matches NFL touchdown props (TDs Scored, Rush TDs, Rec TDs). */
+export function isNFLTDStat(statType: string): boolean {
+  const s = statType.toLowerCase();
+  return NFL_TD_KEYWORDS.some((k) => s.includes(k));
 }
 
 const NBA_COUNTING_KEYWORDS = ["point", "pts", "rebound", "reb", "assist", "ast", "3-pt", "three", "block", "steal"];
@@ -324,10 +340,17 @@ export function homeAwayFactor(input: {
   };
 }
 
-/** NFL advanced usage (target share / WOPR) for receiving props. */
+/**
+ * NFL advanced usage factor for receiving props.
+ * Blends air yards share (0.4), target share (0.35), and WOPR (0.25).
+ * Also computes an aDOT stdDev multiplier — deep routes widen variance,
+ * short routes narrow it — stored on stdMultiplier for compute.ts.
+ */
 export function nflAdvancedFactor(input: {
-  targetShare?: number | null; // 0..1
+  targetShare?: number | null;     // 0..1
+  airYardsShare?: number | null;   // 0..1
   wopr?: number | null;
+  aDot?: number | null;            // average depth of target (yards)
   posBaselineTargetShare?: number | null; // 0..1
   statType: string;
 }): FactorResult | null {
@@ -336,9 +359,14 @@ export function nflAdvancedFactor(input: {
   let adj = 0;
   const notes: string[] = [];
   const baseline = input.posBaselineTargetShare ?? 0.18;
+
+  if (input.airYardsShare != null) {
+    adj += (input.airYardsShare - 0.20) * c.airYardsShareWeight;
+    notes.push(`${Math.round(input.airYardsShare * 100)}% AY-share`);
+  }
   if (input.targetShare != null) {
     adj += (input.targetShare - baseline) * c.targetShareWeight;
-    notes.push(`${Math.round(input.targetShare * 100)}% target share`);
+    notes.push(`${Math.round(input.targetShare * 100)}% tgt-share`);
   }
   if (input.wopr != null) {
     // WOPR ~0.6 is a high-end every-down receiver; center around 0.45.
@@ -348,12 +376,70 @@ export function nflAdvancedFactor(input: {
   if (adj === 0 || notes.length === 0) return null;
   const factor = clamp(1 + adj, c.clamp.min, c.clamp.max);
   if (Math.abs(factor - 1) < 0.002) return null;
+
+  // aDOT variance modifier: deep routes widen variance; short routes narrow it.
+  let stdMultiplier: number | undefined;
+  if (input.aDot != null) {
+    if (input.aDot > 10) {
+      stdMultiplier = round3(Math.min(1.20, 1 + (input.aDot - 10) * 0.025));
+    } else if (input.aDot < 5) {
+      stdMultiplier = round3(Math.max(0.85, 1 - (5 - input.aDot) * 0.03));
+    }
+  }
+
+  const explain = `${notes.join(", ")} → ×${factor.toFixed(3)}`
+    + (stdMultiplier != null ? ` (σ×${stdMultiplier.toFixed(2)})` : "");
+
   return {
     key: "nflAdvanced",
-    label: "NFL usage (target share / WOPR)",
+    label: "NFL usage (AY-share / tgt-share / WOPR)",
     factor: round3(factor),
-    explain: `${notes.join(", ")} → ×${factor.toFixed(3)}`,
+    explain,
+    ...(stdMultiplier != null ? { stdMultiplier } : {}),
   };
+}
+
+/**
+ * NFL red zone factor for TD props ("TDs Scored", "Rush TDs", "Rec TDs").
+ * RBs use red zone carry share; WR/TE use red zone target share.
+ * Returns null when the stat type is not a TD prop or data is unavailable.
+ */
+export function redZoneFactor(input: {
+  redZoneTargetShare?: number | null; // 0..1
+  redZoneCarryShare?: number | null;  // 0..1
+  position?: string | null;
+  statType: string;
+}): FactorResult | null {
+  if (!isNFLTDStat(input.statType)) return null;
+  const c = FACTOR_CONFIG.redZone;
+  const pos = (input.position ?? "").toUpperCase();
+  const isRB = pos === "RB" || pos === "FB";
+
+  if (isRB && input.redZoneCarryShare != null) {
+    const adj = (input.redZoneCarryShare - c.rbRzCarryBaseline) * c.weight;
+    if (Math.abs(adj) < 0.01) return null;
+    const factor = clamp(1 + adj, c.clamp.min, c.clamp.max);
+    return {
+      key: "redZone",
+      label: "Red zone carry share",
+      factor: round3(factor),
+      explain: `${Math.round(input.redZoneCarryShare * 100)}% RZ carries vs ${Math.round(c.rbRzCarryBaseline * 100)}% baseline → ×${factor.toFixed(3)}`,
+    };
+  }
+
+  if (!isRB && input.redZoneTargetShare != null) {
+    const adj = (input.redZoneTargetShare - c.wrTeRzTargetBaseline) * c.weight;
+    if (Math.abs(adj) < 0.01) return null;
+    const factor = clamp(1 + adj, c.clamp.min, c.clamp.max);
+    return {
+      key: "redZone",
+      label: "Red zone target share",
+      factor: round3(factor),
+      explain: `${Math.round(input.redZoneTargetShare * 100)}% RZ targets vs ${Math.round(c.wrTeRzTargetBaseline * 100)}% baseline → ×${factor.toFixed(3)}`,
+    };
+  }
+
+  return null;
 }
 
 /** NFL snap-rate factor. @param snapPct 0..1. */
