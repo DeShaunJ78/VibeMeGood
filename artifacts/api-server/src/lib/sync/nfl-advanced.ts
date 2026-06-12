@@ -124,6 +124,21 @@ async function ingestPlayerStats(season: number): Promise<number> {
   const rows = await downloadCSV(PLAYER_STATS_URL(season));
   logger.info({ season, rowCount: rows.length }, "NFL player stats downloaded");
 
+  // Pre-compute team-level TD totals per (team, week) for red zone share denominators.
+  // nflverse player_stats has rushing_tds + receiving_tds per player per week; summing
+  // them per team gives the denominator needed to compute each player's share.
+  const teamTDs = new Map<string, { rushing: number; receiving: number }>();
+  for (const r of rows) {
+    const team = r["recent_team"] ?? r["team"] ?? "";
+    const week = r["week"] ?? "";
+    if (!team || !week) continue;
+    const key = `${team}|${week}`;
+    const entry = teamTDs.get(key) ?? { rushing: 0, receiving: 0 };
+    entry.rushing  += num(r["rushing_tds"])   ?? 0;
+    entry.receiving += num(r["receiving_tds"]) ?? 0;
+    teamTDs.set(key, entry);
+  }
+
   let upserted = 0;
   const BATCH = 200;
   for (let i = 0; i < rows.length; i += BATCH) {
@@ -132,11 +147,21 @@ async function ingestPlayerStats(season: number): Promise<number> {
       const tgtNum = int(r["targets"]);
       const aDotVal = ayNum != null && tgtNum != null && tgtNum > 0
         ? ayNum / tgtNum : null;
-      const rzTargetShare = num(r["red_zone_target_share"] ?? r["rz_target_share"]);
-      const rzCarryShare  = num(r["red_zone_carry_share"]  ?? r["rz_carry_share"]);
+
+      const team = r["recent_team"] ?? r["team"] ?? "";
+      const week = r["week"] ?? "";
+      const totals = teamTDs.get(`${team}|${week}`);
+
+      const playerRushTDs = num(r["rushing_tds"])   ?? 0;
+      const playerRecTDs  = num(r["receiving_tds"]) ?? 0;
+      const rzCarry  = totals && totals.rushing   > 0
+        ? playerRushTDs  / totals.rushing   : null;
+      const rzTarget = totals && totals.receiving > 0
+        ? playerRecTDs   / totals.receiving : null;
+
       return {
         playerName:         r["player_display_name"] ?? r["player_name"] ?? r["player"] ?? "",
-        team:               r["recent_team"] ?? r["team"] ?? "",
+        team,
         season,
         week:               int(r["week"]),
         targetShare:        num(r["target_share"]) != null ? String(num(r["target_share"])!) : null,
@@ -146,8 +171,8 @@ async function ingestPlayerStats(season: number): Promise<number> {
         racr:               num(r["racr"]) != null ? String(num(r["racr"])!) : null,
         targets:            tgtNum,
         aDot:               aDotVal != null ? String(aDotVal) : null,
-        redZoneTargetShare: rzTargetShare != null ? String(rzTargetShare) : null,
-        redZoneCarryShare:  rzCarryShare  != null ? String(rzCarryShare)  : null,
+        redZoneTargetShare: rzTarget != null ? String(rzTarget) : null,
+        redZoneCarryShare:  rzCarry  != null ? String(rzCarry)  : null,
       };
     }).filter(r => r.playerName && r.team));
 

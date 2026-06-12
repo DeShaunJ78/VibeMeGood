@@ -416,9 +416,9 @@ export function redZoneFactor(input: {
   const isRB = pos === "RB" || pos === "FB";
 
   if (isRB && input.redZoneCarryShare != null) {
-    const adj = (input.redZoneCarryShare - c.rbRzCarryBaseline) * c.weight;
-    if (Math.abs(adj) < 0.01) return null;
-    const factor = clamp(1 + adj, c.clamp.min, c.clamp.max);
+    // Ratio model: player's RZ carry share / position baseline
+    const factor = clamp(input.redZoneCarryShare / c.rbRzCarryBaseline, c.clamp.min, c.clamp.max);
+    if (Math.abs(factor - 1) < 0.003) return null;
     return {
       key: "redZone",
       label: "Red zone carry share",
@@ -428,9 +428,9 @@ export function redZoneFactor(input: {
   }
 
   if (!isRB && input.redZoneTargetShare != null) {
-    const adj = (input.redZoneTargetShare - c.wrTeRzTargetBaseline) * c.weight;
-    if (Math.abs(adj) < 0.01) return null;
-    const factor = clamp(1 + adj, c.clamp.min, c.clamp.max);
+    // Ratio model: player's RZ target share / position baseline
+    const factor = clamp(input.redZoneTargetShare / c.wrTeRzTargetBaseline, c.clamp.min, c.clamp.max);
+    if (Math.abs(factor - 1) < 0.003) return null;
     return {
       key: "redZone",
       label: "Red zone target share",
