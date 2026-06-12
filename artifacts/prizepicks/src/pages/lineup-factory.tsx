@@ -778,7 +778,18 @@ function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap, o
                 <Star className="w-2.5 h-2.5 text-violet-400 shrink-0 fill-violet-400" />
               </span>
             )}
-            <span className={cn("font-medium truncate flex-1 min-w-0", isAnchor && "text-violet-200")}>{pick.playerName}</span>
+            <span
+              className={cn(
+                "font-medium truncate flex-1 min-w-0",
+                isAnchor && "text-violet-200",
+                onOpenProp && "cursor-pointer hover:text-cyan-300 transition-colors",
+              )}
+              role={onOpenProp ? "button" : undefined}
+              tabIndex={onOpenProp ? 0 : undefined}
+              onClick={onOpenProp ? () => onOpenProp(pick.ppLineId) : undefined}
+              onKeyDown={onOpenProp ? (e) => { if (e.key === "Enter" || e.key === " ") onOpenProp(pick.ppLineId); } : undefined}
+              title={onOpenProp ? `Open ${pick.playerName} prop details` : undefined}
+            >{pick.playerName}</span>
             <span className="text-muted-foreground shrink-0">{pick.statType}</span>
             <span className="font-mono text-foreground shrink-0">{pick.ppLine}</span>
             <span className={cn("font-mono text-xs shrink-0 uppercase", pick.direction === "more" ? "text-emerald-400" : "text-red-400")}>
