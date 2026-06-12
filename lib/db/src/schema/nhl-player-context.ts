@@ -4,7 +4,8 @@ import { playersTable } from "./players";
 export const nhlPlayerContextTable = pgTable("nhl_player_context", {
   id:            serial("id").primaryKey(),
   playerId:      integer("player_id").notNull().references(() => playersTable.id, { onDelete: "cascade" }),
-  toiPerGame:    numeric("toi_per_game",    { precision: 5, scale: 2 }),  // minutes/game e.g. 21.50
+  toiPerGame:    numeric("toi_per_game",    { precision: 5, scale: 2 }),  // season-avg TOI minutes/game e.g. 21.50
+  toiProjected:  numeric("toi_projected",   { precision: 5, scale: 2 }),  // recent-form TOI (last 10 games avg); used by nhlTimeOnIceFactor as the "projected" input
   ppToiPerGame:  numeric("pp_toi_per_game", { precision: 5, scale: 2 }),  // PP minutes/game e.g. 3.20
   ppUnit:        smallint("pp_unit"),                                      // 1 = 1st unit, 2 = 2nd unit, null = not on PP
   corsiFor60:    numeric("corsi_for_60",    { precision: 6, scale: 2 }),  // Corsi For attempts / 60 min

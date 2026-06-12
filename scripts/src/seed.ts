@@ -603,18 +603,21 @@ async function seed() {
   // Representative 2024-25 season context rows for seeded NHL players.
   // These are overwritten on the first real syncNhlPlayerContext() run.
   // Values: toiPerGame (min), ppToiPerGame (min), ppUnit, corsiFor60, fenwickFor60.
+  // toiProjected = last-10-games avg TOI (from NHL API lastNGames=10 fetch).
+  // These seed values intentionally differ from toiPerGame for some players to
+  // demonstrate the factor firing (e.g. McDavid trending up in recent form).
   const nhlContextDefs: Array<{
-    name: string; toi: string; ppToi: string; ppUnit: number | null;
+    name: string; toi: string; toiProj: string; ppToi: string; ppUnit: number | null;
     corsi: string; fenwick: string;
   }> = [
-    { name: "Connor McDavid",   toi: "22.10", ppToi: "4.20", ppUnit: 1, corsi: "78.4", fenwick: "65.2" },
-    { name: "Leon Draisaitl",   toi: "21.50", ppToi: "3.80", ppUnit: 1, corsi: "72.1", fenwick: "60.9" },
-    { name: "Auston Matthews",  toi: "21.00", ppToi: "3.50", ppUnit: 1, corsi: "68.5", fenwick: "57.3" },
-    { name: "Mitch Marner",     toi: "20.30", ppToi: "3.20", ppUnit: 1, corsi: "67.2", fenwick: "56.1" },
-    { name: "Artemi Panarin",   toi: "19.80", ppToi: "2.90", ppUnit: 1, corsi: "64.8", fenwick: "54.7" },
-    { name: "Adam Fox",         toi: "24.50", ppToi: "3.60", ppUnit: 1, corsi: "66.3", fenwick: "55.9" },
-    { name: "Nathan MacKinnon", toi: "21.80", ppToi: "3.90", ppUnit: 1, corsi: "75.6", fenwick: "63.4" },
-    { name: "Cale Makar",       toi: "25.20", ppToi: "3.80", ppUnit: 1, corsi: "71.0", fenwick: "59.8" },
+    { name: "Connor McDavid",   toi: "22.10", toiProj: "23.80", ppToi: "4.20", ppUnit: 1, corsi: "78.4", fenwick: "65.2" },
+    { name: "Leon Draisaitl",   toi: "21.50", toiProj: "21.50", ppToi: "3.80", ppUnit: 1, corsi: "72.1", fenwick: "60.9" },
+    { name: "Auston Matthews",  toi: "21.00", toiProj: "20.10", ppToi: "3.50", ppUnit: 1, corsi: "68.5", fenwick: "57.3" },
+    { name: "Mitch Marner",     toi: "20.30", toiProj: "21.40", ppToi: "3.20", ppUnit: 1, corsi: "67.2", fenwick: "56.1" },
+    { name: "Artemi Panarin",   toi: "19.80", toiProj: "19.80", ppToi: "2.90", ppUnit: 1, corsi: "64.8", fenwick: "54.7" },
+    { name: "Adam Fox",         toi: "24.50", toiProj: "25.30", ppToi: "3.60", ppUnit: 1, corsi: "66.3", fenwick: "55.9" },
+    { name: "Nathan MacKinnon", toi: "21.80", toiProj: "22.90", ppToi: "3.90", ppUnit: 1, corsi: "75.6", fenwick: "63.4" },
+    { name: "Cale Makar",       toi: "25.20", toiProj: "24.60", ppToi: "3.80", ppUnit: 1, corsi: "71.0", fenwick: "59.8" },
   ];
   const nhlContextRows = nhlContextDefs
     .map(d => {
@@ -623,6 +626,7 @@ async function seed() {
       return {
         playerId:     player.id,
         toiPerGame:   d.toi,
+        toiProjected: d.toiProj,
         ppToiPerGame: d.ppToi,
         ppUnit:       d.ppUnit,
         corsiFor60:   d.corsi,

@@ -2,7 +2,9 @@
  * NHL Player Context Sync
  *
  * Fetches per-skater season context from the free NHL Stats API:
- *   - Time on ice (TOI) per game
+ *   - Season-avg TOI per game (toiPerGame)
+ *   - Recent-form TOI per game (toiProjected) — last 10 games; used as the
+ *     "projected" input to nhlTimeOnIceFactor(toiProjected, toiSeasonAvg, ...)
  *   - Power-play TOI per game → infer PP unit (1st / 2nd / none)
  *   - Corsi For / 60 (shot-attempt differential)
  *   - Fenwick For / 60 (unblocked shot-attempt differential)
@@ -11,8 +13,9 @@
  * then upserts into nhl_player_context (unique on player_id).
  *
  * Data sources (free, no auth required):
- *   Summary:          https://api.nhle.com/stats/rest/en/skater/summary
- *   Puck Possessions: https://api.nhle.com/stats/rest/en/skater/puckPossessions
+ *   Season summary:    https://api.nhle.com/stats/rest/en/skater/summary
+ *   Last-10 summary:   https://api.nhle.com/stats/rest/en/skater/summary?lastNGames=10
+ *   Puck Possessions:  https://api.nhle.com/stats/rest/en/skater/puckPossessions
  */
 
 import { db } from "@workspace/db";
@@ -42,8 +45,11 @@ interface NhlPossessionRow {
   uSatFor:      number;   // Fenwick For = unblocked (season total)
 }
 
-async function fetchNhlJson(report: string): Promise<Record<string, unknown>[]> {
-  const url = `${NHL_API_BASE}/${report}?reportType=season&seasonId=${SEASON_ID}&gameTypeId=${GAME_TYPE_ID}&limit=${FETCH_LIMIT}&start=0`;
+async function fetchNhlJson(
+  report: string,
+  extraParams: string = "",
+): Promise<Record<string, unknown>[]> {
+  const url = `${NHL_API_BASE}/${report}?reportType=season&seasonId=${SEASON_ID}&gameTypeId=${GAME_TYPE_ID}&limit=${FETCH_LIMIT}&start=0${extraParams}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
   try {
@@ -73,19 +79,27 @@ function inferPpUnit(ppToiMin: number): number | null {
 }
 
 export async function syncNhlPlayerContext(): Promise<number> {
-  // ── 1. Fetch both endpoints in parallel ────────────────────────────────────
-  const [summaryRaw, possessionRaw] = await Promise.all([
+  // ── 1. Fetch all endpoints in parallel ────────────────────────────────────
+  const [summaryRaw, recentRaw, possessionRaw] = await Promise.all([
+    // Full season summary: provides season-avg TOI (toiPerGame baseline)
     fetchNhlJson("summary").catch((err) => {
       logger.warn({ err }, "syncNhlPlayerContext: summary fetch failed — skipping");
       return [] as Record<string, unknown>[];
     }),
+    // Last 10 games summary: provides recent-form TOI (toiProjected)
+    // When this differs from the season average it signals a role change.
+    fetchNhlJson("summary", "&lastNGames=10").catch((err) => {
+      logger.warn({ err }, "syncNhlPlayerContext: last-10 fetch failed — toiProjected will use season avg");
+      return [] as Record<string, unknown>[];
+    }),
+    // Puck possessions: Corsi For / Fenwick For per 60 min
     fetchNhlJson("puckPossessions").catch((err) => {
-      logger.warn({ err }, "syncNhlPlayerContext: puckPossessions fetch failed — Corsi will be null");
+      logger.warn({ err }, "syncNhlPlayerContext: puckPossessions fetch failed — Corsi will use shots proxy");
       return [] as Record<string, unknown>[];
     }),
   ]);
 
-  // ── 2. Parse summary rows ─────────────────────────────────────────────────
+  // ── 2. Parse season summary rows ──────────────────────────────────────────
   const summaryMap = new Map<number, NhlSummaryRow>();
   for (const row of summaryRaw) {
     const id    = row.playerId as number;
@@ -102,7 +116,20 @@ export async function syncNhlPlayerContext(): Promise<number> {
     });
   }
 
-  // ── 3. Parse possession rows (Corsi/Fenwick) ──────────────────────────────
+  // ── 3. Parse last-10-games summary rows → projected TOI ───────────────────
+  // toiProjected = recent-form avg TOI (last 10 games). A player coming off a
+  // high-leverage stretch will have toiProjected > toiPerGame (boost), while a
+  // player with reduced recent role will have toiProjected < toiPerGame (reduction).
+  const recentToiByNhlId = new Map<number, number>();  // nhl player id → seconds/game
+  for (const row of recentRaw) {
+    const id  = row.playerId as number;
+    const toi = row.timeOnIcePerGame as number;
+    if (typeof id === "number" && typeof toi === "number") {
+      recentToiByNhlId.set(id, toi);
+    }
+  }
+
+  // ── 4. Parse possession rows (Corsi/Fenwick) ──────────────────────────────
   const possessionMap = new Map<number, NhlPossessionRow>();
   for (const row of possessionRaw) {
     const id  = row.playerId as number;
@@ -123,7 +150,7 @@ export async function syncNhlPlayerContext(): Promise<number> {
     return 0;
   }
 
-  // ── 4. Fetch our NHL players (name-match from DB) ─────────────────────────
+  // ── 5. Fetch our NHL players (name-match from DB) ─────────────────────────
   const dbPlayers = await db
     .select({ id: playersTable.id, fullName: playersTable.fullName })
     .from(playersTable)
@@ -134,7 +161,7 @@ export async function syncNhlPlayerContext(): Promise<number> {
     nameToDbId.set(p.fullName.toLowerCase(), p.id);
   }
 
-  // ── 5. Build upsert payloads ──────────────────────────────────────────────
+  // ── 6. Build upsert payloads ──────────────────────────────────────────────
   type UpsertRow = typeof nhlPlayerContextTable.$inferInsert;
   const payloads: UpsertRow[] = [];
 
@@ -142,14 +169,20 @@ export async function syncNhlPlayerContext(): Promise<number> {
     const dbPlayerId = nameToDbId.get(summary.skaterFullName.toLowerCase());
     if (!dbPlayerId) continue;   // not in our player roster → skip
 
-    const toiMinPerGame = summary.timeOnIcePerGame / 60;   // sec → min
+    const toiMinPerGame   = summary.timeOnIcePerGame / 60;   // sec → min
     const ppToiMinPerGame = summary.ppTimeOnIcePerGame / 60;
-    const ppUnit = inferPpUnit(ppToiMinPerGame);
+    const ppUnit          = inferPpUnit(ppToiMinPerGame);
+
+    // toiProjected: recent-form avg (last 10 games); falls back to season avg
+    // when last-10 data is unavailable for this player.
+    const recentToiSec   = recentToiByNhlId.get(nhlId);
+    const toiProjectedMin = recentToiSec != null
+      ? recentToiSec / 60
+      : toiMinPerGame;  // fallback: same as season avg → factor gracefully no-ops
 
     // Corsi / Fenwick per 60 from possession data.
     // Fallback: when the puckPossessions endpoint misses this player (partial
     // coverage), derive a shots-per-60 proxy from the summary `shots` field.
-    // shots/60 ≈ Corsi For/60 minus missed/blocked — conservative but non-null.
     let corsiFor60: number | null = null;
     let fenwickFor60: number | null = null;
 
@@ -172,6 +205,7 @@ export async function syncNhlPlayerContext(): Promise<number> {
     payloads.push({
       playerId:     dbPlayerId,
       toiPerGame:   toiMinPerGame.toFixed(2),
+      toiProjected: toiProjectedMin.toFixed(2),
       ppToiPerGame: ppToiMinPerGame.toFixed(2),
       ppUnit:       ppUnit,
       corsiFor60:   corsiFor60  != null ? corsiFor60.toFixed(2)   : null,
@@ -186,7 +220,7 @@ export async function syncNhlPlayerContext(): Promise<number> {
     return 0;
   }
 
-  // ── 6. Bulk upsert (unique on player_id) ──────────────────────────────────
+  // ── 7. Bulk upsert (unique on player_id) ──────────────────────────────────
   const BATCH = 200;
   let upserted = 0;
   for (let i = 0; i < payloads.length; i += BATCH) {
@@ -197,6 +231,7 @@ export async function syncNhlPlayerContext(): Promise<number> {
         target: nhlPlayerContextTable.playerId,
         set: {
           toiPerGame:   sql`excluded.toi_per_game`,
+          toiProjected: sql`excluded.toi_projected`,
           ppToiPerGame: sql`excluded.pp_toi_per_game`,
           ppUnit:       sql`excluded.pp_unit`,
           corsiFor60:   sql`excluded.corsi_for_60`,
