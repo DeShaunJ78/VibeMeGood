@@ -756,23 +756,30 @@ export function isNHLShotsOnGoal(statType: string): boolean {
 /**
  * NHL Time-on-Ice factor.
  *
- * Computes the ratio of today's projected TOI to the player's season-average TOI.
- * When that ratio deviates meaningfully from 1.0 it signals a role change
- * (line-up shuffle, injury shortfall, extra-time chance) that should shift all
+ * Computes the ratio of a player's TOI to a comparison baseline and scales
  * counting-stat projections proportionally.
  *
+ * Two modes — same function, different inputs:
+ *   Mode A (preferred — nightly deviation): playerToi = tonight's projected TOI,
+ *     baselineToi = player's season-average TOI. Fires when a lineup shuffle
+ *     or injury changes expected ice time relative to the player's own norm.
+ *   Mode B (interim — role/usage signal): playerToi = player's season-average TOI,
+ *     baselineToi = NHL positional/league-average TOI. Fires for top-liners who
+ *     log well above the league average and depth players who log well below.
+ *     This is the active mode until a nightly projected-TOI feed is wired (#192).
+ *
  * Fires for: Goals, Assists, Shots on Goal, Points.
- * Clamp: [0.65, 1.45].
+ * Clamp: [0.65, 1.45]. Trivial moves (|ratio−1| < 4%) are dropped.
  */
 export function nhlTimeOnIceFactor(
-  projectedToi:  number | null,  // tonight's projected TOI in minutes
-  seasonAvgToi:  number | null,  // season-average TOI per game in minutes
+  playerToi:   number | null,  // player TOI in minutes (projected or season-avg)
+  baselineToi: number | null,  // baseline TOI in minutes (player-avg or league-avg)
   statType: string,
 ): FactorResult | null {
-  if (projectedToi == null || seasonAvgToi == null || seasonAvgToi <= 0) return null;
+  if (playerToi == null || baselineToi == null || baselineToi <= 0) return null;
   if (!isNHLCountingStat(statType)) return null;
   const c = FACTOR_CONFIG.nhlTimeOnIce;
-  const ratio = projectedToi / seasonAvgToi;
+  const ratio = playerToi / baselineToi;
   if (Math.abs(ratio - 1) < c.trivialThreshold) return null;
   const factor = clamp(ratio, c.clamp.min, c.clamp.max);
   const dir = ratio > 1 ? "↑" : "↓";
@@ -780,7 +787,7 @@ export function nhlTimeOnIceFactor(
     key: "nhlTOI",
     label: "NHL TOI",
     factor: round3(factor),
-    explain: `${dir}${projectedToi.toFixed(1)} min projected vs ${seasonAvgToi.toFixed(1)} avg → ×${factor.toFixed(3)}`,
+    explain: `${dir}${playerToi.toFixed(1)} min vs ${baselineToi.toFixed(1)} baseline → ×${factor.toFixed(3)}`,
   };
 }
 

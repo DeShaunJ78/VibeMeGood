@@ -9,7 +9,7 @@ import {
   externalLinesTable, projectionsTable, injuriesTable, lineupConfirmationsTable,
   propScoresTable, entriesTable, entryPicksTable, watchlistItemsTable,
   alertsTable, payoutConfigTable, gameEnvironmentTable, lineMoveEventsTable,
-  nflAdvancedMetricsTable, pitcherProfilesTable,
+  nflAdvancedMetricsTable, pitcherProfilesTable, nhlPlayerContextTable,
 } from "@workspace/db/schema";
 import { sql } from "drizzle-orm";
 
@@ -20,7 +20,7 @@ async function seed() {
     alerts, watchlist_items, entry_picks, entries, prop_scores,
     lineup_confirmations, injuries, projections, external_lines,
     pp_line_history, line_move_events, pp_lines, game_environment,
-    games, players, teams, payout_config
+    games, nhl_player_context, players, teams, payout_config
     RESTART IDENTITY CASCADE`);
 
   // ---- Teams ----
@@ -46,8 +46,14 @@ async function seed() {
     { sport: "MLB", name: "Houston Astros", abbreviation: "HOU", city: "Houston" },
     { sport: "MLB", name: "Atlanta Braves", abbreviation: "ATL", city: "Atlanta" },
   ];
+  const nhlTeams = [
+    { sport: "NHL", name: "Edmonton Oilers",      abbreviation: "EDM", city: "Edmonton" },
+    { sport: "NHL", name: "Toronto Maple Leafs",  abbreviation: "TOR", city: "Toronto" },
+    { sport: "NHL", name: "New York Rangers",     abbreviation: "NYR", city: "New York" },
+    { sport: "NHL", name: "Colorado Avalanche",   abbreviation: "COL", city: "Colorado" },
+  ];
 
-  const teams = await db.insert(teamsTable).values([...nbaTeams, ...nflTeams, ...mlbTeams]).returning();
+  const teams = await db.insert(teamsTable).values([...nbaTeams, ...nflTeams, ...mlbTeams, ...nhlTeams]).returning();
   const teamsByAbbr = Object.fromEntries(teams.map(t => [t.abbreviation, t]));
   console.log(`Inserted ${teams.length} teams`);
 
@@ -74,6 +80,15 @@ async function seed() {
     { sport: "MLB", fullName: "Freddie Freeman", firstName: "Freddie", lastName: "Freeman", teamId: teamsByAbbr["LAD"].id, position: "1B", status: "active" },
     { sport: "MLB", fullName: "Aaron Judge", firstName: "Aaron", lastName: "Judge", teamId: teamsByAbbr["NYY"].id, position: "RF", status: "active" },
     { sport: "MLB", fullName: "Yordan Alvarez", firstName: "Yordan", lastName: "Alvarez", teamId: teamsByAbbr["HOU"].id, position: "DH", status: "active" },
+    // ---- NHL players ----
+    { sport: "NHL", fullName: "Connor McDavid",   firstName: "Connor",   lastName: "McDavid",   teamId: teamsByAbbr["EDM"].id, position: "C",  status: "active" },
+    { sport: "NHL", fullName: "Leon Draisaitl",   firstName: "Leon",     lastName: "Draisaitl", teamId: teamsByAbbr["EDM"].id, position: "C",  status: "active" },
+    { sport: "NHL", fullName: "Auston Matthews",  firstName: "Auston",   lastName: "Matthews",  teamId: teamsByAbbr["TOR"].id, position: "C",  status: "active" },
+    { sport: "NHL", fullName: "Mitch Marner",     firstName: "Mitch",    lastName: "Marner",    teamId: teamsByAbbr["TOR"].id, position: "RW", status: "active" },
+    { sport: "NHL", fullName: "Artemi Panarin",   firstName: "Artemi",   lastName: "Panarin",   teamId: teamsByAbbr["NYR"].id, position: "LW", status: "active" },
+    { sport: "NHL", fullName: "Adam Fox",         firstName: "Adam",     lastName: "Fox",       teamId: teamsByAbbr["NYR"].id, position: "D",  status: "active" },
+    { sport: "NHL", fullName: "Nathan MacKinnon", firstName: "Nathan",   lastName: "MacKinnon", teamId: teamsByAbbr["COL"].id, position: "C",  status: "active" },
+    { sport: "NHL", fullName: "Cale Makar",       firstName: "Cale",     lastName: "Makar",     teamId: teamsByAbbr["COL"].id, position: "D",  status: "active" },
   ];
 
   const players = await db.insert(playersTable).values(playerDefs).returning();
@@ -583,6 +598,44 @@ async function seed() {
     { playerName: "Trevor Rogers",        hand: "L", sport: "MLB" },
   ]).onConflictDoNothing();
   console.log("Inserted pitcher profiles");
+
+  // ---- NHL Player Context ----
+  // Representative 2024-25 season context rows for seeded NHL players.
+  // These are overwritten on the first real syncNhlPlayerContext() run.
+  // Values: toiPerGame (min), ppToiPerGame (min), ppUnit, corsiFor60, fenwickFor60.
+  const nhlContextDefs: Array<{
+    name: string; toi: string; ppToi: string; ppUnit: number | null;
+    corsi: string; fenwick: string;
+  }> = [
+    { name: "Connor McDavid",   toi: "22.10", ppToi: "4.20", ppUnit: 1, corsi: "78.4", fenwick: "65.2" },
+    { name: "Leon Draisaitl",   toi: "21.50", ppToi: "3.80", ppUnit: 1, corsi: "72.1", fenwick: "60.9" },
+    { name: "Auston Matthews",  toi: "21.00", ppToi: "3.50", ppUnit: 1, corsi: "68.5", fenwick: "57.3" },
+    { name: "Mitch Marner",     toi: "20.30", ppToi: "3.20", ppUnit: 1, corsi: "67.2", fenwick: "56.1" },
+    { name: "Artemi Panarin",   toi: "19.80", ppToi: "2.90", ppUnit: 1, corsi: "64.8", fenwick: "54.7" },
+    { name: "Adam Fox",         toi: "24.50", ppToi: "3.60", ppUnit: 1, corsi: "66.3", fenwick: "55.9" },
+    { name: "Nathan MacKinnon", toi: "21.80", ppToi: "3.90", ppUnit: 1, corsi: "75.6", fenwick: "63.4" },
+    { name: "Cale Makar",       toi: "25.20", ppToi: "3.80", ppUnit: 1, corsi: "71.0", fenwick: "59.8" },
+  ];
+  const nhlContextRows = nhlContextDefs
+    .map(d => {
+      const player = playersByName[d.name];
+      if (!player) return null;
+      return {
+        playerId:     player.id,
+        toiPerGame:   d.toi,
+        ppToiPerGame: d.ppToi,
+        ppUnit:       d.ppUnit,
+        corsiFor60:   d.corsi,
+        fenwickFor60: d.fenwick,
+        xGoalsPer60:  null as string | null,
+        updatedAt:    new Date(),
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+  if (nhlContextRows.length > 0) {
+    await db.insert(nhlPlayerContextTable).values(nhlContextRows).onConflictDoNothing();
+    console.log(`Inserted ${nhlContextRows.length} nhl_player_context rows`);
+  }
 
   console.log("Seed complete!");
   process.exit(0);

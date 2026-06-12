@@ -1019,13 +1019,21 @@ export async function computeAllProjections(): Promise<number> {
           const ppUnit        = nhlCtx.ppUnit ?? null;
           const corsiFor60    = nhlCtx.corsiFor60    != null ? parseFloat(nhlCtx.corsiFor60.toString())    : null;
 
-          // 1. TOI factor — fires when nightly projected TOI differs from the
-          //    player's season average (ratio outside ±4% trivial threshold).
-          //    Requires an external projected-TOI source (lineup feed). Until
-          //    that source is wired (follow-up #192) we have no projected value
-          //    and must skip this factor to avoid a permanent no-op or positional
-          //    bias. nhlTimeOnIceFactor() remains in factors.ts for future use.
-          //    (noop — no projected TOI available yet)
+          // 1. TOI role/usage factor (Mode B — interim until nightly projected feed).
+          //    Compares the player's season-average TOI to a positional league
+          //    average. Top-liners well above the positional average receive a
+          //    positive boost; depth players below it receive a reduction.
+          //    NHL position baselines (2024-25 skaters ≥10 GP):
+          //      C:16.5  LW/RW:15.5  F(generic):16.0  D:21.0  min/game.
+          //    Once a nightly projected-TOI feed is available (follow-up #192),
+          //    swap to Mode A: nhlTimeOnIceFactor(toiProjected, toiPerGame, ...).
+          const NHL_TOI_BASELINES: Record<string, number> = {
+            C: 16.5, LW: 15.5, RW: 15.5, F: 16.0, D: 21.0,
+          };
+          const posBaseline = player.position
+            ? (NHL_TOI_BASELINES[player.position] ?? 16.5)
+            : 16.5;
+          factors.push(nhlTimeOnIceFactor(toiPerGame, posBaseline, line.statType));
 
           // 2. Power-play factor (ratio-driven) — fires for Goals/Assists/Points.
           //    boost = (ppToi / totalToi) × (ppEfficiency − 1); no-op when player
