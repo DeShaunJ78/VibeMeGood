@@ -93,14 +93,17 @@ export const FACTOR_CONFIG = {
     trivialThreshold: 0.04, // skip if |ratio-1| < 4%
   },
   nhlPowerPlay: {
-    // Additive boost on scoring props for players confirmed on PP units.
-    firstUnit:  0.14,  // 1st PP unit: +14% on scoring props
-    secondUnit: 0.06,  // 2nd PP unit: +6% on scoring props
-    clamp: { min: 0.90, max: 1.20 },
+    // PP efficiency: PP scoring rate is roughly 2.5× higher per minute than 5v5.
+    // boost = (ppToi / totalToi) × ppEfficiency.
+    // For a typical PP1 player (~3.5 min PP / 20 min total): boost ≈ +44% → clamped.
+    // For a PP2 player (~1.5 min / 18 min): boost ≈ +21%.
+    ppEfficiency: 2.5,
+    minPpToi: 0.5,       // require at least 0.5 min/game PP TOI to emit a signal
+    clamp: { min: 0.90, max: 1.45 },
   },
   nhlCorsi: {
-    leagueAvgCF60: 55.0, // typical NHL team CF/60 average
-    weight: 0.40,        // dampening weight on the ratio deviation
+    leagueAvgCF60: 55.0, // typical NHL skater CF/60 average
+    weight: 1.00,        // full ratio: 65 vs 55 → +18%; 45 vs 55 → -18%
     clamp: { min: 0.80, max: 1.25 },
     minCF60: 20,         // require at least 20 CF/60 to emit a signal (filters goalies / fringe)
   },
@@ -782,31 +785,46 @@ export function nhlTimeOnIceFactor(
 }
 
 /**
- * NHL Power-Play factor.
+ * NHL Power-Play factor (ratio-driven).
  *
- * PP unit membership is a strong proxy for scoring-prop value.
- * 1st PP unit players average ~60% of a team's PP time and are the primary
- * beneficiaries of 5-on-4 advantages; 2nd-unit players get the remainder.
+ * PP scoring rates are roughly 2.5× higher per minute than even-strength play.
+ * A player who spends 17% of their ice on the PP gets a proportionally larger
+ * expected-value boost than a 2nd-unit player at 7%.
+ *
+ * Formula: boost = (ppToiPerGame / toiPerGame) × (ppEfficiency − 1)
+ *   where ppEfficiency = 2.5 (PP scoring 2.5× per-min vs 5v5)
+ *   and ppFraction = ppToi / totalToi captures the proportion of ice on the PP.
+ *
+ * Example — PP1 player: 3.5 PP-min / 20 total-min
+ *   boost = (3.5/20) × (2.5−1) = 0.175 × 1.5 = 0.263 → ×1.263 (clamped if >1.45)
+ * Example — PP2 player: 1.5 PP-min / 18 total-min
+ *   boost = (1.5/18) × 1.5 = 0.083 × 1.5 = 0.125 → ×1.125
  *
  * Fires for: Goals, Assists, Points.
- * Clamp: [0.90, 1.20].
+ * Clamp: [0.90, 1.45].
  */
 export function powerPlayFactor(
-  ppToiPerGame: number | null,   // PP minutes per game (from nhl_player_context)
-  ppUnit:       number | null,   // 1 | 2 | null
+  ppToiPerGame: number | null,  // PP minutes per game (from nhl_player_context)
+  toiPerGame:   number | null,  // total TOI minutes per game
+  ppUnit:       number | null,  // 1 | 2 | null — used only for the explain label
   statType: string,
 ): FactorResult | null {
-  if (ppUnit == null || !isNHLScoringStat(statType)) return null;
+  if (!isNHLScoringStat(statType)) return null;
   const c = FACTOR_CONFIG.nhlPowerPlay;
-  const boost = ppUnit === 1 ? c.firstUnit : c.secondUnit;
-  const factor = clamp(1 + boost, c.clamp.min, c.clamp.max);
-  const unitLabel = ppUnit === 1 ? "1st PP unit" : "2nd PP unit";
-  const ppMin = ppToiPerGame != null ? ` (${ppToiPerGame.toFixed(1)} min/game)` : "";
+  if (ppToiPerGame == null || toiPerGame == null || toiPerGame <= 0) return null;
+  if (ppToiPerGame < c.minPpToi) return null;  // player not meaningfully on PP
+
+  const ppFraction = ppToiPerGame / toiPerGame;
+  const boost      = ppFraction * (c.ppEfficiency - 1);
+  const factor     = clamp(1 + boost, c.clamp.min, c.clamp.max);
+  if (Math.abs(factor - 1) < 0.02) return null;  // skip trivial signal
+
+  const unitLabel = ppUnit === 1 ? "1st PP unit" : ppUnit === 2 ? "2nd PP unit" : "PP ice";
   return {
     key: "nhlPP",
     label: "Power-play",
     factor: round3(factor),
-    explain: `${unitLabel}${ppMin} → ×${factor.toFixed(3)}`,
+    explain: `${unitLabel}: ${ppToiPerGame.toFixed(1)}/${toiPerGame.toFixed(1)} min PP fraction × ${c.ppEfficiency}× efficiency → ×${factor.toFixed(3)}`,
   };
 }
 

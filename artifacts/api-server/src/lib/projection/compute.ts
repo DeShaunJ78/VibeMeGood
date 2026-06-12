@@ -38,6 +38,19 @@ const NBA_USG_BASELINE_PCT: Record<string, number> = {
   PG: 28, SG: 25, SF: 22, PF: 20, C: 18,
 };
 
+// NHL position-based average TOI per game (minutes) — 2024-25 season baselines.
+// Compares a player's actual TOI to their positional peer group to detect
+// top-line overperformers (high TOI → more scoring opportunity) vs depth players.
+// Source: NHL Stats skater summary, season avg across all players ≥10 GP.
+const NHL_TOI_POSITION_BASELINE: Record<string, number> = {
+  C:  16.5,  // center
+  LW: 15.5,  // left wing
+  RW: 15.5,  // right wing
+  F:  16.0,  // generic forward
+  D:  21.0,  // defenseman
+  G:  0,     // goalie — TOI factor not applicable to goalie props
+};
+
 export interface ProjectionOutput {
   mean: number;
   stdDev: number;
@@ -1013,22 +1026,29 @@ export async function computeAllProjections(): Promise<number> {
       if (sport === "NHL") {
         const nhlCtx = nhlContextByPlayer.get(line.playerId);
         if (nhlCtx) {
-          const toiPerGame = nhlCtx.toiPerGame != null ? parseFloat(nhlCtx.toiPerGame.toString()) : null;
-          const ppToiPerGame = nhlCtx.ppToiPerGame != null ? parseFloat(nhlCtx.ppToiPerGame.toString()) : null;
-          const ppUnit = nhlCtx.ppUnit ?? null;
-          const corsiFor60 = nhlCtx.corsiFor60 != null ? parseFloat(nhlCtx.corsiFor60.toString()) : null;
+          const toiPerGame    = nhlCtx.toiPerGame    != null ? parseFloat(nhlCtx.toiPerGame.toString())    : null;
+          const ppToiPerGame  = nhlCtx.ppToiPerGame  != null ? parseFloat(nhlCtx.ppToiPerGame.toString())  : null;
+          const ppUnit        = nhlCtx.ppUnit ?? null;
+          const corsiFor60    = nhlCtx.corsiFor60    != null ? parseFloat(nhlCtx.corsiFor60.toString())    : null;
 
-          // 1. Time-on-Ice factor — fires for Goals/Assists/Shots/Points
-          //    Use season-average TOI from context as the baseline.
-          //    (Projected TOI = same baseline unless lineup data overrides; the
-          //    factor is a no-op when projected == avg, so it gracefully degrades
-          //    until a lineup projection feed is wired in.)
-          factors.push(nhlTimeOnIceFactor(toiPerGame, toiPerGame, line.statType));
+          // 1. TOI factor — compare player's season-avg TOI to their positional
+          //    peer-group baseline (forward ~16 min, defenseman ~21 min).
+          //    Top-liners above the baseline get a positive role boost; depth
+          //    players below it get a negative adjustment on counting stats.
+          //    When a projected-TOI source is wired (follow-up #192), replace
+          //    `toiPerGame` (1st arg) with the nightly projected value.
+          const posBaseline = player.position
+            ? (NHL_TOI_POSITION_BASELINE[player.position] ?? null)
+            : null;
+          factors.push(nhlTimeOnIceFactor(toiPerGame, posBaseline, line.statType));
 
-          // 2. Power-play factor — fires for Goals/Assists/Points
-          factors.push(powerPlayFactor(ppToiPerGame, ppUnit, line.statType));
+          // 2. Power-play factor (ratio-driven) — fires for Goals/Assists/Points.
+          //    boost = (ppToi / totalToi) × (ppEfficiency − 1); no-op when player
+          //    has < 0.5 min/game PP ice time.
+          factors.push(powerPlayFactor(ppToiPerGame, toiPerGame, ppUnit, line.statType));
 
-          // 3. Corsi factor — fires for Shots on Goal only
+          // 3. Corsi factor — fires for Shots on Goal only.
+          //    65 CF/60 vs 55 → weight 1.0 → (65/55−1) × 1.0 ≈ +18%.
           factors.push(corsiFactor(
             corsiFor60,
             FACTOR_CONFIG.nhlCorsi.leagueAvgCF60,

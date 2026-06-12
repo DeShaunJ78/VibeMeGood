@@ -180,6 +180,18 @@ router.post("/sync/historical-stats", async (req, res) => {
               err instanceof Error ? err.message : "Auto-chain failed");
           });
       }
+      // Auto-chain NHL player context whenever NHL logs were synced.
+      // Safe to re-run: fetches the free NHL Stats API and upserts; no credits consumed.
+      if (nhl && result.nhl > 0) {
+        logger.info("Auto-triggering NHL player context sync after backfill");
+        syncNhlPlayerContext()
+          .then(n => broadcastSyncStatus("nhl-player-context", "success", `${n} records (auto)`))
+          .catch(err => {
+            logger.warn({ err }, "NHL player context auto-chain failed (non-critical)");
+            broadcastSyncStatus("nhl-player-context", "error",
+              err instanceof Error ? err.message : "Auto-chain failed");
+          });
+      }
       // Auto-chain calibration — only when new records were written (skip if 0)
       if (result.total > 0) {
         runAutoCalibration("Auto-started after historical-stats sync").catch(() => {});
