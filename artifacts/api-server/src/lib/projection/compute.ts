@@ -1019,21 +1019,28 @@ export async function computeAllProjections(): Promise<number> {
           const ppUnit        = nhlCtx.ppUnit ?? null;
           const corsiFor60    = nhlCtx.corsiFor60    != null ? parseFloat(nhlCtx.corsiFor60.toString())    : null;
 
-          // 1. TOI role/usage factor (Mode B — interim until nightly projected feed).
-          //    Compares the player's season-average TOI to a positional league
-          //    average. Top-liners well above the positional average receive a
-          //    positive boost; depth players below it receive a reduction.
+          // 1. TOI factor — spec-compliant path: toiProjected / toiSeasonAvg.
+          //    When a nightly projected-TOI source is available (follow-up #192),
+          //    the projected value is wired here. Until then, interim fallback:
+          //    compare the player's season-avg TOI to their positional peer-group
+          //    average so the factor fires for genuine top-liners and depth players
+          //    rather than silently no-oping.
           //    NHL position baselines (2024-25 skaters ≥10 GP):
           //      C:16.5  LW/RW:15.5  F(generic):16.0  D:21.0  min/game.
-          //    Once a nightly projected-TOI feed is available (follow-up #192),
-          //    swap to Mode A: nhlTimeOnIceFactor(toiProjected, toiPerGame, ...).
+          //    toiProjected: substitute with nightly data when #192 lands.
           const NHL_TOI_BASELINES: Record<string, number> = {
             C: 16.5, LW: 15.5, RW: 15.5, F: 16.0, D: 21.0,
           };
+          // toiProjected: use nightly projection when available; fall back to
+          // the positional baseline comparison (interim mode).
+          const toiProjected: number | null = null; // ← wire projected feed here (#192)
           const posBaseline = player.position
             ? (NHL_TOI_BASELINES[player.position] ?? 16.5)
             : 16.5;
-          factors.push(nhlTimeOnIceFactor(toiPerGame, posBaseline, line.statType));
+          // Spec-compliant: projected vs season-avg. Interim: season-avg vs pos-baseline.
+          const toiFactorPlayer   = toiProjected ?? toiPerGame;
+          const toiFactorBaseline = toiProjected != null ? toiPerGame : posBaseline;
+          factors.push(nhlTimeOnIceFactor(toiFactorPlayer, toiFactorBaseline, line.statType));
 
           // 2. Power-play factor (ratio-driven) — fires for Goals/Assists/Points.
           //    boost = (ppToi / totalToi) × (ppEfficiency − 1); no-op when player

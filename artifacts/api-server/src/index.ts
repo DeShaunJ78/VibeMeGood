@@ -37,6 +37,12 @@ app.listen(port, (err) => {
   setTimeout(async () => {
     try {
       let computed = 0;
+      // Refresh NHL skater context FIRST so computeAllProjections() has fresh
+      // TOI / PP unit / Corsi data when it runs the NHL Saber Sim factor block.
+      await logPull("internal", "nhl-player-context", async () => {
+        const n = await syncNhlPlayerContext();
+        return n;
+      });
       await logPull("nba-stats", "projections", async () => {
         computed = await computeAllProjections();
         await recalcPropScores();
@@ -46,12 +52,6 @@ app.listen(port, (err) => {
       await logPull("internal", "fatigue", async () => {
         await syncFatigueData();
         return 0;
-      });
-      // Refresh NHL skater context (TOI / PP unit / Corsi) on every startup so
-      // NHL props always score against current-season role data. Free API, no credits.
-      await logPull("internal", "nhl-player-context", async () => {
-        const n = await syncNhlPlayerContext();
-        return n;
       });
       await logPull("internal", "variance", async () => {
         const n = await computeAllVarianceScores();

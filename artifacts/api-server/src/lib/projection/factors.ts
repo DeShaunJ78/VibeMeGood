@@ -813,20 +813,24 @@ export function nhlTimeOnIceFactor(
 export function powerPlayFactor(
   ppToiPerGame: number | null,  // PP minutes per game (from nhl_player_context)
   toiPerGame:   number | null,  // total TOI minutes per game
-  ppUnit:       number | null,  // 1 | 2 | null — used only for the explain label
+  ppUnit:       number | null,  // 1 | 2 | null — must be 1 or 2 to fire
   statType: string,
 ): FactorResult | null {
   if (!isNHLScoringStat(statType)) return null;
+  // Gate: only fire for confirmed PP unit members (unit 1 or 2).
+  // ppUnit is inferred from ppToiPerGame thresholds (≥3 min = 1st, ≥1 min = 2nd).
+  // Players with null ppUnit have negligible PP time and should not receive a boost.
+  if (ppUnit !== 1 && ppUnit !== 2) return null;
   const c = FACTOR_CONFIG.nhlPowerPlay;
   if (ppToiPerGame == null || toiPerGame == null || toiPerGame <= 0) return null;
-  if (ppToiPerGame < c.minPpToi) return null;  // player not meaningfully on PP
+  if (ppToiPerGame < c.minPpToi) return null;  // sanity guard
 
   const ppFraction = ppToiPerGame / toiPerGame;
   const boost      = ppFraction * (c.ppEfficiency - 1);
   const factor     = clamp(1 + boost, c.clamp.min, c.clamp.max);
   if (Math.abs(factor - 1) < 0.02) return null;  // skip trivial signal
 
-  const unitLabel = ppUnit === 1 ? "1st PP unit" : ppUnit === 2 ? "2nd PP unit" : "PP ice";
+  const unitLabel = ppUnit === 1 ? "1st PP unit" : "2nd PP unit";
   return {
     key: "nhlPP",
     label: "Power-play",
