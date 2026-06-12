@@ -26,18 +26,22 @@ import {
 import { logger } from "../logger";
 import { normalizeStatType } from "../stat-type";
 
-/**
- * NBA/WNBA per-minute value baselines by position + stat type.
- * Used to compute a usage-rate index: (player val/min) / (baseline val/min).
- * Values represent typical production per minute for an average starter at
- * each position (2024-25 season averages, ~30 min/game starters).
- */
-const NBA_USAGE_BASELINE_VPM: Record<string, Record<string, number>> = {
-  PG: { "Points": 0.60, "Assists": 0.22, "Rebounds": 0.14, "3-PT Made": 0.07, "Blocked Shots": 0.02, "Steals": 0.04 },
-  SG: { "Points": 0.55, "Assists": 0.13, "Rebounds": 0.14, "3-PT Made": 0.07, "Blocked Shots": 0.02, "Steals": 0.03 },
-  SF: { "Points": 0.50, "Assists": 0.11, "Rebounds": 0.18, "3-PT Made": 0.05, "Blocked Shots": 0.03, "Steals": 0.03 },
-  PF: { "Points": 0.47, "Assists": 0.09, "Rebounds": 0.23, "3-PT Made": 0.03, "Blocked Shots": 0.04, "Steals": 0.02 },
-  C:  { "Points": 0.43, "Assists": 0.07, "Rebounds": 0.28, "3-PT Made": 0.02, "Blocked Shots": 0.07, "Steals": 0.02 },
+// Position-average stats per game used as the denominator when computing USG% proxy.
+// Source: 2024-25 NBA position-group averages (all players who averaged ≥10 min/g).
+// FGA/FTA are not available as PrizePicks stat types, so we use per-game output
+// normalized by position as the highest-fidelity proxy for true USG%.
+const NBA_USG_PER_GAME: Record<string, Partial<Record<string, number>>> = {
+  PG: { "Points": 16.5, "Assists": 5.5, "Rebounds": 4.0, "3-PT Made": 1.8, "Blocked Shots": 0.3, "Steals": 1.0 },
+  SG: { "Points": 15.5, "Assists": 3.5, "Rebounds": 4.0, "3-PT Made": 1.8, "Blocked Shots": 0.3, "Steals": 0.9 },
+  SF: { "Points": 14.5, "Assists": 3.0, "Rebounds": 5.5, "3-PT Made": 1.4, "Blocked Shots": 0.7, "Steals": 0.8 },
+  PF: { "Points": 13.5, "Assists": 2.5, "Rebounds": 7.0, "3-PT Made": 0.8, "Blocked Shots": 1.1, "Steals": 0.6 },
+  C:  { "Points": 12.5, "Assists": 2.0, "Rebounds": 8.5, "3-PT Made": 0.5, "Blocked Shots": 1.7, "Steals": 0.5 },
+};
+
+// Position-average USG% (possession share), 2024-25 NBA season.
+// Used as the normalization target so computed proxy is in USG% scale (0-100).
+const NBA_USG_BASELINE_PCT: Record<string, number> = {
+  PG: 28, SG: 25, SF: 22, PF: 20, C: 18,
 };
 
 export interface ProjectionOutput {
@@ -567,17 +571,16 @@ export async function computeAllProjections(): Promise<number> {
     avgMinutesByPlayer.set(playerId, arr.reduce((a, b) => a + b, 0) / arr.length);
   }
 
-  // Per-minute production rate per (player, statType) for the usage rate factor.
-  // Requires ≥3 recent games with minutes recorded to emit a signal.
-  const valPerMinByKey = new Map<string, number>(); // `${playerId}:${statType}` → val/min
+  // Per-game average per (player, statType) for the USG% proxy in usageRateFactor.
+  // Using per-game (not per-minute) output as the numerator matches the position baselines
+  // in NBA_USG_PER_GAME, and captures the player's role independent of tonight's minutes.
+  // Requires ≥3 recent games to emit a signal.
+  const avgValPerGameByKey = new Map<string, number>(); // `${playerId}:${statType}` → avg val/game
   for (const [key, logs] of gameLogsByKey) {
-    const playerId = parseInt(key.split(":")[0], 10);
-    const avgMins = avgMinutesByPlayer.get(playerId);
-    if (!avgMins || avgMins <= 0) continue;
-    const recent = logs.slice(0, 20).filter(l => l.minutes != null && parseFloat(l.minutes.toString()) > 0);
+    const recent = logs.slice(0, 20);
     if (recent.length < 3) continue;
     const avgVal = recent.reduce((s, l) => s + parseFloat(l.value.toString()), 0) / recent.length;
-    if (avgVal > 0) valPerMinByKey.set(key, avgVal / avgMins);
+    if (avgVal >= 0) avgValPerGameByKey.set(key, avgVal);
   }
 
   const opponentIds = [...new Set(
@@ -741,15 +744,19 @@ export async function computeAllProjections(): Promise<number> {
         const seasonAvgMin = avgMinutesByPlayer.get(line.playerId) ?? null;
         factors.push(minutesFactor(expMin, seasonAvgMin, line.statType));
 
-        // 2. Usage rate factor (per-minute production vs position baseline)
+        // 2. Usage rate factor — USG% proxy: player's avg val/game relative to position norm
         if (isNBACountingStat(line.statType)) {
-          const vpm = valPerMinByKey.get(`${line.playerId}:${line.statType}`) ?? null;
-          const posBaseline = NBA_USAGE_BASELINE_VPM[player.position ?? ""]?.[line.statType] ?? null;
-          const uf = usageRateFactor(vpm, posBaseline, line.statType);
+          const avgVal = avgValPerGameByKey.get(`${line.playerId}:${line.statType}`) ?? null;
+          const perGameBaseline = NBA_USG_PER_GAME[player.position ?? ""]?.[line.statType] ?? null;
+          const usgBaselinePct = NBA_USG_BASELINE_PCT[player.position ?? ""] ?? null;
+          // USG% proxy = (player avg val/game / position avg val/game) × position USG% baseline
+          const usagePct =
+            avgVal != null && perGameBaseline != null && perGameBaseline > 0 && usgBaselinePct != null
+              ? Math.round((avgVal / perGameBaseline) * usgBaselinePct * 10) / 10
+              : null;
+          const uf = usageRateFactor(usagePct, usgBaselinePct, line.statType);
           factors.push(uf);
-          if (uf != null && vpm != null && posBaseline != null) {
-            usageRateIdx = Math.round((vpm / posBaseline) * 100) / 100;
-          }
+          if (usagePct != null) usageRateIdx = usagePct; // store USG% proxy (0-100 scale)
         }
 
         // 3. 3-point defense factor (team-wide 3PM allowed vs league avg)

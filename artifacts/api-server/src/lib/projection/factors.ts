@@ -74,7 +74,7 @@ export const FACTOR_CONFIG = {
   },
   usageRate: {
     weight: 0.7,
-    clamp: { min: 0.80, max: 1.25 },
+    clamp: { min: 0.80, max: 1.30 },
   },
   threePointDefense: {
     weight: 0.35,
@@ -411,27 +411,32 @@ export function minutesFactor(
 
 /**
  * NBA/WNBA usage rate factor.
- * Adjusts projected mean when a player's per-minute production rate
- * deviates meaningfully from the position baseline.
+ * Computes a USG%-proxy signal: (player's avg val/game) / (position avg val/game)
+ * normalized to the position's USG% baseline (PG≈28%, SG≈25%, SF≈22%, PF≈20%, C≈18%).
+ * Both inputs should be in the same 0-100 percentage scale.
+ *
+ * True USG% (FGA + 0.44·FTA + TOV) is not computable from PrizePicks stat rows
+ * alone (FGA/FTA aren't tracked as separate props), so per-game output normalized
+ * by position is the highest-fidelity proxy available from local game-log data.
  */
 export function usageRateFactor(
-  playerValPerMin: number | null,
-  positionBaselineValPerMin: number | null,
+  usagePct: number | null,            // player's estimated USG% proxy (0-100)
+  positionBaselinePct: number | null, // position avg USG% (0-100); e.g. PG=28, C=18
   statType: string,
 ): FactorResult | null {
-  if (playerValPerMin == null || positionBaselineValPerMin == null || positionBaselineValPerMin <= 0) return null;
+  if (usagePct == null || positionBaselinePct == null || positionBaselinePct <= 0) return null;
   if (!isNBACountingStat(statType)) return null;
   const c = FACTOR_CONFIG.usageRate;
-  const ratio = playerValPerMin / positionBaselineValPerMin;
+  const ratio = usagePct / positionBaselinePct;
   const adj = (ratio - 1) * c.weight;
-  if (Math.abs(adj) < 0.03) return null; // skip trivial deviations
+  if (Math.abs(adj) < 0.03) return null;
   const factor = clamp(1 + adj, c.clamp.min, c.clamp.max);
   const dir = ratio > 1 ? "high" : "low";
   return {
     key: "usageRate",
     label: "Usage rate",
     factor: round3(factor),
-    explain: `${dir}-usage: ${(playerValPerMin * 40).toFixed(1)}/40 min vs baseline ${(positionBaselineValPerMin * 40).toFixed(1)}/40 → ×${factor.toFixed(3)}`,
+    explain: `${dir}-usage: USG% proxy ${usagePct.toFixed(1)}% vs position avg ${positionBaselinePct.toFixed(1)}% → ×${factor.toFixed(3)}`,
   };
 }
 
