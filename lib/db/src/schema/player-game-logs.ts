@@ -13,6 +13,7 @@ export const playerGameLogsTable = pgTable("player_game_logs", {
   minutes: numeric("minutes"),
   homeAway: varchar("home_away", { length: 4 }),
   opponentTeamId: integer("opponent_team_id").references(() => teamsTable.id),
+  pitcherHand: varchar("pitcher_hand", { length: 1 }),
   source: varchar("source", { length: 50 }).default("manual"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => ({

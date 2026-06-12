@@ -9,7 +9,7 @@ import {
   externalLinesTable, projectionsTable, injuriesTable, lineupConfirmationsTable,
   propScoresTable, entriesTable, entryPicksTable, watchlistItemsTable,
   alertsTable, payoutConfigTable, gameEnvironmentTable, lineMoveEventsTable,
-  nflAdvancedMetricsTable,
+  nflAdvancedMetricsTable, pitcherProfilesTable,
 } from "@workspace/db/schema";
 import { sql } from "drizzle-orm";
 
@@ -510,6 +510,79 @@ async function seed() {
     { providerName: "prizepicks", entryType: "flex", pickCount: 6, config: { "6of6": 40.0, "5of6": 6.0, "4of6": 1.5, description: "6-pick Flex" }, effectiveAt: new Date("2026-01-01") },
   ]);
   console.log("Inserted payout configs");
+
+  // ---- Pitcher Profiles (MLB starting pitcher handedness) ----
+  await db.execute(sql`TRUNCATE TABLE pitcher_profiles RESTART IDENTITY CASCADE`);
+  await db.insert(pitcherProfilesTable).values([
+    // NL West
+    { playerName: "Clayton Kershaw",      hand: "L", sport: "MLB" },
+    { playerName: "Julio Urias",          hand: "L", sport: "MLB" },
+    { playerName: "Walker Buehler",       hand: "R", sport: "MLB" },
+    { playerName: "Tyler Glasnow",        hand: "R", sport: "MLB" },
+    { playerName: "Bobby Miller",         hand: "R", sport: "MLB" },
+    { playerName: "Blake Snell",          hand: "L", sport: "MLB" },
+    { playerName: "Yu Darvish",           hand: "R", sport: "MLB" },
+    { playerName: "Dylan Cease",          hand: "R", sport: "MLB" },
+    { playerName: "Joe Musgrove",         hand: "R", sport: "MLB" },
+    { playerName: "Zack Wheeler",         hand: "R", sport: "MLB" },
+    { playerName: "Aaron Nola",           hand: "R", sport: "MLB" },
+    { playerName: "Spencer Strider",      hand: "R", sport: "MLB" },
+    { playerName: "Chris Sale",           hand: "L", sport: "MLB" },
+    { playerName: "Max Fried",            hand: "L", sport: "MLB" },
+    { playerName: "Charlie Morton",       hand: "R", sport: "MLB" },
+    // AL East
+    { playerName: "Gerrit Cole",          hand: "R", sport: "MLB" },
+    { playerName: "Carlos Rodon",         hand: "L", sport: "MLB" },
+    { playerName: "Marcus Stroman",       hand: "R", sport: "MLB" },
+    { playerName: "Luis Severino",        hand: "R", sport: "MLB" },
+    { playerName: "Kodai Senga",          hand: "R", sport: "MLB" },
+    { playerName: "Jose Quintana",        hand: "L", sport: "MLB" },
+    { playerName: "Zach Eflin",           hand: "R", sport: "MLB" },
+    { playerName: "Shane McClanahan",     hand: "L", sport: "MLB" },
+    { playerName: "Zach Littell",         hand: "R", sport: "MLB" },
+    { playerName: "Tanner Houck",         hand: "R", sport: "MLB" },
+    { playerName: "Nick Pivetta",         hand: "R", sport: "MLB" },
+    { playerName: "Brayan Bello",         hand: "R", sport: "MLB" },
+    { playerName: "Corbin Burnes",        hand: "R", sport: "MLB" },
+    { playerName: "Cole Irvin",           hand: "L", sport: "MLB" },
+    { playerName: "Kevin Gausman",        hand: "R", sport: "MLB" },
+    // AL Central
+    { playerName: "Pablo Lopez",          hand: "R", sport: "MLB" },
+    { playerName: "Joe Ryan",             hand: "R", sport: "MLB" },
+    { playerName: "Sonny Gray",           hand: "R", sport: "MLB" },
+    { playerName: "Bailey Ober",          hand: "R", sport: "MLB" },
+    { playerName: "Framber Valdez",       hand: "L", sport: "MLB" },
+    { playerName: "Hunter Brown",         hand: "R", sport: "MLB" },
+    { playerName: "Ronel Blanco",         hand: "R", sport: "MLB" },
+    { playerName: "Logan Gilbert",        hand: "R", sport: "MLB" },
+    { playerName: "Bryan Woo",            hand: "R", sport: "MLB" },
+    { playerName: "Bryce Miller",         hand: "R", sport: "MLB" },
+    // AL West
+    { playerName: "Shohei Ohtani",        hand: "L", sport: "MLB" },
+    { playerName: "Jose Suarez",          hand: "L", sport: "MLB" },
+    { playerName: "Patrick Sandoval",     hand: "L", sport: "MLB" },
+    { playerName: "Lucas Giolito",        hand: "R", sport: "MLB" },
+    { playerName: "Reid Detmers",         hand: "L", sport: "MLB" },
+    { playerName: "Chris Bassitt",        hand: "R", sport: "MLB" },
+    { playerName: "Robbie Ray",           hand: "L", sport: "MLB" },
+    { playerName: "George Kirby",         hand: "R", sport: "MLB" },
+    // NL Central / East
+    { playerName: "Justin Steele",        hand: "L", sport: "MLB" },
+    { playerName: "Jameson Taillon",      hand: "R", sport: "MLB" },
+    { playerName: "Marcus Stroman",       hand: "R", sport: "MLB" },
+    { playerName: "Nestor Cortes",        hand: "L", sport: "MLB" },
+    { playerName: "Freddy Peralta",       hand: "R", sport: "MLB" },
+    { playerName: "Wade Miley",           hand: "L", sport: "MLB" },
+    { playerName: "Hunter Greene",        hand: "R", sport: "MLB" },
+    { playerName: "Graham Ashcraft",      hand: "R", sport: "MLB" },
+    { playerName: "Miles Mikolas",        hand: "R", sport: "MLB" },
+    { playerName: "Kyle Gibson",          hand: "R", sport: "MLB" },
+    { playerName: "Lance Lynn",           hand: "R", sport: "MLB" },
+    { playerName: "Sandy Alcantara",      hand: "R", sport: "MLB" },
+    { playerName: "Jesus Luzardo",        hand: "L", sport: "MLB" },
+    { playerName: "Trevor Rogers",        hand: "L", sport: "MLB" },
+  ]).onConflictDoNothing();
+  console.log("Inserted pitcher profiles");
 
   console.log("Seed complete!");
   process.exit(0);

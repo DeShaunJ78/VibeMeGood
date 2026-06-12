@@ -75,6 +75,18 @@ export const FACTOR_CONFIG = {
     rbRzCarryBaseline:   0.22, // RB red zone carry share league average
     wrTeRzTargetBaseline: 0.12, // WR/TE red zone target share league average
   },
+  mlbPlatoon: {
+    clamp: { min: 0.70, max: 1.35 },
+    minGames: 5, // minimum games vs hand required to emit a signal
+  },
+  strikeoutMatchup: {
+    leagueAvgKPct: 0.222, // MLB league-average batter K% (~22%)
+    clamp: { min: 0.65, max: 1.40 },
+  },
+  pitcherForm: {
+    fipConstant: 3.2, // FIP constant: (13×HR + 3×BB − 2×K) / IP + 3.2
+    clamp: { min: 0.75, max: 1.25 },
+  },
   snap: {
     clamp: { min: 0.9, max: 1.0 },
   },
@@ -562,6 +574,127 @@ export function threePointDefenseFactor(input: {
     label: "3P defense",
     factor: round3(factor),
     explain: `Opp allows ${input.allowed3PM.toFixed(1)} 3PM/game vs league ${input.league3PM.toFixed(1)} (${dir}) → ×${factor.toFixed(3)}`,
+  };
+}
+
+// ── MLB Saber Sim helpers ────────────────────────────────────────────────────
+
+const MLB_BATTING_STAT_KEYWORDS = [
+  "hits", "home runs", "rbi", "runs", "singles", "doubles", "triples",
+  "total bases", "stolen bases", "walks", "batting average",
+];
+
+/** Returns true if the statType is an MLB hitting/counting prop. */
+export function isMLBBattingStat(statType: string): boolean {
+  const lower = statType.toLowerCase();
+  return MLB_BATTING_STAT_KEYWORDS.some(k => lower.includes(k));
+}
+
+/** Returns true if the statType is an MLB batter strikeout prop. */
+export function isMLBStrikeoutStat(statType: string): boolean {
+  const lower = statType.toLowerCase();
+  // "Strikeouts" without "pitcher" context means batter K prop on PrizePicks
+  return lower === "strikeouts" || lower === "batter strikeouts";
+}
+
+// ── MLB platoon split factor ──────────────────────────────────────────────────
+
+/**
+ * MLB platoon split factor.
+ * Computes signal from batter's historical average vs today's pitcher hand
+ * relative to their overall average across both hands.
+ *
+ * Formula: avgVsHand / overallAvg, clamped [0.70, 1.35].
+ * Requires ≥5 games vs that pitcher hand; returns null otherwise.
+ */
+export function mlbPlatoonFactor(input: {
+  avgVsHand: number | null;   // batter's avg for this stat vs today's pitcher hand
+  overallAvg: number | null;  // batter's overall avg for this stat (all pitcher hands)
+  gamesVsHand: number;        // how many games vs that hand contributed to avgVsHand
+}): FactorResult | null {
+  const c = FACTOR_CONFIG.mlbPlatoon;
+  if (
+    input.avgVsHand == null ||
+    input.overallAvg == null ||
+    input.overallAvg <= 0 ||
+    input.gamesVsHand < c.minGames
+  ) return null;
+
+  const factor = clamp(input.avgVsHand / input.overallAvg, c.clamp.min, c.clamp.max);
+  if (Math.abs(factor - 1) < 0.02) return null; // skip trivial signal
+
+  const dir = factor > 1 ? "favorable split" : "unfavorable split";
+  return {
+    key: "mlbPlatoon",
+    label: "Platoon split",
+    factor: round3(factor),
+    explain: `Avg vs hand ${input.avgVsHand.toFixed(3)} vs overall ${input.overallAvg.toFixed(3)} (${dir}, n=${input.gamesVsHand}) → ×${factor.toFixed(3)}`,
+  };
+}
+
+// ── MLB strikeout matchup factor ──────────────────────────────────────────────
+
+/**
+ * MLB K-rate matchup factor (batter strikeout props only).
+ * Combines batter K% and pitcher K% relative to league average.
+ *
+ * Formula: (batterKPct × pitcherKPct) / leagueAvgKPct² → normalized around 1.0.
+ * Inputs are fractions (0..1).  Clamped [0.65, 1.40].
+ */
+export function strikeoutMatchupFactor(input: {
+  batterKPct: number | null;   // batter K% as fraction e.g. 0.22
+  pitcherKPct: number | null;  // pitcher K% (K per batter faced) as fraction
+  statType: string;
+}): FactorResult | null {
+  if (!isMLBStrikeoutStat(input.statType)) return null;
+  if (input.batterKPct == null || input.pitcherKPct == null) return null;
+
+  const c = FACTOR_CONFIG.strikeoutMatchup;
+  const lg = c.leagueAvgKPct;
+  // (bKPct × pKPct) / lg² → centered at 1.0 when both are exactly league-average
+  const matchupRaw = (input.batterKPct * input.pitcherKPct) / (lg * lg);
+  const factor = clamp(matchupRaw, c.clamp.min, c.clamp.max);
+  if (Math.abs(factor - 1) < 0.02) return null;
+
+  return {
+    key: "strikeoutMatchup",
+    label: "K-rate matchup",
+    factor: round3(factor),
+    explain: `Batter K% ${(input.batterKPct * 100).toFixed(1)}% × pitcher K% ${(input.pitcherKPct * 100).toFixed(1)}% vs lg ${(lg * 100).toFixed(1)}% → ×${factor.toFixed(3)}`,
+  };
+}
+
+// ── MLB pitcher form factor ───────────────────────────────────────────────────
+
+/**
+ * MLB pitcher form factor (all hitting props).
+ * Compares pitcher's recent ERA (last 3 starts) against their season FIP proxy.
+ * FIP = (13×HR + 3×BB − 2×K) / IP + constant (captures true skill, strips defense).
+ *
+ * When ERA >> FIP the pitcher is "struggling" (luck / contact running hot) → batter
+ * gets a positive boost.  When ERA << FIP the pitcher is "running hot" → negative
+ * adjustment for batters.  Capped ±25%.
+ */
+export function pitcherFormFactor(input: {
+  lastNStartsERA: number | null;  // ERA over last 3 starts
+  seasonFIP: number | null;       // season FIP proxy (13HR+3BB-2K)/IP + constant
+  statType: string;
+}): FactorResult | null {
+  if (!isMLBBattingStat(input.statType)) return null;
+  if (input.lastNStartsERA == null || input.seasonFIP == null || input.seasonFIP <= 0) return null;
+
+  const c = FACTOR_CONFIG.pitcherForm;
+  // Relative deviation: how much ERA differs from FIP as a fraction of FIP
+  const deviation = (input.lastNStartsERA - input.seasonFIP) / input.seasonFIP;
+  const factor = clamp(1 + deviation, c.clamp.min, c.clamp.max);
+  if (Math.abs(factor - 1) < 0.02) return null;
+
+  const trend = factor > 1 ? "struggling (ERA > FIP)" : "running hot (ERA < FIP)";
+  return {
+    key: "pitcherForm",
+    label: "Pitcher form",
+    factor: round3(factor),
+    explain: `ERA ${input.lastNStartsERA.toFixed(2)} vs FIP ${input.seasonFIP.toFixed(2)} (${trend}) → ×${factor.toFixed(3)}`,
   };
 }
 

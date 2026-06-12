@@ -32,6 +32,7 @@
 - [Data-readiness thresholds](data-readiness-thresholds.md) — isDataReady = playersWithLogs≥100; isCalibrationReady = calibrationBuckets≥50; exposed at GET /api/data-readiness; shown as amber banner on Dashboard + Slate.
 - [Rescore vs Sync Odds](rescore-vs-sync-odds.md) — POST /api/sync/rescore-props runs only recalcPropScores() (free, no API call); POST /api/sync/external-odds fetches live lines (costs Odds API credits). Never conflate the two.
 - [Roster auto-population](roster-auto-population.md) — backfill was silently dropping 95%+ of boxscore data; fix: pre-fetch all 30 NBA/32 NHL/MLB rosters and upsert unknown players before boxscore pass; TRUNCATE calibration + re-run calibration job after first full run.
+- [MLB Saber Sim factor data pipeline](mlb-saber-sim-pipeline.md) — three factors wired but all need data pipeline work to fire; pitcher_profiles table + pitcherHand column on game_logs are the prerequisites.
 - [GPP mode design](gpp-mode-design.md) — composite score, leverage formula, direction-aware sharp signal mapping, narrative filter gate, pace season dedup, ownership source, and backtest entry tagging.
 - [GPP filter null-guard](gpp-filter-null-guard.md) — null data = include (unknown), not exclude; pattern: `p.field !== null && p.field < threshold`. Missing this silently drops all props.
 - [Role stability scoring](role-stability-scoring.md) — minutes computed from player_game_logs.minutes (existing col); dedupe by (playerId, gameDate); stored in prop_scores.reasoning JSONB; penalty applied in riskScore capped at 100.

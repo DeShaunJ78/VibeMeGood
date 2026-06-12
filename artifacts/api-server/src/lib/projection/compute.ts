@@ -3,6 +3,7 @@ import {
   playerGameLogsTable, ourProjectionsTable, ppLinesTable, playersTable,
   injuriesTable, matchupHistoryTable, gamesTable, teamsTable,
   fatigueDataTable, teamPaceRatingsTable, lineupConfirmationsTable,
+  pitcherProfilesTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray, isNotNull, sql } from "drizzle-orm";
 import { getNflUsageMap } from "../sync/nfl-advanced";
@@ -22,6 +23,8 @@ import {
   redZoneFactor, isNFLTDStat,
   isNBACountingStat, is3PTStat,
   impliedTeamTotal, SPORT_IMPLIED_BASELINE,
+  mlbPlatoonFactor, strikeoutMatchupFactor, pitcherFormFactor,
+  isMLBBattingStat, isMLBStrikeoutStat,
   type FactorResult,
 } from "./factors";
 import { logger } from "../logger";
@@ -429,7 +432,7 @@ export async function computeAllProjections(): Promise<number> {
   const teamAbbrMap = new Map(teams.map(t => [t.id, t.abbreviation]));
 
   // --- Batch-load all factor context in parallel ---
-  const [fatigueRows, paceRows, nflUsageMap, dvpRows, lineupConfirmRows] = await Promise.all([
+  const [fatigueRows, paceRows, nflUsageMap, dvpRows, lineupConfirmRows, pitcherProfileRows] = await Promise.all([
     // Latest fatigue row per player (ordered desc; we keep the first seen).
     playerIds.length
       ? db.select().from(fatigueDataTable)
@@ -460,6 +463,8 @@ export async function computeAllProjections(): Promise<number> {
           .where(inArray(lineupConfirmationsTable.playerId, playerIds))
           .orderBy(desc(lineupConfirmationsTable.confirmedAt))
       : Promise.resolve([] as (typeof lineupConfirmationsTable.$inferSelect)[]),
+    // MLB pitcher hand profiles (for platoon split factor).
+    db.select().from(pitcherProfilesTable).where(eq(pitcherProfilesTable.sport, "MLB")),
   ]);
 
   // Index fatigue (first row per player = latest).
@@ -608,6 +613,171 @@ export async function computeAllProjections(): Promise<number> {
     const possUsed = fgaEst + 0.44 * ftaEst + tov;
     const usg = 100 * possUsed * (NBA_TM_MP / 5) / (mpAvg * NBA_TM_POSS_USED);
     playerUSGByPlayerId.set(pId, Math.round(Math.max(5, Math.min(50, usg)) * 10) / 10);
+  }
+
+  // ── MLB Saber Sim pre-computations ─────────────────────────────────────────
+
+  /** Shape of game.metadata for MLB games with lineup info populated by schedule sync. */
+  interface GameMetaMlb {
+    homeStartingPitcher?: string;
+    awayStartingPitcher?: string;
+  }
+
+  /** Pitcher stats derived from player_game_logs when pitcher exists in DB. */
+  interface PitcherStats {
+    kPct: number | null;        // K% (fraction 0..1): K per batter faced proxy
+    lastNERA: number | null;    // ERA over last 3 starts
+    seasonFIP: number | null;   // FIP proxy = (13HR + 3BB - 2K) / IP + 3.2
+  }
+
+  // Pitcher hand lookup: pitcher name (lower) → "L" | "R"
+  const pitcherHandMap = new Map(
+    pitcherProfileRows.map(p => [p.playerName.toLowerCase(), p.hand as "L" | "R"])
+  );
+
+  // Today's opposing pitcher hand, keyed by `${gameId}:${playerTeamId}`.
+  // Away batters face the home SP; home batters face the away SP.
+  const mlbOpposingPitcherHand = new Map<string, "L" | "R">();
+  for (const game of games) {
+    if (!game.metadata) continue;
+    const meta = game.metadata as GameMetaMlb;
+    if (meta.homeStartingPitcher) {
+      const hand = pitcherHandMap.get(meta.homeStartingPitcher.toLowerCase());
+      if (hand) mlbOpposingPitcherHand.set(`${game.id}:${game.awayTeamId}`, hand);
+    }
+    if (meta.awayStartingPitcher) {
+      const hand = pitcherHandMap.get(meta.awayStartingPitcher.toLowerCase());
+      if (hand) mlbOpposingPitcherHand.set(`${game.id}:${game.homeTeamId}`, hand);
+    }
+  }
+
+  // Batter platoon splits: Map<`${playerId}:${statType}`, split stats>
+  interface MlbPlatoonSplit {
+    avgVsLeft:    number | null;
+    gamesVsLeft:  number;
+    avgVsRight:   number | null;
+    gamesVsRight: number;
+    overallAvg:   number | null;
+  }
+  const mlbBatterSplits = new Map<string, MlbPlatoonSplit>();
+
+  // Batter K% proxy: K per game / ~4 PA estimate → K% as fraction (0..1)
+  const mlbBatterKPct = new Map<number, number>();
+
+  const mlbPlayerIdSet = new Set(
+    activeLines.filter(r => r.player.sport === "MLB").map(r => r.line.playerId)
+  );
+
+  if (mlbPlayerIdSet.size > 0) {
+    // Accumulate batter stats from all loaded game logs (pitcherHand populated
+    // after schema push + next game-log sync; returns null splits until then).
+    const splitAcc = new Map<string, { vsL: number[]; vsR: number[]; all: number[] }>();
+    for (const log of allGameLogs) {
+      if (!mlbPlayerIdSet.has(log.playerId)) continue;
+      const key = `${log.playerId}:${log.statType}`;
+      const acc = splitAcc.get(key) ?? { vsL: [], vsR: [], all: [] };
+      const v = parseFloat(log.value.toString());
+      acc.all.push(v);
+      if (log.pitcherHand === "L") acc.vsL.push(v);
+      else if (log.pitcherHand === "R") acc.vsR.push(v);
+      splitAcc.set(key, acc);
+    }
+    const safeAvg = (arr: number[]) =>
+      arr.length > 0 ? arr.reduce((s, v) => s + v, 0) / arr.length : null;
+    for (const [key, acc] of splitAcc) {
+      mlbBatterSplits.set(key, {
+        avgVsLeft:    safeAvg(acc.vsL),
+        gamesVsLeft:  acc.vsL.length,
+        avgVsRight:   safeAvg(acc.vsR),
+        gamesVsRight: acc.vsR.length,
+        overallAvg:   safeAvg(acc.all),
+      });
+    }
+
+    // Batter K% from strikeout game logs (≥5 games required)
+    for (const playerId of mlbPlayerIdSet) {
+      const kLogs = (allLogsByPlayer.get(playerId) ?? [])
+        .filter(l => l.statType.toLowerCase() === "strikeouts");
+      if (kLogs.length < 5) continue;
+      const recent = kLogs.slice(0, 20);
+      const avgKPerGame = recent.reduce((s, l) => s + parseFloat(l.value.toString()), 0) / recent.length;
+      mlbBatterKPct.set(playerId, Math.min(avgKPerGame / 4, 0.50));
+    }
+  }
+
+  // Pitcher game-log stats (K%, ERA, FIP) — computed from player_game_logs where
+  // MLB pitchers exist as players with positions SP/P/RP.  Currently empty until
+  // a pitcher-log sync is added; factors gracefully return null when data is absent.
+  const pitcherGameStatsMap = new Map<string, PitcherStats>();
+  const mlbPitcherPlayers = await db.select({ id: playersTable.id, fullName: playersTable.fullName })
+    .from(playersTable)
+    .where(and(
+      eq(playersTable.sport, "MLB"),
+      inArray(playersTable.position, ["SP", "P", "RP"]),
+    ));
+
+  if (mlbPitcherPlayers.length > 0) {
+    const pitcherIds = mlbPitcherPlayers.map(p => p.id);
+    const pitcherLogs = await db.select().from(playerGameLogsTable)
+      .where(inArray(playerGameLogsTable.playerId, pitcherIds))
+      .orderBy(desc(playerGameLogsTable.gameDate));
+
+    const logsByPitcher = new Map<number, typeof pitcherLogs>();
+    for (const log of pitcherLogs) {
+      const arr = logsByPitcher.get(log.playerId) ?? [];
+      arr.push(log);
+      logsByPitcher.set(log.playerId, arr);
+    }
+
+    for (const pitcher of mlbPitcherPlayers) {
+      const logs = logsByPitcher.get(pitcher.id) ?? [];
+      if (logs.length === 0) continue;
+
+      // Group logs by gameDate → per-start stat snapshot
+      const byDate = new Map<string, Record<string, number>>();
+      for (const log of logs) {
+        const st = byDate.get(log.gameDate) ?? {};
+        st[log.statType.toLowerCase()] = parseFloat(log.value.toString());
+        byDate.set(log.gameDate, st);
+      }
+      const starts = [...byDate.values()];
+
+      // K%: K per batter faced proxy from last 5 starts (K / (IP × 3))
+      const kStarts = starts.slice(0, 5)
+        .filter(s => s["strikeouts"] != null && (s["innings pitched"] ?? 0) > 0);
+      let kPct: number | null = null;
+      if (kStarts.length >= 2) {
+        const totalK  = kStarts.reduce((s, st) => s + (st["strikeouts"] ?? 0), 0);
+        const totalIP = kStarts.reduce((s, st) => s + (st["innings pitched"] ?? 0), 0);
+        kPct = totalIP > 0 ? Math.min(totalK / (totalIP * 3), 0.45) : null;
+      }
+
+      // Last 3 starts ERA: (earned runs / IP) × 9
+      const eraStarts = starts.slice(0, 3)
+        .filter(s => s["earned runs allowed"] != null && (s["innings pitched"] ?? 0) > 0);
+      let lastNERA: number | null = null;
+      if (eraStarts.length >= 1) {
+        const totalER = eraStarts.reduce((s, st) => s + (st["earned runs allowed"] ?? 0), 0);
+        const totalIP = eraStarts.reduce((s, st) => s + (st["innings pitched"] ?? 0), 0);
+        lastNERA = totalIP > 0 ? (totalER / totalIP) * 9 : null;
+      }
+
+      // Season FIP proxy: (13×HR + 3×BB − 2×K) / IP + 3.2
+      const allFIPStarts = starts.filter(s => (s["innings pitched"] ?? 0) > 0);
+      let seasonFIP: number | null = null;
+      if (allFIPStarts.length >= 3) {
+        const totalHR = allFIPStarts.reduce((s, st) => s + (st["home runs allowed"] ?? 0), 0);
+        const totalBB = allFIPStarts.reduce((s, st) => s + (st["walks"] ?? 0), 0);
+        const totalK  = allFIPStarts.reduce((s, st) => s + (st["strikeouts"] ?? 0), 0);
+        const totalIP = allFIPStarts.reduce((s, st) => s + (st["innings pitched"] ?? 0), 0);
+        const fip = ((13 * totalHR + 3 * totalBB - 2 * totalK) / totalIP) + 3.2;
+        seasonFIP = Number.isFinite(fip) ? Math.max(1.0, Math.min(9.0, fip)) : null;
+      }
+
+      if (kPct != null || lastNERA != null || seasonFIP != null) {
+        pitcherGameStatsMap.set(pitcher.fullName.toLowerCase(), { kPct, lastNERA, seasonFIP });
+      }
+    }
   }
 
   const opponentIds = [...new Set(
@@ -762,12 +932,63 @@ export async function computeAllProjections(): Promise<number> {
         }
       }
 
-      // MLB park
-      if (sport === "MLB" && game) {
-        const homeAbbr = teamAbbrMap.get(game.homeTeamId);
-        const isBatter = MLB_BATTING_STATS.some(s => line.statType.toLowerCase().includes(s));
-        if (homeAbbr && isBatter) {
-          factors.push(parkFactor(MLB_PARK_FACTORS[homeAbbr.toUpperCase()] ?? null, homeAbbr));
+      // MLB park + Saber Sim factors
+      if (sport === "MLB") {
+        const isBatterProp = isMLBBattingStat(line.statType);
+        const isKProp = isMLBStrikeoutStat(line.statType);
+
+        // Park factor (requires known home team abbreviation)
+        if (game) {
+          const homeAbbr = teamAbbrMap.get(game.homeTeamId);
+          if (homeAbbr && isBatterProp) {
+            factors.push(parkFactor(MLB_PARK_FACTORS[homeAbbr.toUpperCase()] ?? null, homeAbbr));
+          }
+        }
+
+        // Resolve opposing pitcher info from game metadata
+        let pitcherStats: PitcherStats | undefined;
+        let opposingPitcherHand: "L" | "R" | undefined;
+
+        if (game) {
+          const meta = (game.metadata ?? null) as GameMetaMlb | null;
+          // Home batter faces away SP; away batter faces home SP
+          const pitcherName = meta
+            ? (game.homeTeamId === player.teamId
+                ? meta.awayStartingPitcher
+                : meta.homeStartingPitcher)
+            : undefined;
+          if (pitcherName) pitcherStats = pitcherGameStatsMap.get(pitcherName.toLowerCase());
+          if (player.teamId) {
+            opposingPitcherHand = mlbOpposingPitcherHand.get(`${game.id}:${player.teamId}`);
+          }
+        }
+
+        // 1. Platoon split factor — fires when pitcher hand known + ≥5 split games
+        if (isBatterProp && opposingPitcherHand) {
+          const split = mlbBatterSplits.get(`${line.playerId}:${line.statType}`);
+          if (split) {
+            const avgVsHand   = opposingPitcherHand === "L" ? split.avgVsLeft  : split.avgVsRight;
+            const gamesVsHand = opposingPitcherHand === "L" ? split.gamesVsLeft : split.gamesVsRight;
+            factors.push(mlbPlatoonFactor({ avgVsHand, overallAvg: split.overallAvg, gamesVsHand }));
+          }
+        }
+
+        // 2. K-rate matchup — batter strikeout props only; pitcher K% optional
+        if (isKProp) {
+          factors.push(strikeoutMatchupFactor({
+            batterKPct:  mlbBatterKPct.get(line.playerId) ?? null,
+            pitcherKPct: pitcherStats?.kPct ?? null,
+            statType:    line.statType,
+          }));
+        }
+
+        // 3. Pitcher form — all batting props; needs pitcher ERA + FIP
+        if (isBatterProp) {
+          factors.push(pitcherFormFactor({
+            lastNStartsERA: pitcherStats?.lastNERA ?? null,
+            seasonFIP:      pitcherStats?.seasonFIP ?? null,
+            statType:       line.statType,
+          }));
         }
       }
 
