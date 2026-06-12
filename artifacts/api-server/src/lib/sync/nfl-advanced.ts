@@ -1,3 +1,5 @@
+import { createGunzip } from "node:zlib";
+import { Readable } from "node:stream";
 import { db } from "@workspace/db";
 import { nflAdvancedMetricsTable } from "@workspace/db/schema";
 import { sql } from "drizzle-orm";
@@ -8,6 +10,10 @@ const SNAP_COUNTS_URL = (season: number) =>
 
 const PLAYER_STATS_URL = (season: number) =>
   `https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_${season}.csv`;
+
+/** nflverse play-by-play (gzipped CSV) — source of true red-zone target/carry counts. */
+const PBP_URL = (season: number) =>
+  `https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_${season}.csv.gz`;
 
 function parseCSVLine(line: string): string[] {
   const fields: string[] = [];
@@ -124,21 +130,6 @@ async function ingestPlayerStats(season: number): Promise<number> {
   const rows = await downloadCSV(PLAYER_STATS_URL(season));
   logger.info({ season, rowCount: rows.length }, "NFL player stats downloaded");
 
-  // Pre-compute team-level TD totals per (team, week) for red zone share denominators.
-  // nflverse player_stats has rushing_tds + receiving_tds per player per week; summing
-  // them per team gives the denominator needed to compute each player's share.
-  const teamTDs = new Map<string, { rushing: number; receiving: number }>();
-  for (const r of rows) {
-    const team = r["recent_team"] ?? r["team"] ?? "";
-    const week = r["week"] ?? "";
-    if (!team || !week) continue;
-    const key = `${team}|${week}`;
-    const entry = teamTDs.get(key) ?? { rushing: 0, receiving: 0 };
-    entry.rushing  += num(r["rushing_tds"])   ?? 0;
-    entry.receiving += num(r["receiving_tds"]) ?? 0;
-    teamTDs.set(key, entry);
-  }
-
   let upserted = 0;
   const BATCH = 200;
   for (let i = 0; i < rows.length; i += BATCH) {
@@ -147,32 +138,18 @@ async function ingestPlayerStats(season: number): Promise<number> {
       const tgtNum = int(r["targets"]);
       const aDotVal = ayNum != null && tgtNum != null && tgtNum > 0
         ? ayNum / tgtNum : null;
-
-      const team = r["recent_team"] ?? r["team"] ?? "";
-      const week = r["week"] ?? "";
-      const totals = teamTDs.get(`${team}|${week}`);
-
-      const playerRushTDs = num(r["rushing_tds"])   ?? 0;
-      const playerRecTDs  = num(r["receiving_tds"]) ?? 0;
-      const rzCarry  = totals && totals.rushing   > 0
-        ? playerRushTDs  / totals.rushing   : null;
-      const rzTarget = totals && totals.receiving > 0
-        ? playerRecTDs   / totals.receiving : null;
-
       return {
-        playerName:         r["player_display_name"] ?? r["player_name"] ?? r["player"] ?? "",
-        team,
+        playerName:    r["player_display_name"] ?? r["player_name"] ?? r["player"] ?? "",
+        team:          r["recent_team"] ?? r["team"] ?? "",
         season,
-        week:               int(r["week"]),
-        targetShare:        num(r["target_share"]) != null ? String(num(r["target_share"])!) : null,
-        airYards:           ayNum != null ? String(ayNum) : null,
-        airYardsShare:      num(r["air_yards_share"]) != null ? String(num(r["air_yards_share"])!) : null,
-        wopr:               num(r["wopr"]) != null ? String(num(r["wopr"])!) : null,
-        racr:               num(r["racr"]) != null ? String(num(r["racr"])!) : null,
-        targets:            tgtNum,
-        aDot:               aDotVal != null ? String(aDotVal) : null,
-        redZoneTargetShare: rzTarget != null ? String(rzTarget) : null,
-        redZoneCarryShare:  rzCarry  != null ? String(rzCarry)  : null,
+        week:          int(r["week"]),
+        targetShare:   num(r["target_share"])   != null ? String(num(r["target_share"])!)   : null,
+        airYards:      ayNum  != null ? String(ayNum)  : null,
+        airYardsShare: num(r["air_yards_share"]) != null ? String(num(r["air_yards_share"])!) : null,
+        wopr:          num(r["wopr"])  != null ? String(num(r["wopr"])!)  : null,
+        racr:          num(r["racr"])  != null ? String(num(r["racr"])!)  : null,
+        targets:       tgtNum,
+        aDot:          aDotVal != null ? String(aDotVal) : null,
       };
     }).filter(r => r.playerName && r.team));
 
@@ -188,21 +165,154 @@ async function ingestPlayerStats(season: number): Promise<number> {
           nflAdvancedMetricsTable.week,
         ],
         set: {
-          targetShare:        sql`excluded.target_share`,
-          airYards:           sql`excluded.air_yards`,
-          airYardsShare:      sql`excluded.air_yards_share`,
-          wopr:               sql`excluded.wopr`,
-          racr:               sql`excluded.racr`,
-          targets:            sql`excluded.targets`,
-          aDot:               sql`excluded.a_dot`,
-          redZoneTargetShare: sql`excluded.red_zone_target_share`,
-          redZoneCarryShare:  sql`excluded.red_zone_carry_share`,
-          computedAt:         sql`now()`,
+          targetShare:   sql`excluded.target_share`,
+          airYards:      sql`excluded.air_yards`,
+          airYardsShare: sql`excluded.air_yards_share`,
+          wopr:          sql`excluded.wopr`,
+          racr:          sql`excluded.racr`,
+          targets:       sql`excluded.targets`,
+          aDot:          sql`excluded.a_dot`,
+          computedAt:    sql`now()`,
         },
       });
     upserted += batch.length;
   }
   return upserted;
+}
+
+/**
+ * Extract the last name from a PBP-format player name ("T.Kelce" → "Kelce").
+ * Returns null when the name doesn't match the expected "F.Lastname" pattern.
+ */
+function pbpLastName(pbpName: string): string | null {
+  // Handles: "T.Kelce", "Ja'Marr.Chase" (two-part first names), "D.J.Moore" (dot in last)
+  const m = pbpName.match(/^[A-Z][a-zA-Z'.]*\.([A-Za-z''-]+(?:-[A-Za-z''-]+)*)$/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Stream-parse the nflverse play-by-play gzip CSV for a season.
+ * Filters to red-zone plays (yardline_100 ≤ 20) and derives true per-player
+ * red-zone target share (receivers) and carry share (rushers) as:
+ *   player_rz_events / team_rz_events_that_week
+ *
+ * Upserts computed shares into nfl_advanced_metrics rows that were already
+ * created by ingestPlayerStats, matching on (season, week, team, last name).
+ */
+async function ingestRedZoneFromPBP(season: number): Promise<number> {
+  const url = PBP_URL(season);
+  const res = await fetch(url, {
+    headers: { "User-Agent": "PropEdge/1.0 nflverse-ingest" },
+    redirect: "follow",
+  });
+  if (!res.ok || !res.body) {
+    logger.warn({ season, status: res.status }, "PBP download unavailable — skipping red zone ingest");
+    return 0;
+  }
+
+  // Stream-decompress line-by-line to avoid loading 500 MB+ uncompressed into memory.
+  const gunzip = createGunzip();
+  const nodeStream = Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]);
+  nodeStream.pipe(gunzip);
+
+  // (team|week) → totals
+  const teamRZ = new Map<string, { targets: number; carries: number }>();
+  // (pbpName|team|week) → player counts
+  const playerRZ = new Map<string, { name: string; team: string; week: number; targets: number; carries: number }>();
+
+  let headers: string[] | null = null;
+  let remainder = "";
+
+  const processLine = (line: string) => {
+    if (!line.trim()) return;
+    if (!headers) { headers = parseCSVLine(line); return; }
+    const vals = parseCSVLine(line);
+    const row: Record<string, string> = {};
+    headers.forEach((h, i) => { row[h] = vals[i] ?? ""; });
+
+    const yl = num(row["yardline_100"]);
+    if (yl == null || yl > 20) return;
+
+    const week = int(row["week"]);
+    const team = row["posteam"] ?? "";
+    if (!week || !team) return;
+
+    const teamKey = `${team}|${week}`;
+    const tot = teamRZ.get(teamKey) ?? { targets: 0, carries: 0 };
+
+    if (row["pass_attempt"] === "1") {
+      const name = (row["receiver_player_name"] ?? "").trim();
+      if (name) {
+        const pk = `${name}|${team}|${week}`;
+        const pc = playerRZ.get(pk) ?? { name, team, week, targets: 0, carries: 0 };
+        pc.targets++;
+        playerRZ.set(pk, pc);
+      }
+      tot.targets++;
+    }
+
+    if (row["rush_attempt"] === "1") {
+      const name = (row["rusher_player_name"] ?? "").trim();
+      if (name) {
+        const pk = `${name}|${team}|${week}`;
+        const pc = playerRZ.get(pk) ?? { name, team, week, targets: 0, carries: 0 };
+        pc.carries++;
+        playerRZ.set(pk, pc);
+      }
+      tot.carries++;
+    }
+
+    teamRZ.set(teamKey, tot);
+  };
+
+  for await (const chunk of gunzip) {
+    const text = remainder + (chunk as Buffer).toString("utf8");
+    const lines = text.split("\n");
+    remainder = lines.pop() ?? "";
+    for (const line of lines) processLine(line);
+  }
+  if (remainder) processLine(remainder);
+
+  logger.info({ season, players: playerRZ.size, teams: teamRZ.size }, "PBP red zone aggregation complete");
+
+  // Upsert computed red zone shares into existing rows.
+  // PBP names are "F.Lastname"; DB player_name is the full display name.
+  // Match on season + week + team + last-name suffix for robustness.
+  const updates = [...playerRZ.values()];
+  let updated = 0;
+  const BATCH = 50;
+
+  for (let i = 0; i < updates.length; i += BATCH) {
+    const slice = updates.slice(i, i + BATCH);
+    await Promise.all(slice.map(async (player) => {
+      const totals = teamRZ.get(`${player.team}|${player.week}`);
+      if (!totals) return;
+      const rzTarget = totals.targets > 0 ? player.targets / totals.targets : null;
+      const rzCarry  = totals.carries > 0 ? player.carries / totals.carries : null;
+      if (rzTarget === null && rzCarry === null) return;
+
+      const lastName = pbpLastName(player.name);
+      if (!lastName) return;
+
+      const setData: { redZoneTargetShare?: string; redZoneCarryShare?: string } = {};
+      if (rzTarget != null) setData.redZoneTargetShare = String(rzTarget);
+      if (rzCarry  != null) setData.redZoneCarryShare  = String(rzCarry);
+
+      const affected = await db.update(nflAdvancedMetricsTable)
+        .set(setData)
+        .where(
+          sql`season = ${season}
+              and week = ${player.week}
+              and team = ${player.team}
+              and lower(player_name) like '% ' || lower(${lastName})`,
+        )
+        .returning({ id: nflAdvancedMetricsTable.id });
+      updated += affected.length;
+    }));
+  }
+
+  logger.info({ season, updated }, "Red zone PBP shares upserted");
+  return updated;
 }
 
 export async function syncNflAdvancedMetrics(): Promise<number> {
@@ -214,6 +324,17 @@ export async function syncNflAdvancedMetrics(): Promise<number> {
     const statsRows = await ingestPlayerStats(season);
     totalUpserted += snapRows + statsRows;
     logger.info({ season, snapRows, statsRows }, "NFL advanced metrics season done");
+  }
+
+  // Ingest true red zone shares from PBP (most recent complete season).
+  // nflverse player_stats weekly CSV has no red zone columns — the PBP is the
+  // authoritative source for yardline_100-filtered target/carry counts.
+  try {
+    const rzRows = await ingestRedZoneFromPBP(2024);
+    totalUpserted += rzRows;
+    logger.info({ season: 2024, rzRows }, "Red zone PBP ingest done");
+  } catch (err) {
+    logger.warn({ err }, "Red zone PBP ingest failed — red zone shares will remain stale (non-critical)");
   }
 
   return totalUpserted;

@@ -150,6 +150,13 @@ export function isReceivingStat(statType: string): boolean {
   return RECEIVING_KEYWORDS.some((k) => s.includes(k));
 }
 
+const RECEIVING_YARDS_KEYWORDS = ["receiving yard", "rec yard"];
+/** Matches receiving-YARDS props only (not receptions). aDOT stdMultiplier applies here. */
+export function isReceivingYardsStat(statType: string): boolean {
+  const s = statType.toLowerCase();
+  return RECEIVING_YARDS_KEYWORDS.some((k) => s.includes(k));
+}
+
 const NFL_TD_KEYWORDS = ["td scored", "tds scored", "rush td", "rec td"];
 /** Matches NFL touchdown props (TDs Scored, Rush TDs, Rec TDs). */
 export function isNFLTDStat(statType: string): boolean {
@@ -377,9 +384,10 @@ export function nflAdvancedFactor(input: {
   const factor = clamp(1 + adj, c.clamp.min, c.clamp.max);
   if (Math.abs(factor - 1) < 0.002) return null;
 
-  // aDOT variance modifier: deep routes widen variance; short routes narrow it.
+  // aDOT variance modifier: applies only to receiving-YARDS props.
+  // Deep routes widen variance (more "boom or bust"); short routes narrow it.
   let stdMultiplier: number | undefined;
-  if (input.aDot != null) {
+  if (input.aDot != null && isReceivingYardsStat(input.statType)) {
     if (input.aDot > 10) {
       stdMultiplier = round3(Math.min(1.20, 1 + (input.aDot - 10) * 0.025));
     } else if (input.aDot < 5) {
