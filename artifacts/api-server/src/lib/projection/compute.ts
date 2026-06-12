@@ -697,7 +697,7 @@ export async function computeAllProjections(): Promise<number> {
     // Batter K% from strikeout game logs (≥5 games required)
     for (const playerId of mlbPlayerIdSet) {
       const kLogs = (allLogsByPlayer.get(playerId) ?? [])
-        .filter(l => l.statType.toLowerCase() === "strikeouts");
+        .filter(l => l.statType === "Hitter Strikeouts");
       if (kLogs.length < 5) continue;
       const recent = kLogs.slice(0, 20);
       const avgKPerGame = recent.reduce((s, l) => s + parseFloat(l.value.toString()), 0) / recent.length;
@@ -743,33 +743,39 @@ export async function computeAllProjections(): Promise<number> {
       const starts = [...byDate.values()];
 
       // K%: K per batter faced proxy from last 5 starts (K / (IP × 3))
+      // "Pitcher Strikeouts" and "Pitching Outs" match what historical-stats.ts writes.
+      // Pitching Outs = total outs recorded; divide by 3 to convert to innings pitched.
       const kStarts = starts.slice(0, 5)
-        .filter(s => s["strikeouts"] != null && (s["innings pitched"] ?? 0) > 0);
+        .filter(s => s["pitcher strikeouts"] != null && (s["pitching outs"] ?? 0) > 0);
       let kPct: number | null = null;
       if (kStarts.length >= 2) {
-        const totalK  = kStarts.reduce((s, st) => s + (st["strikeouts"] ?? 0), 0);
-        const totalIP = kStarts.reduce((s, st) => s + (st["innings pitched"] ?? 0), 0);
+        const totalK    = kStarts.reduce((s, st) => s + (st["pitcher strikeouts"] ?? 0), 0);
+        const totalOuts = kStarts.reduce((s, st) => s + (st["pitching outs"] ?? 0), 0);
+        const totalIP   = totalOuts / 3;
         kPct = totalIP > 0 ? Math.min(totalK / (totalIP * 3), 0.45) : null;
       }
 
       // Last 3 starts ERA: (earned runs / IP) × 9
       const eraStarts = starts.slice(0, 3)
-        .filter(s => s["earned runs allowed"] != null && (s["innings pitched"] ?? 0) > 0);
+        .filter(s => s["earned runs allowed"] != null && (s["pitching outs"] ?? 0) > 0);
       let lastNERA: number | null = null;
       if (eraStarts.length >= 1) {
-        const totalER = eraStarts.reduce((s, st) => s + (st["earned runs allowed"] ?? 0), 0);
-        const totalIP = eraStarts.reduce((s, st) => s + (st["innings pitched"] ?? 0), 0);
+        const totalER   = eraStarts.reduce((s, st) => s + (st["earned runs allowed"] ?? 0), 0);
+        const totalOuts = eraStarts.reduce((s, st) => s + (st["pitching outs"] ?? 0), 0);
+        const totalIP   = totalOuts / 3;
         lastNERA = totalIP > 0 ? (totalER / totalIP) * 9 : null;
       }
 
       // Season FIP proxy: (13×HR + 3×BB − 2×K) / IP + 3.2
-      const allFIPStarts = starts.filter(s => (s["innings pitched"] ?? 0) > 0);
+      // "Walks Allowed", "Home Runs Allowed" match historical-stats.ts pitcher stat names.
+      const allFIPStarts = starts.filter(s => (s["pitching outs"] ?? 0) > 0);
       let seasonFIP: number | null = null;
       if (allFIPStarts.length >= 3) {
-        const totalHR = allFIPStarts.reduce((s, st) => s + (st["home runs allowed"] ?? 0), 0);
-        const totalBB = allFIPStarts.reduce((s, st) => s + (st["walks"] ?? 0), 0);
-        const totalK  = allFIPStarts.reduce((s, st) => s + (st["strikeouts"] ?? 0), 0);
-        const totalIP = allFIPStarts.reduce((s, st) => s + (st["innings pitched"] ?? 0), 0);
+        const totalHR   = allFIPStarts.reduce((s, st) => s + (st["home runs allowed"] ?? 0), 0);
+        const totalBB   = allFIPStarts.reduce((s, st) => s + (st["walks allowed"] ?? 0), 0);
+        const totalK    = allFIPStarts.reduce((s, st) => s + (st["pitcher strikeouts"] ?? 0), 0);
+        const totalOuts = allFIPStarts.reduce((s, st) => s + (st["pitching outs"] ?? 0), 0);
+        const totalIP   = totalOuts / 3;
         const fip = ((13 * totalHR + 3 * totalBB - 2 * totalK) / totalIP) + 3.2;
         seasonFIP = Number.isFinite(fip) ? Math.max(1.0, Math.min(9.0, fip)) : null;
       }

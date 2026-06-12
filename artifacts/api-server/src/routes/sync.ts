@@ -194,6 +194,20 @@ router.post("/sync/historical-stats", async (req, res) => {
   })();
 });
 
+// MLB pitcher hand backfill — DB-only, infers pitcher_hand on existing batter
+// game logs using pitcher_game_logs + pitcher_profiles.  Safe to re-run.
+router.post("/sync/backfill-mlb-pitcher-hand", async (req, res) => {
+  res.json({ status: "started" });
+  try {
+    const { backfillMlbPitcherHand } = await import("../lib/sync/historical-stats");
+    const n = await backfillMlbPitcherHand();
+    broadcastSyncStatus("backfill-mlb-pitcher-hand", "success", `${n} batter logs updated`);
+  } catch (e) {
+    req.log.error({ err: e }, "MLB pitcher hand backfill failed");
+    broadcastSyncStatus("backfill-mlb-pitcher-hand", "error", e instanceof Error ? e.message : "Unknown error");
+  }
+});
+
 // #167 — Derive Blks+Stls combined game-log rows without a full NBA backfill.
 // Fast (one SQL join + batch upsert), so no in-flight guard needed.
 router.post("/sync/derive-blks-stls", async (req, res) => {

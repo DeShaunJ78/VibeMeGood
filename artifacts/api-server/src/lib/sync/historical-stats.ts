@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { playerGameLogsTable, playersTable, teamsTable } from "@workspace/db/schema";
+import { playerGameLogsTable, playersTable, teamsTable, pitcherProfilesTable } from "@workspace/db/schema";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { logger } from "../logger";
 import { normalizeName } from "../projections/name-match";
@@ -71,6 +71,34 @@ async function getJson(url: string, timeoutMs = 15000): Promise<any> {
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
+// Resolve the opposing starting pitcher's handedness for a batter game log.
+// Fetches the MLB Stats API boxscore for the given gamePk (cached per run so
+// each unique game is only fetched once).  Returns null when unavailable.
+async function resolveGamePitcherHand(
+  gamePk: number,
+  batterIsHome: boolean,
+  pitcherHandLookup: Map<string, "L" | "R">,
+  cache: Map<number, "L" | "R" | null>,
+): Promise<"L" | "R" | null> {
+  if (cache.has(gamePk)) return cache.get(gamePk)!;
+  try {
+    const box = await getJson(`https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`);
+    // Batter team is home → they face the away pitcher, and vice versa
+    const side = batterIsHome ? "away" : "home";
+    const pitcherIds: number[] = box?.teams?.[side]?.pitchers ?? [];
+    if (pitcherIds.length === 0) { cache.set(gamePk, null); return null; }
+    const spKey = `ID${pitcherIds[0]}`;
+    const fullName: string | undefined = box?.teams?.[side]?.players?.[spKey]?.person?.fullName;
+    if (!fullName) { cache.set(gamePk, null); return null; }
+    const hand = pitcherHandLookup.get(fullName.toLowerCase()) ?? null;
+    cache.set(gamePk, hand);
+    return hand;
+  } catch {
+    cache.set(gamePk, null);
+    return null;
+  }
+}
+
 // Upsert game log. Any context fields (opponentTeamId, minutes, homeAway) present
 // in `extra` are written on insert AND updated on conflict, so re-runs of
 // sport-specific backfills can backfill these columns onto existing rows.
@@ -80,7 +108,12 @@ async function upsertLog(
   statType: string,
   value: number,
   source: string,
-  extra: { opponentTeamId?: number | null; minutes?: number | null; homeAway?: string | null } = {},
+  extra: {
+    opponentTeamId?: number | null;
+    minutes?: number | null;
+    homeAway?: string | null;
+    pitcherHand?: string | null;
+  } = {},
 ): Promise<void> {
   const insertVals: typeof playerGameLogsTable.$inferInsert = {
     playerId, gameDate, statType, value: value.toString(), source,
@@ -97,6 +130,10 @@ async function upsertLog(
   if (extra.homeAway != null) {
     insertVals.homeAway = extra.homeAway;
     updateSet.homeAway = extra.homeAway;
+  }
+  if (extra.pitcherHand != null) {
+    insertVals.pitcherHand = extra.pitcherHand;
+    updateSet.pitcherHand = extra.pitcherHand;
   }
 
   if (Object.keys(updateSet).length > 0) {
@@ -378,6 +415,15 @@ async function backfillMLB(
   const BASE = "https://statsapi.mlb.com/api/v1";
   let grandTotal = 0;
 
+  // Pre-load pitcher_profiles → name (lowercase) → hand lookup
+  const pitcherProfileRows = await db.select().from(pitcherProfilesTable)
+    .where(eq(pitcherProfilesTable.sport, "MLB"));
+  const pitcherHandLookup = new Map<string, "L" | "R">(
+    pitcherProfileRows.map(p => [p.playerName.toLowerCase(), p.hand as "L" | "R"]),
+  );
+  // Per-run gamePk → pitcher hand cache (avoids duplicate boxscore API calls)
+  const gamePkPitcherCache = new Map<number, "L" | "R" | null>();
+
   // Track which normalised names already exist across all seasons
   const existingNorm = new Set(
     allDbPlayers.filter(p => p.sport === "MLB").map(p => normalizeName(p.fullName)),
@@ -475,6 +521,16 @@ async function backfillMLB(
             const so      = s.strikeOuts ?? 0;
             const singles = Math.max(0, hits - doubles - triples - hrs);
 
+            // Resolve opposing starter's hand via gamePk → boxscore (cached per run)
+            const gamePk = (split.game?.gamePk ?? split.gamePk) as number | undefined;
+            const isHome = split.isHome as boolean | undefined;
+            let pitcherHand: "L" | "R" | null = null;
+            if (gamePk != null && isHome != null && pitcherHandLookup.size > 0) {
+              pitcherHand = await resolveGamePitcherHand(
+                gamePk, isHome, pitcherHandLookup, gamePkPitcherCache,
+              );
+            }
+
             const logs: [string, number][] = [
               ["Hits",             hits],
               ["Home Runs",        hrs],
@@ -491,7 +547,7 @@ async function backfillMLB(
             ];
 
             for (const [statType, value] of logs) {
-              await upsertLog(dbId, gameDate, statType, value, source);
+              await upsertLog(dbId, gameDate, statType, value, source, { pitcherHand });
               count++;
             }
           }
@@ -512,6 +568,7 @@ async function backfillMLB(
             const bbP      = s.baseOnBalls ?? 0;
             const hAllowed = s.hits ?? 0;
             const er       = s.earnedRuns ?? 0;
+            const hraP     = s.homeRuns ?? 0;
             const ipStr    = (s.inningsPitched as string | undefined) ?? "0";
             const ipParts  = ipStr.split(".");
             const outs     = (parseInt(ipParts[0] ?? "0") * 3) + parseInt(ipParts[1] ?? "0");
@@ -521,6 +578,7 @@ async function backfillMLB(
               ["Walks Allowed",       bbP],
               ["Hits Allowed",        hAllowed],
               ["Earned Runs Allowed", er],
+              ["Home Runs Allowed",   hraP],
               ["Pitching Outs",       outs],
             ];
 
@@ -971,4 +1029,44 @@ export async function backfillHistoricalStats(
   results.total = results.nba + results.mlb + results.nhl + results.nfl;
   logger.info(results, "Historical stats backfill complete");
   return results;
+}
+
+// ─── One-time pitcher hand backfill (DB-only, no API calls) ──────────────────
+//
+// Infers pitcher_hand on existing batter game logs using pitcher game logs
+// already in the DB + pitcher_profiles.  Matches on (game_date, pitcher's
+// team_id = batter's opponent_team_id).  Safe to re-run — only touches rows
+// where pitcher_hand IS NULL.
+export async function backfillMlbPitcherHand(): Promise<number> {
+  const result = await db.execute(sql`
+    WITH pitcher_starts AS (
+      SELECT DISTINCT ON (pgl.game_date, p.team_id)
+        pgl.game_date,
+        p.team_id            AS pitcher_team_id,
+        pp.hand
+      FROM player_game_logs pgl
+      JOIN players p
+        ON p.id = pgl.player_id
+      JOIN pitcher_profiles pp
+        ON lower(p.full_name) = lower(pp.player_name)
+       AND pp.sport = 'MLB'
+      WHERE p.sport = 'MLB'
+        AND p.position IN ('SP', 'P', 'RP')
+        AND pgl.stat_type = 'Pitcher Strikeouts'
+        AND pp.hand IS NOT NULL
+        AND p.team_id IS NOT NULL
+      ORDER BY pgl.game_date, p.team_id
+    )
+    UPDATE player_game_logs bgl
+    SET pitcher_hand = ps.hand
+    FROM pitcher_starts ps
+    JOIN players bp ON bp.id = bgl.player_id
+    WHERE bp.sport = 'MLB'
+      AND bgl.game_date = ps.game_date
+      AND bgl.opponent_team_id = ps.pitcher_team_id
+      AND bgl.pitcher_hand IS NULL
+  `);
+  const updated = (result as any)?.rowCount ?? 0;
+  logger.info({ updated }, "MLB pitcher hand backfill complete");
+  return updated;
 }

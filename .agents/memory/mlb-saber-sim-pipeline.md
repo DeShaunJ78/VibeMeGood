@@ -22,8 +22,26 @@ Before assuming these factors are broken, check whether their data prerequisites
 - `player_game_logs.pitcher_hand varchar(1)` — nullable, set by game-log sync
 - `pitcher_profiles` table — seeded with ~60 MLB starters; keyed by `playerName + sport`
 
+## Stat-type naming contract
+All pitcher stat keys in compute.ts are stored as `.toLowerCase()` of what historical-stats.ts writes:
+| historical-stats.ts writes | compute.ts key |
+|---|---|
+| `"Pitcher Strikeouts"` | `"pitcher strikeouts"` |
+| `"Pitching Outs"` | `"pitching outs"` (÷3 = IP) |
+| `"Walks Allowed"` | `"walks allowed"` |
+| `"Earned Runs Allowed"` | `"earned runs allowed"` |
+| `"Home Runs Allowed"` | `"home runs allowed"` |
+| `"Hitter Strikeouts"` | exact match (batter K%) |
+
+## pitcherHand population
+Two paths — both needed:
+1. **Sync-time**: `resolveGamePitcherHand(gamePk, batterIsHome, lookup, cache)` fetches MLB Stats API `/game/{gamePk}/boxscore`, reads `teams[side].pitchers[0]`, resolves name→hand from pitcher_profiles. Called during MLB hitting backfill; cache prevents duplicate boxscore calls per run.
+2. **Historical backfill**: `POST /api/sync/backfill-mlb-pitcher-hand` triggers `backfillMlbPitcherHand()` — DB-only SQL using pitcher game logs × pitcher_profiles × player.team_id to update batter logs where pitcher_hand IS NULL.
+
 ## Key files
 - `artifacts/api-server/src/lib/projection/factors.ts` — `mlbPlatoonFactor()`, `strikeoutMatchupFactor()`, `pitcherFormFactor()`
-- `artifacts/api-server/src/lib/projection/compute.ts` — MLB pre-computation block + per-line wiring (~line 620–800)
+- `artifacts/api-server/src/lib/projection/compute.ts` — MLB pre-computation block + per-line wiring
+- `artifacts/api-server/src/lib/sync/historical-stats.ts` — `upsertLog` pitcherHand extra, `resolveGamePitcherHand`, `backfillMlbPitcherHand`
+- `artifacts/api-server/src/routes/sync.ts` — `POST /api/sync/backfill-mlb-pitcher-hand`
 - `lib/db/src/schema/pitcher-profiles.ts` — pitcher hand table
 - `scripts/src/seed.ts` — pitcher profiles seed data (~60 starters)
