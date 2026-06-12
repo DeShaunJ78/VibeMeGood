@@ -298,10 +298,11 @@ const SYNC_JOB_GROUPS: Array<{ label: string; jobs: SyncJob[] }> = [
   {
     label: "Maintenance",
     jobs: [
-      { label: "Grade Pending Picks", endpoint: "/api/sync/auto-grade-picks" },
-      { label: "Backfill History",    endpoint: "/api/sync/historical-stats" },
-      { label: "Derive Blks+Stls",    endpoint: "/api/sync/derive-blks-stls" },
-      { label: "Run Calibration",     endpoint: "/api/sync/calibration", staleDays: 7 },
+      { label: "Grade Pending Picks",    endpoint: "/api/sync/auto-grade-picks" },
+      { label: "Backfill History",       endpoint: "/api/sync/historical-stats" },
+      { label: "Derive Blks+Stls",       endpoint: "/api/sync/derive-blks-stls" },
+      { label: "MLB Pitcher Hand Tags",  endpoint: "/api/sync/backfill-mlb-pitcher-hand" },
+      { label: "Run Calibration",        endpoint: "/api/sync/calibration", staleDays: 7 },
     ],
   },
 ];
@@ -311,14 +312,15 @@ const SYNC_JOBS: SyncJob[] = SYNC_JOB_GROUPS.flatMap(g => g.jobs);
 // Maps a manual sync job to the data_pull_logs provider it refreshes, so each
 // row can show live status instead of a static button.
 const JOB_PROVIDER: Record<string, string> = {
-  "/api/sync/injuries":             "injury-news",
-  "/api/sync/external-odds":        "the-odds-api",
-  "/api/sync/projections":          "nba-stats",
-  "/api/sync/scores":               "espn",
-  "/api/sync/variance":             "internal",
-  "/api/sync/game-schedule":        "espn",
-  "/api/sync/calibration":          "calibration",
-  "/api/sync/nhl-player-context":   "nhl-stats",
+  "/api/sync/injuries":                       "injury-news",
+  "/api/sync/external-odds":                  "the-odds-api",
+  "/api/sync/projections":                    "nba-stats",
+  "/api/sync/scores":                         "espn",
+  "/api/sync/variance":                       "internal",
+  "/api/sync/game-schedule":                  "espn",
+  "/api/sync/calibration":                    "calibration",
+  "/api/sync/nhl-player-context":             "nhl-stats",
+  "/api/sync/backfill-mlb-pitcher-hand":      "internal",
 };
 
 function StatusDot({ status }: { status: string }) {

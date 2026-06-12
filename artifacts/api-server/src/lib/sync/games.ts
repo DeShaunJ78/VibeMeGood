@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { gamesTable, teamsTable } from "@workspace/db/schema";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { logger } from "../logger";
 
 const SPORT_ENDPOINTS: Record<string, string> = {
@@ -142,6 +142,105 @@ async function syncSportForDate(
   }
 }
 
+/**
+ * Fetch today's MLB probable starters from the free MLB Stats API and patch
+ * games.metadata with { homeStartingPitcher, awayStartingPitcher }.
+ *
+ * Called after every today-only schedule sync so matchup factors in the
+ * projection engine (platoon splits, strikeout matchup, pitcher form) can
+ * resolve the opposing pitcher for each batter.
+ *
+ * The MLB Stats API is free and requires no auth:
+ *   GET https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=YYYY-MM-DD&hydrate=probablePitcher
+ */
+async function syncMlbProbableStarters(): Promise<number> {
+  const today = new Date();
+  const dateStr = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, "0"),
+    String(today.getDate()).padStart(2, "0"),
+  ].join("-");
+
+  const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${dateStr}&hydrate=probablePitcher`;
+  let data: any;
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status }, "syncMlbProbableStarters: MLB Stats API returned non-200");
+      return 0;
+    }
+    data = await res.json();
+  } catch (e) {
+    logger.warn({ err: e }, "syncMlbProbableStarters: fetch failed");
+    return 0;
+  }
+
+  const games: any[] = (data?.dates ?? []).flatMap((d: any) => d.games ?? []);
+  if (games.length === 0) return 0;
+
+  // Day window for matching our DB game rows (same calendar day UTC)
+  const dayStart = new Date(today);
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const dayEnd = new Date(today);
+  dayEnd.setUTCHours(23, 59, 59, 999);
+
+  // Load today's MLB games from DB indexed by home team abbreviation (upper)
+  const mlbTeamRows = await db
+    .select({ id: teamsTable.id, abbreviation: teamsTable.abbreviation })
+    .from(teamsTable)
+    .where(eq(teamsTable.sport, "MLB"));
+  const abbr2TeamId = new Map<string, number>(mlbTeamRows.map(t => [t.abbreviation.toUpperCase(), t.id]));
+
+  const dbGames = await db
+    .select({ id: gamesTable.id, homeTeamId: gamesTable.homeTeamId, metadata: gamesTable.metadata })
+    .from(gamesTable)
+    .where(and(
+      eq(gamesTable.sport, "MLB"),
+      gte(gamesTable.startTime, dayStart),
+      lte(gamesTable.startTime, dayEnd),
+    ));
+  const homeTeamId2GameId = new Map<number, number>(dbGames.map(g => [g.homeTeamId, g.id]));
+
+  let updated = 0;
+  for (const g of games) {
+    try {
+      const homeAbbr = (g.teams?.home?.team?.abbreviation as string | undefined)?.toUpperCase();
+      const awayAbbr = (g.teams?.away?.team?.abbreviation as string | undefined)?.toUpperCase();
+      const homeSP   = g.teams?.home?.probablePitcher?.fullName as string | undefined;
+      const awaySP   = g.teams?.away?.probablePitcher?.fullName as string | undefined;
+
+      if (!homeAbbr || (!homeSP && !awaySP)) continue;
+
+      const homeTeamId = abbr2TeamId.get(homeAbbr);
+      if (!homeTeamId) continue;
+      const gameId = homeTeamId2GameId.get(homeTeamId);
+      if (!gameId) continue;
+
+      // Merge into existing metadata (preserving any other keys)
+      const existing = (dbGames.find(g => g.id === gameId)?.metadata ?? {}) as Record<string, unknown>;
+      const newMeta = {
+        ...existing,
+        ...(homeSP ? { homeStartingPitcher: homeSP } : {}),
+        ...(awaySP ? { awayStartingPitcher: awaySP } : {}),
+      };
+
+      await db
+        .update(gamesTable)
+        .set({ metadata: newMeta, updatedAt: new Date() })
+        .where(eq(gamesTable.id, gameId));
+      updated++;
+    } catch (e) {
+      logger.warn({ err: e }, "syncMlbProbableStarters: game patch failed");
+    }
+  }
+
+  logger.info({ updated, date: dateStr }, "syncMlbProbableStarters: done");
+  return updated;
+}
+
 export async function syncGameSchedule(options?: {
   fromDate?: Date;
   toDate?: Date;
@@ -188,5 +287,12 @@ export async function syncGameSchedule(options?: {
     total += await syncSportForDate(sport, url);
   }
   logger.info({ total }, "Game schedule sync complete");
+
+  // Patch MLB games with today's probable starters so platoon/K-matchup/
+  // pitcher-form factors can resolve the opposing pitcher per batter.
+  syncMlbProbableStarters().catch(e =>
+    logger.warn({ err: e }, "syncMlbProbableStarters fire-and-forget failed"),
+  );
+
   return total;
 }
