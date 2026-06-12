@@ -290,6 +290,12 @@ const SYNC_JOB_GROUPS: Array<{ label: string; jobs: SyncJob[] }> = [
     ],
   },
   {
+    label: "NHL Context",
+    jobs: [
+      { label: "NHL TOI/PP/Corsi", endpoint: "/api/sync/nhl-player-context" },
+    ],
+  },
+  {
     label: "Maintenance",
     jobs: [
       { label: "Grade Pending Picks", endpoint: "/api/sync/auto-grade-picks" },
@@ -305,13 +311,14 @@ const SYNC_JOBS: SyncJob[] = SYNC_JOB_GROUPS.flatMap(g => g.jobs);
 // Maps a manual sync job to the data_pull_logs provider it refreshes, so each
 // row can show live status instead of a static button.
 const JOB_PROVIDER: Record<string, string> = {
-  "/api/sync/injuries":      "injury-news",
-  "/api/sync/external-odds": "the-odds-api",
-  "/api/sync/projections":   "nba-stats",
-  "/api/sync/scores":        "espn",
-  "/api/sync/variance":      "internal",
-  "/api/sync/game-schedule": "espn",
-  "/api/sync/calibration":   "calibration",
+  "/api/sync/injuries":             "injury-news",
+  "/api/sync/external-odds":        "the-odds-api",
+  "/api/sync/projections":          "nba-stats",
+  "/api/sync/scores":               "espn",
+  "/api/sync/variance":             "internal",
+  "/api/sync/game-schedule":        "espn",
+  "/api/sync/calibration":          "calibration",
+  "/api/sync/nhl-player-context":   "nhl-stats",
 };
 
 function StatusDot({ status }: { status: string }) {

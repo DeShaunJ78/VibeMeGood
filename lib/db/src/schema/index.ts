@@ -39,3 +39,4 @@ export * from "./nfl-advanced-metrics";
 export * from "./backtest-results";
 export * from "./crowd-ownership";
 export * from "./pitcher-profiles";
+export * from "./nhl-player-context";

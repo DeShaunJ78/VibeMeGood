@@ -3,7 +3,7 @@ import {
   playerGameLogsTable, ourProjectionsTable, ppLinesTable, playersTable,
   injuriesTable, matchupHistoryTable, gamesTable, teamsTable,
   fatigueDataTable, teamPaceRatingsTable, lineupConfirmationsTable,
-  pitcherProfilesTable,
+  pitcherProfilesTable, nhlPlayerContextTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray, isNotNull, sql } from "drizzle-orm";
 import { getNflUsageMap } from "../sync/nfl-advanced";
@@ -25,6 +25,8 @@ import {
   impliedTeamTotal, SPORT_IMPLIED_BASELINE,
   mlbPlatoonFactor, strikeoutMatchupFactor, pitcherFormFactor,
   isMLBBattingStat, isMLBStrikeoutStat,
+  nhlTimeOnIceFactor, powerPlayFactor, corsiFactor,
+  FACTOR_CONFIG,
   type FactorResult,
 } from "./factors";
 import { logger } from "../logger";
@@ -432,7 +434,7 @@ export async function computeAllProjections(): Promise<number> {
   const teamAbbrMap = new Map(teams.map(t => [t.id, t.abbreviation]));
 
   // --- Batch-load all factor context in parallel ---
-  const [fatigueRows, paceRows, nflUsageMap, dvpRows, lineupConfirmRows, pitcherProfileRows] = await Promise.all([
+  const [fatigueRows, paceRows, nflUsageMap, dvpRows, lineupConfirmRows, pitcherProfileRows, nhlContextRows] = await Promise.all([
     // Latest fatigue row per player (ordered desc; we keep the first seen).
     playerIds.length
       ? db.select().from(fatigueDataTable)
@@ -465,11 +467,20 @@ export async function computeAllProjections(): Promise<number> {
       : Promise.resolve([] as (typeof lineupConfirmationsTable.$inferSelect)[]),
     // MLB pitcher hand profiles (for platoon split factor).
     db.select().from(pitcherProfilesTable).where(eq(pitcherProfilesTable.sport, "MLB")),
+    // NHL player context (TOI, PP unit, Corsi) for NHL Saber Sim factors.
+    playerIds.length
+      ? db.select().from(nhlPlayerContextTable)
+          .where(inArray(nhlPlayerContextTable.playerId, playerIds))
+      : Promise.resolve([] as (typeof nhlPlayerContextTable.$inferSelect)[]),
   ]);
 
   // Index fatigue (first row per player = latest).
   const fatigueByPlayer = new Map<number, typeof fatigueDataTable.$inferSelect>();
   for (const f of fatigueRows) if (!fatigueByPlayer.has(f.playerId)) fatigueByPlayer.set(f.playerId, f);
+
+  // Index NHL player context (one row per player).
+  const nhlContextByPlayer = new Map<number, typeof nhlPlayerContextTable.$inferSelect>();
+  for (const ctx of nhlContextRows) nhlContextByPlayer.set(ctx.playerId, ctx);
 
   // Index NBA pace by abbreviation (first = most recent season), fall back to seed.
   const paceByAbbr = new Map<string, number>();
@@ -995,6 +1006,34 @@ export async function computeAllProjections(): Promise<number> {
             seasonFIP:      pitcherStats?.seasonFIP ?? null,
             statType:       line.statType,
           }));
+        }
+      }
+
+      // ── NHL Saber Sim factors ──────────────────────────────────────────────
+      if (sport === "NHL") {
+        const nhlCtx = nhlContextByPlayer.get(line.playerId);
+        if (nhlCtx) {
+          const toiPerGame = nhlCtx.toiPerGame != null ? parseFloat(nhlCtx.toiPerGame.toString()) : null;
+          const ppToiPerGame = nhlCtx.ppToiPerGame != null ? parseFloat(nhlCtx.ppToiPerGame.toString()) : null;
+          const ppUnit = nhlCtx.ppUnit ?? null;
+          const corsiFor60 = nhlCtx.corsiFor60 != null ? parseFloat(nhlCtx.corsiFor60.toString()) : null;
+
+          // 1. Time-on-Ice factor — fires for Goals/Assists/Shots/Points
+          //    Use season-average TOI from context as the baseline.
+          //    (Projected TOI = same baseline unless lineup data overrides; the
+          //    factor is a no-op when projected == avg, so it gracefully degrades
+          //    until a lineup projection feed is wired in.)
+          factors.push(nhlTimeOnIceFactor(toiPerGame, toiPerGame, line.statType));
+
+          // 2. Power-play factor — fires for Goals/Assists/Points
+          factors.push(powerPlayFactor(ppToiPerGame, ppUnit, line.statType));
+
+          // 3. Corsi factor — fires for Shots on Goal only
+          factors.push(corsiFactor(
+            corsiFor60,
+            FACTOR_CONFIG.nhlCorsi.leagueAvgCF60,
+            line.statType,
+          ));
         }
       }
 

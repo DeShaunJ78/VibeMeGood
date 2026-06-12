@@ -14,6 +14,7 @@ import { syncFatigueData } from "../lib/sync/fatigue";
 import { syncInjuries } from "../lib/sync/injuries";
 import { syncProjections } from "../lib/projections/sync";
 import { syncNflAdvancedMetrics } from "../lib/sync/nfl-advanced";
+import { syncNhlPlayerContext } from "../lib/sync/nhl-player-context";
 import { syncGameSchedule } from "../lib/sync/games";
 import { syncGameOdds } from "../lib/sync/game-odds";
 import { syncWeather } from "../lib/sync/weather";
@@ -497,6 +498,10 @@ router.post("/sync/scores", async (req, res) => {
   // Logs under "espn" (ESPN game logs), NOT "prizepicks" — PP's data-health dot
   // must reflect only the browser import, never a server-side scores pull.
   await runSync("espn", "sync-scores", syncScoresImpl, res);
+});
+
+router.post("/sync/nhl-player-context", async (req, res) => {
+  await runSync("nhl-stats", "nhl-player-context", syncNhlPlayerContext, res);
 });
 
 router.post("/sync/fatigue", async (req, res) => {

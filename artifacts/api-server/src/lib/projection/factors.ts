@@ -87,6 +87,23 @@ export const FACTOR_CONFIG = {
     fipConstant: 3.2, // FIP constant: (13×HR + 3×BB − 2×K) / IP + 3.2
     clamp: { min: 0.75, max: 1.25 },
   },
+  nhlTimeOnIce: {
+    // Ratio of projected TOI to season-average TOI; small moves ignored.
+    clamp: { min: 0.65, max: 1.45 },
+    trivialThreshold: 0.04, // skip if |ratio-1| < 4%
+  },
+  nhlPowerPlay: {
+    // Additive boost on scoring props for players confirmed on PP units.
+    firstUnit:  0.14,  // 1st PP unit: +14% on scoring props
+    secondUnit: 0.06,  // 2nd PP unit: +6% on scoring props
+    clamp: { min: 0.90, max: 1.20 },
+  },
+  nhlCorsi: {
+    leagueAvgCF60: 55.0, // typical NHL team CF/60 average
+    weight: 0.40,        // dampening weight on the ratio deviation
+    clamp: { min: 0.80, max: 1.25 },
+    minCF60: 20,         // require at least 20 CF/60 to emit a signal (filters goalies / fringe)
+  },
   snap: {
     clamp: { min: 0.9, max: 1.0 },
   },
@@ -695,6 +712,135 @@ export function pitcherFormFactor(input: {
     label: "Pitcher form",
     factor: round3(factor),
     explain: `ERA ${input.lastNStartsERA.toFixed(2)} vs FIP ${input.seasonFIP.toFixed(2)} (${trend}) → ×${factor.toFixed(3)}`,
+  };
+}
+
+// ── NHL Saber Sim helpers ────────────────────────────────────────────────────
+
+/**
+ * NHL counting props that respond to TOI changes (Goals, Assists, Shots, Points).
+ * Excludes saves / save% (goalie props) and combo+carries.
+ */
+const NHL_COUNTING_KEYWORDS = ["goal", "assist", "shot", "point"];
+export function isNHLCountingStat(statType: string): boolean {
+  const s = statType.toLowerCase();
+  if (s.includes("save") || s.includes("%")) return false;
+  return NHL_COUNTING_KEYWORDS.some(k => s.includes(k));
+}
+
+/**
+ * NHL scoring props that are boosted by power-play participation
+ * (Goals, Assists, Points).  Excludes shots-only props.
+ */
+const NHL_SCORING_KEYWORDS = ["goal", "assist", "point"];
+export function isNHLScoringStat(statType: string): boolean {
+  const s = statType.toLowerCase();
+  if (s.includes("save") || s.includes("%")) return false;
+  return NHL_SCORING_KEYWORDS.some(k => s.includes(k));
+}
+
+/**
+ * Matches "Shots on Goal" (and common variants).
+ * Corsi factor fires only for this prop type.
+ */
+export function isNHLShotsOnGoal(statType: string): boolean {
+  const s = statType.toLowerCase();
+  return s.includes("shot");
+}
+
+// ── NHL factor builders ───────────────────────────────────────────────────────
+
+/**
+ * NHL Time-on-Ice factor.
+ *
+ * Computes the ratio of today's projected TOI to the player's season-average TOI.
+ * When that ratio deviates meaningfully from 1.0 it signals a role change
+ * (line-up shuffle, injury shortfall, extra-time chance) that should shift all
+ * counting-stat projections proportionally.
+ *
+ * Fires for: Goals, Assists, Shots on Goal, Points.
+ * Clamp: [0.65, 1.45].
+ */
+export function nhlTimeOnIceFactor(
+  projectedToi:  number | null,  // tonight's projected TOI in minutes
+  seasonAvgToi:  number | null,  // season-average TOI per game in minutes
+  statType: string,
+): FactorResult | null {
+  if (projectedToi == null || seasonAvgToi == null || seasonAvgToi <= 0) return null;
+  if (!isNHLCountingStat(statType)) return null;
+  const c = FACTOR_CONFIG.nhlTimeOnIce;
+  const ratio = projectedToi / seasonAvgToi;
+  if (Math.abs(ratio - 1) < c.trivialThreshold) return null;
+  const factor = clamp(ratio, c.clamp.min, c.clamp.max);
+  const dir = ratio > 1 ? "↑" : "↓";
+  return {
+    key: "nhlTOI",
+    label: "NHL TOI",
+    factor: round3(factor),
+    explain: `${dir}${projectedToi.toFixed(1)} min projected vs ${seasonAvgToi.toFixed(1)} avg → ×${factor.toFixed(3)}`,
+  };
+}
+
+/**
+ * NHL Power-Play factor.
+ *
+ * PP unit membership is a strong proxy for scoring-prop value.
+ * 1st PP unit players average ~60% of a team's PP time and are the primary
+ * beneficiaries of 5-on-4 advantages; 2nd-unit players get the remainder.
+ *
+ * Fires for: Goals, Assists, Points.
+ * Clamp: [0.90, 1.20].
+ */
+export function powerPlayFactor(
+  ppToiPerGame: number | null,   // PP minutes per game (from nhl_player_context)
+  ppUnit:       number | null,   // 1 | 2 | null
+  statType: string,
+): FactorResult | null {
+  if (ppUnit == null || !isNHLScoringStat(statType)) return null;
+  const c = FACTOR_CONFIG.nhlPowerPlay;
+  const boost = ppUnit === 1 ? c.firstUnit : c.secondUnit;
+  const factor = clamp(1 + boost, c.clamp.min, c.clamp.max);
+  const unitLabel = ppUnit === 1 ? "1st PP unit" : "2nd PP unit";
+  const ppMin = ppToiPerGame != null ? ` (${ppToiPerGame.toFixed(1)} min/game)` : "";
+  return {
+    key: "nhlPP",
+    label: "Power-play",
+    factor: round3(factor),
+    explain: `${unitLabel}${ppMin} → ×${factor.toFixed(3)}`,
+  };
+}
+
+/**
+ * NHL Corsi For / 60 factor.
+ *
+ * Corsi For/60 measures shot-attempt volume — a strong proxy for offensive zone
+ * time and therefore shot-on-goal opportunity. Players above league average
+ * generate more scoring chances per minute; below-average players face fewer
+ * opportunities.
+ *
+ * League average CF/60 ≈ 55 (skaters who play ≥10 min/game).
+ * Fires for: Shots on Goal only.
+ * Clamp: [0.80, 1.25].
+ */
+export function corsiFactor(
+  corsiFor60:    number | null,  // player's Corsi For per 60 (from nhl_player_context)
+  leagueAvgCF60: number,         // FACTOR_CONFIG.nhlCorsi.leagueAvgCF60
+  statType: string,
+): FactorResult | null {
+  if (corsiFor60 == null) return null;
+  if (!isNHLShotsOnGoal(statType)) return null;
+  const c = FACTOR_CONFIG.nhlCorsi;
+  if (corsiFor60 < c.minCF60) return null;
+  const ratio = corsiFor60 / leagueAvgCF60;
+  const adj   = (ratio - 1) * c.weight;
+  const factor = clamp(1 + adj, c.clamp.min, c.clamp.max);
+  if (Math.abs(factor - 1) < 0.01) return null; // skip trivial signal
+  const dir = factor > 1 ? "above-avg" : "below-avg";
+  return {
+    key: "nhlCorsi",
+    label: "Corsi (shot volume)",
+    factor: round3(factor),
+    explain: `CF/60 ${corsiFor60.toFixed(1)} vs league ${leagueAvgCF60.toFixed(1)} (${dir}) → ×${factor.toFixed(3)}`,
   };
 }
 
