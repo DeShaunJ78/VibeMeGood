@@ -26,18 +26,6 @@ import {
 import { logger } from "../logger";
 import { normalizeStatType } from "../stat-type";
 
-// Position-average stats per game used as the denominator when computing USG% proxy.
-// Source: 2024-25 NBA position-group averages (all players who averaged ≥10 min/g).
-// FGA/FTA are not available as PrizePicks stat types, so we use per-game output
-// normalized by position as the highest-fidelity proxy for true USG%.
-const NBA_USG_PER_GAME: Record<string, Partial<Record<string, number>>> = {
-  PG: { "Points": 16.5, "Assists": 5.5, "Rebounds": 4.0, "3-PT Made": 1.8, "Blocked Shots": 0.3, "Steals": 1.0 },
-  SG: { "Points": 15.5, "Assists": 3.5, "Rebounds": 4.0, "3-PT Made": 1.8, "Blocked Shots": 0.3, "Steals": 0.9 },
-  SF: { "Points": 14.5, "Assists": 3.0, "Rebounds": 5.5, "3-PT Made": 1.4, "Blocked Shots": 0.7, "Steals": 0.8 },
-  PF: { "Points": 13.5, "Assists": 2.5, "Rebounds": 7.0, "3-PT Made": 0.8, "Blocked Shots": 1.1, "Steals": 0.6 },
-  C:  { "Points": 12.5, "Assists": 2.0, "Rebounds": 8.5, "3-PT Made": 0.5, "Blocked Shots": 1.7, "Steals": 0.5 },
-};
-
 // Position-average USG% (possession share), 2024-25 NBA season.
 // Used as the normalization target so computed proxy is in USG% scale (0-100).
 const NBA_USG_BASELINE_PCT: Record<string, number> = {
@@ -502,26 +490,34 @@ export async function computeAllProjections(): Promise<number> {
     leagueAgg.set(lk, cur);
   }
 
-  // Build team-wide 3PM allowed map from the DvP data (all positions aggregated).
-  // Used by threePointDefenseFactor() as a cleaner signal than position-specific DvP.
-  const team3PMAllowed = new Map<number, { sum: number; cnt: number }>();
+  // Build team-wide 3PM-ALLOWED map from DvP data (all positions aggregated).
+  // Uses exact stat-type match on "3-PT Made" to avoid mixing in 3PA rows.
+  // Keyed by `${sport}:${opponentTeamId}` to prevent cross-league blending.
+  const team3PMAllowed = new Map<string, { sum: number; cnt: number }>();
   for (const r of dvpRows) {
-    if (!r.opponentTeamId) continue;
-    const st = (r.statType ?? "").toLowerCase();
-    if (!st.includes("3-pt") && !st.includes("3pt") && !st.includes("three")) continue;
+    if (!r.opponentTeamId || !r.sport) continue;
+    if (r.statType !== "3-PT Made") continue; // exact match — no 3PA contamination
     const avg = parseFloat(r.avgValue);
     const cnt = parseInt(r.games, 10);
-    const cur = team3PMAllowed.get(r.opponentTeamId) ?? { sum: 0, cnt: 0 };
+    const key = `${r.sport}:${r.opponentTeamId}`;
+    const cur = team3PMAllowed.get(key) ?? { sum: 0, cnt: 0 };
     cur.sum += avg * cnt;
     cur.cnt += cnt;
-    team3PMAllowed.set(r.opponentTeamId, cur);
+    team3PMAllowed.set(key, cur);
   }
-  let league3PMTotalSum = 0, league3PMTotalCnt = 0;
-  for (const v of team3PMAllowed.values()) {
-    league3PMTotalSum += v.sum;
-    league3PMTotalCnt += v.cnt;
+  // League-average 3PM-allowed per sport (for ratio baseline in threePointDefenseFactor).
+  const league3PMBySport = new Map<string, number>(); // sport → avg 3PM allowed/game
+  const sportAgg3PM = new Map<string, { sum: number; cnt: number }>();
+  for (const [key, v] of team3PMAllowed) {
+    const sp = key.split(":")[0];
+    const cur = sportAgg3PM.get(sp) ?? { sum: 0, cnt: 0 };
+    cur.sum += v.sum;
+    cur.cnt += v.cnt;
+    sportAgg3PM.set(sp, cur);
   }
-  const league3PMAvg = league3PMTotalCnt > 0 ? league3PMTotalSum / league3PMTotalCnt : null;
+  for (const [sp, agg] of sportAgg3PM) {
+    if (agg.cnt > 0) league3PMBySport.set(sp, agg.sum / agg.cnt);
+  }
 
   // Index lineup confirmations: most recent per (playerId, gameId).
   const lineupByPlayerGame = new Map<string, typeof lineupConfirmationsTable.$inferSelect>();
@@ -571,9 +567,7 @@ export async function computeAllProjections(): Promise<number> {
     avgMinutesByPlayer.set(playerId, arr.reduce((a, b) => a + b, 0) / arr.length);
   }
 
-  // Per-game average per (player, statType) for the USG% proxy in usageRateFactor.
-  // Using per-game (not per-minute) output as the numerator matches the position baselines
-  // in NBA_USG_PER_GAME, and captures the player's role independent of tonight's minutes.
+  // Per-game average per (player, statType) — used by USG% computation below.
   // Requires ≥3 recent games to emit a signal.
   const avgValPerGameByKey = new Map<string, number>(); // `${playerId}:${statType}` → avg val/game
   for (const [key, logs] of gameLogsByKey) {
@@ -581,6 +575,38 @@ export async function computeAllProjections(): Promise<number> {
     if (recent.length < 3) continue;
     const avgVal = recent.reduce((s, l) => s + parseFloat(l.value.toString()), 0) / recent.length;
     if (avgVal >= 0) avgValPerGameByKey.set(key, avgVal);
+  }
+
+  // NBA/WNBA USG% proxy per player.
+  // Formula: USG% = 100 × (FGA_est + 0.44×FTA_est + TOV) × (Tm_MP/5) / (MP_avg × Tm_possUsed)
+  // FGA is estimated from Points + 3PM (FGA not tracked as a PrizePicks prop):
+  //   2PA ≈ (Points − 3PM×3) / 2 / 0.53   (2-pt FGM ÷ 2pt FG%)
+  //   3PA ≈ 3PM / 0.36                     (3PM ÷ league-avg 3P%)
+  // FTA is estimated from Points (FT ≈ 15% of NBA scoring at 77% FT%).
+  // Turnovers are read directly from the "Turnovers" game-log rows (IS a tracked stat).
+  const NBA_TM_POSS_USED = 112.0; // NBA avg: FGA + 0.44×FTA + TOV per team per game
+  const NBA_TM_MP        = 240;   // 5 players × 48 min
+  const playerUSGByPlayerId = new Map<number, number>(); // playerId → USG% (0–100)
+  for (const [pidStr] of avgValPerGameByKey) {
+    const pId = parseInt(pidStr.split(":")[0], 10);
+    if (playerUSGByPlayerId.has(pId)) continue; // already computed for this player
+    const pts     = avgValPerGameByKey.get(`${pId}:Points`) ?? null;
+    if (pts == null) continue;
+    const tov    = avgValPerGameByKey.get(`${pId}:Turnovers`) ?? 0;
+    const threepm = avgValPerGameByKey.get(`${pId}:3-PT Made`) ?? 0;
+    const mpAvg  = avgMinutesByPlayer.get(pId);
+    if (!mpAvg || mpAvg <= 0) continue;
+    // FGA estimation
+    const twoFGM = Math.max(0, pts - 3 * threepm);
+    const twoPA  = twoFGM / 2 / 0.53;
+    const threePA = threepm / 0.36;
+    const fgaEst = twoPA + threePA;
+    // FTA estimation
+    const ftaEst = pts * 0.15 / 0.77;
+    // USG%
+    const possUsed = fgaEst + 0.44 * ftaEst + tov;
+    const usg = 100 * possUsed * (NBA_TM_MP / 5) / (mpAvg * NBA_TM_POSS_USED);
+    playerUSGByPlayerId.set(pId, Math.round(Math.max(5, Math.min(50, usg)) * 10) / 10);
   }
 
   const opponentIds = [...new Set(
@@ -744,28 +770,23 @@ export async function computeAllProjections(): Promise<number> {
         const seasonAvgMin = avgMinutesByPlayer.get(line.playerId) ?? null;
         factors.push(minutesFactor(expMin, seasonAvgMin, line.statType));
 
-        // 2. Usage rate factor — USG% proxy: player's avg val/game relative to position norm
+        // 2. Usage rate factor — true USG% proxy using FGA_est + FTA_est + TOV
         if (isNBACountingStat(line.statType)) {
-          const avgVal = avgValPerGameByKey.get(`${line.playerId}:${line.statType}`) ?? null;
-          const perGameBaseline = NBA_USG_PER_GAME[player.position ?? ""]?.[line.statType] ?? null;
+          const usagePct = playerUSGByPlayerId.get(line.playerId) ?? null;
           const usgBaselinePct = NBA_USG_BASELINE_PCT[player.position ?? ""] ?? null;
-          // USG% proxy = (player avg val/game / position avg val/game) × position USG% baseline
-          const usagePct =
-            avgVal != null && perGameBaseline != null && perGameBaseline > 0 && usgBaselinePct != null
-              ? Math.round((avgVal / perGameBaseline) * usgBaselinePct * 10) / 10
-              : null;
           const uf = usageRateFactor(usagePct, usgBaselinePct, line.statType);
           factors.push(uf);
-          if (usagePct != null) usageRateIdx = usagePct; // store USG% proxy (0-100 scale)
+          if (usagePct != null) usageRateIdx = usagePct; // store USG% proxy (0-100)
         }
 
-        // 3. 3-point defense factor (team-wide 3PM allowed vs league avg)
+        // 3. 3-point defense factor (team-wide 3PM allowed vs sport-partitioned league avg)
         if (is3PTStat(line.statType) && opponentTeamId != null) {
-          const t3pm = team3PMAllowed.get(opponentTeamId);
+          const t3pmKey = `${sport}:${opponentTeamId}`;
+          const t3pm = team3PMAllowed.get(t3pmKey);
           const allowed3PM = t3pm && t3pm.cnt > 0 ? t3pm.sum / t3pm.cnt : null;
           factors.push(threePointDefenseFactor({
             allowed3PM,
-            league3PM: league3PMAvg,
+            league3PM: league3PMBySport.get(sport) ?? null,
             games: t3pm?.cnt ?? null,
           }));
         }
