@@ -636,7 +636,7 @@ function StatCard({ label, value, sub, color }: { label: string; value: string; 
 
 function PortfolioStatsBar({ stats, numLineups }: { stats: PortfolioStats; numLineups: number }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
       <StatCard label="Total Stake"    value={dollars(stats.totalStake)} />
       <StatCard
         label="Portfolio EV"
@@ -723,42 +723,40 @@ function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap, o
       isStoryMode && !isGppMode && "bg-violet-950/10",
     )}>
       <CardHeader className="pb-2 pt-3 px-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-muted-foreground">#{index + 1}</span>
-            {isGppMode && (
-              <Badge className="text-[8px] px-1.5 py-0 bg-amber-900/50 text-amber-300 border-amber-700/50 font-mono">
-                <Trophy className="w-2 h-2 mr-0.5 inline" />GPP
-              </Badge>
-            )}
-            {storyTpl && (
-              <Badge className="text-[8px] px-1.5 py-0 bg-violet-900/50 text-violet-300 border-violet-700/50 font-mono">
-                {storyTpl.emoji} {storyTpl.label}
-              </Badge>
-            )}
-            {isGppMode && avgLeverage !== null && (
-              <Badge variant="outline" className="font-mono text-xs text-amber-400 border-amber-800/50">
-                lev {avgLeverage.toFixed(0)}
-              </Badge>
-            )}
-            <Badge variant="outline" className={cn("font-mono text-xs", evColor)}>
-              EV {sign(lineup.ev)}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <span className="text-xs font-mono font-bold text-muted-foreground">#{index + 1}</span>
+          {isGppMode && (
+            <Badge className="text-[8px] px-1.5 py-0 bg-amber-900/50 text-amber-300 border-amber-700/50 font-mono">
+              <Trophy className="w-2 h-2 mr-0.5 inline" />GPP
             </Badge>
-            <Badge variant="outline" className="font-mono text-xs text-blue-400 border-blue-800/50">
-              {pct(lineup.hitProbability)} hit
+          )}
+          {storyTpl && (
+            <Badge className="text-[8px] px-1.5 py-0 bg-violet-900/50 text-violet-300 border-violet-700/50 font-mono">
+              {storyTpl.emoji} {storyTpl.label}
             </Badge>
-            <Badge variant="outline" className="font-mono text-xs text-purple-400 border-purple-800/50">
-              {dollars(lineup.grossPayout)} payout
+          )}
+          {isGppMode && avgLeverage !== null && (
+            <Badge variant="outline" className="font-mono text-xs text-amber-400 border-amber-800/50">
+              lev {avgLeverage.toFixed(0)}
             </Badge>
-          </div>
-          <div className="flex items-center gap-1.5">
+          )}
+          <Badge variant="outline" className={cn("font-mono text-xs", evColor)}>
+            EV {sign(lineup.ev)}
+          </Badge>
+          <Badge variant="outline" className="font-mono text-xs text-blue-400 border-blue-800/50">
+            {pct(lineup.hitProbability)} hit
+          </Badge>
+          <Badge variant="outline" className="font-mono text-xs text-purple-400 border-purple-800/50">
+            {dollars(lineup.grossPayout)} payout
+          </Badge>
+          <div className="flex items-center gap-1.5 ml-auto">
             {lineup.diversificationScore !== undefined && (
-              <span className="text-[10px] font-mono text-muted-foreground" title="Diversification score">
+              <span className="text-[10px] font-mono text-muted-foreground hidden sm:inline" title="Diversification score">
                 div {pct(lineup.diversificationScore)}
               </span>
             )}
             <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 font-mono border-slate-700" onClick={() => onLoad(lineup)}>
-              Load to Entry
+              Load
             </Button>
           </div>
         </div>
@@ -792,14 +790,14 @@ function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap, o
             >{pick.playerName}</span>
             <span
               className={cn(
-                "text-muted-foreground shrink-0",
+                "text-muted-foreground shrink truncate max-w-[72px] sm:max-w-none",
                 onOpenProp && "cursor-pointer hover:text-cyan-300 transition-colors",
               )}
               role={onOpenProp ? "button" : undefined}
               tabIndex={onOpenProp ? 0 : undefined}
               onClick={onOpenProp ? () => onOpenProp(pick.ppLineId) : undefined}
               onKeyDown={onOpenProp ? (e) => { if (e.key === "Enter" || e.key === " ") onOpenProp(pick.ppLineId); } : undefined}
-              title={onOpenProp ? `Open ${pick.playerName} prop details` : undefined}
+              title={pick.statType}
             >{pick.statType}</span>
             <span
               className={cn(
@@ -822,7 +820,7 @@ function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap, o
             >{pick.direction === "more" ? "▲" : "▼"} {pct(pick.hitProbability)}</span>
             {isGppMode && sp && (
               <span
-                className={cn("font-mono text-[10px] shrink-0", sp.ownershipSource === "real" ? "text-cyan-400/90" : "text-amber-400/80")}
+                className={cn("font-mono text-[10px] shrink-0 hidden sm:inline", sp.ownershipSource === "real" ? "text-cyan-400/90" : "text-amber-400/80")}
                 title={`${sp.ownershipSource === "real" ? "Live" : "Est."} ownership ${sp.ownershipEst?.toFixed(1)}% / Lev ${sp.leverageScore?.toFixed(0)}`}
               >
                 {sp.ownershipEst != null ? `${sp.ownershipEst.toFixed(0)}%own${sp.ownershipSource === "real" ? "★" : ""}` : ""}
