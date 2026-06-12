@@ -770,7 +770,7 @@ export async function computeAllProjections(): Promise<number> {
         const seasonAvgMin = avgMinutesByPlayer.get(line.playerId) ?? null;
         factors.push(minutesFactor(expMin, seasonAvgMin, line.statType));
 
-        // 2. Usage rate factor — true USG% proxy using FGA_est + FTA_est + TOV
+        // 2. Usage rate factor — USG% proxy (FGA/FTA estimated from Points+3PM; TOV direct)
         if (isNBACountingStat(line.statType)) {
           const usagePct = playerUSGByPlayerId.get(line.playerId) ?? null;
           const usgBaselinePct = NBA_USG_BASELINE_PCT[player.position ?? ""] ?? null;
