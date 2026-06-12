@@ -27,11 +27,12 @@ const FETCH_LIMIT    = 500;
 const FETCH_TIMEOUT  = 20_000;
 
 interface NhlSummaryRow {
-  playerId:          number;
-  skaterFullName:    string;
-  timeOnIcePerGame:  number;   // seconds/game
-  ppTimeOnIcePerGame: number;  // seconds/game
-  gamesPlayed?:      number;
+  playerId:           number;
+  skaterFullName:     string;
+  timeOnIcePerGame:   number;   // seconds/game
+  ppTimeOnIcePerGame: number;   // seconds/game
+  gamesPlayed?:       number;
+  shots?:             number;   // season total shots (used as Corsi proxy when CF/60 unavailable)
 }
 
 interface NhlPossessionRow {
@@ -87,8 +88,8 @@ export async function syncNhlPlayerContext(): Promise<number> {
   // ── 2. Parse summary rows ─────────────────────────────────────────────────
   const summaryMap = new Map<number, NhlSummaryRow>();
   for (const row of summaryRaw) {
-    const id  = row.playerId as number;
-    const toi = row.timeOnIcePerGame as number;
+    const id    = row.playerId as number;
+    const toi   = row.timeOnIcePerGame as number;
     const ppToi = row.ppTimeOnIcePerGame as number;
     if (typeof id !== "number" || typeof toi !== "number") continue;
     summaryMap.set(id, {
@@ -97,6 +98,7 @@ export async function syncNhlPlayerContext(): Promise<number> {
       timeOnIcePerGame:   toi,
       ppTimeOnIcePerGame: ppToi ?? 0,
       gamesPlayed:        (row.gamesPlayed as number | undefined),
+      shots:              (row.shots as number | undefined),
     });
   }
 
@@ -144,7 +146,10 @@ export async function syncNhlPlayerContext(): Promise<number> {
     const ppToiMinPerGame = summary.ppTimeOnIcePerGame / 60;
     const ppUnit = inferPpUnit(ppToiMinPerGame);
 
-    // Corsi / Fenwick per 60 from possession data
+    // Corsi / Fenwick per 60 from possession data.
+    // Fallback: when the puckPossessions endpoint misses this player (partial
+    // coverage), derive a shots-per-60 proxy from the summary `shots` field.
+    // shots/60 ≈ Corsi For/60 minus missed/blocked — conservative but non-null.
     let corsiFor60: number | null = null;
     let fenwickFor60: number | null = null;
 
@@ -153,6 +158,15 @@ export async function syncNhlPlayerContext(): Promise<number> {
       const toiHours = poss.timeOnIce / 3600;
       corsiFor60   = poss.satFor  / toiHours;
       fenwickFor60 = poss.uSatFor / toiHours;
+    } else if (
+      summary.shots != null &&
+      summary.gamesPlayed != null &&
+      summary.gamesPlayed > 0 &&
+      summary.timeOnIcePerGame > 0
+    ) {
+      // Proxy: season shots → shots per 60 min of TOI (conservative Corsi estimate)
+      const seasonToiHours = (summary.timeOnIcePerGame * summary.gamesPlayed) / 3600;
+      corsiFor60 = summary.shots / seasonToiHours;
     }
 
     payloads.push({

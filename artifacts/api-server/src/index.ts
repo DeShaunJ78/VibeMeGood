@@ -5,6 +5,7 @@ import { computeAllProjections } from "./lib/projection/compute";
 import { recalcPropScores } from "./lib/sync/external-odds";
 import { computeStreaks } from "./lib/sync/streaks";
 import { syncFatigueData } from "./lib/sync/fatigue";
+import { syncNhlPlayerContext } from "./lib/sync/nhl-player-context";
 import { computeAllVarianceScores } from "./lib/variance";
 
 const rawPort = process.env["PORT"];
@@ -45,6 +46,12 @@ app.listen(port, (err) => {
       await logPull("internal", "fatigue", async () => {
         await syncFatigueData();
         return 0;
+      });
+      // Refresh NHL skater context (TOI / PP unit / Corsi) on every startup so
+      // NHL props always score against current-season role data. Free API, no credits.
+      await logPull("internal", "nhl-player-context", async () => {
+        const n = await syncNhlPlayerContext();
+        return n;
       });
       await logPull("internal", "variance", async () => {
         const n = await computeAllVarianceScores();
