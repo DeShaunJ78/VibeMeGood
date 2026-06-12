@@ -358,6 +358,37 @@ router.post("/sync/calibration", async (req, res) => {
   })();
 });
 
+// Full calibration rebuild — TRUNCATEs probability_calibration first so stale
+// buckets (e.g. from pre-Saber-Sim model runs) don't bleed into new results.
+// Use this after any model change that shifts projected means (factor additions,
+// prior updates, etc.).  Regular /sync/calibration does the same walk-forward
+// replay but via upsert (keeps old buckets if still valid).
+router.post("/sync/rebuild-calibration", async (req, res) => {
+  if (calibrationInFlight) {
+    res.json({ status: "skipped", reason: "already running" });
+    return;
+  }
+  const limit = Number((req.body as { limit?: number } | undefined)?.limit ?? 5000);
+  res.json({ status: "started", limit, truncated: true });
+  calibrationInFlight = (async () => {
+    try {
+      // Purge all existing buckets so the rebuild is clean
+      await db.execute(sql`TRUNCATE TABLE probability_calibration`);
+      logger.info("probability_calibration truncated — running full rebuild");
+      broadcastSyncStatus("calibration", "running", "Rebuilding calibration from scratch…");
+      const { calibrationJob } = await import("../scripts/calibration-job");
+      const result = await calibrationJob.runHistoricalCalibration(limit);
+      logger.info(result, "Calibration rebuild complete");
+      broadcastSyncStatus("calibration", "success", "Calibration rebuild complete");
+    } catch (e) {
+      logger.error({ err: e }, "Calibration rebuild failed");
+      broadcastSyncStatus("calibration", "error", e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      calibrationInFlight = null;
+    }
+  })();
+});
+
 router.post("/sync/game-schedule", async (req, res) => {
   await runSync("espn", "game-schedule", syncGameSchedule, res);
 });

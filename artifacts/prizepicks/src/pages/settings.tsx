@@ -303,6 +303,7 @@ const SYNC_JOB_GROUPS: Array<{ label: string; jobs: SyncJob[] }> = [
       { label: "Derive Blks+Stls",       endpoint: "/api/sync/derive-blks-stls" },
       { label: "MLB Pitcher Hand Tags",  endpoint: "/api/sync/backfill-mlb-pitcher-hand" },
       { label: "Run Calibration",        endpoint: "/api/sync/calibration", staleDays: 7 },
+      { label: "Rebuild Calibration",    endpoint: "/api/sync/rebuild-calibration" },
     ],
   },
 ];
@@ -321,6 +322,7 @@ const JOB_PROVIDER: Record<string, string> = {
   "/api/sync/calibration":                    "calibration",
   "/api/sync/nhl-player-context":             "nhl-stats",
   "/api/sync/backfill-mlb-pitcher-hand":      "internal",
+  "/api/sync/rebuild-calibration":            "internal",
 };
 
 function StatusDot({ status }: { status: string }) {

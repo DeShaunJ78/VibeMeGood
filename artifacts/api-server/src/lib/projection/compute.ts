@@ -627,6 +627,36 @@ export async function computeAllProjections(): Promise<number> {
     playerUSGByPlayerId.set(pId, Math.round(Math.max(5, Math.min(50, usg)) * 10) / 10);
   }
 
+  // ── NBA position-average USG% computed from live game logs ─────────────────
+  // Build a position → USG% baseline from the players we just computed USG% for.
+  // This replaces the hardcoded NBA_USG_BASELINE_PCT when ≥5 players exist per
+  // position so the factor tracks real season-to-date role distributions rather
+  // than static historical averages.
+  //
+  // Step 1: map playerId → position for NBA/WNBA active-line players
+  const nbaPlayerPositionById = new Map<number, string>();
+  for (const r of activeLines) {
+    if ((r.player.sport === "NBA" || r.player.sport === "WNBA") && r.player.position) {
+      nbaPlayerPositionById.set(r.line.playerId, r.player.position);
+    }
+  }
+  // Step 2: group computed USG% values by position
+  const positionUSGSamples = new Map<string, number[]>();
+  for (const [pId, usg] of playerUSGByPlayerId) {
+    const pos = nbaPlayerPositionById.get(pId);
+    if (!pos) continue;
+    if (!positionUSGSamples.has(pos)) positionUSGSamples.set(pos, []);
+    positionUSGSamples.get(pos)!.push(usg);
+  }
+  // Step 3: mean per position; fall back to hardcoded NBA_USG_BASELINE_PCT when
+  // <5 samples so the factor doesn't collapse with a thin active-line roster.
+  const computedUSGBaseline = new Map<string, number>();
+  for (const [pos, vals] of positionUSGSamples) {
+    if (vals.length < 5) continue;
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+    computedUSGBaseline.set(pos, Math.round(mean * 10) / 10);
+  }
+
   // ── MLB Saber Sim pre-computations ─────────────────────────────────────────
 
   /** Shape of game.metadata for MLB games with lineup info populated by schedule sync. */
@@ -1060,7 +1090,12 @@ export async function computeAllProjections(): Promise<number> {
         // 2. Usage rate factor — USG% proxy (FGA/FTA estimated from Points+3PM; TOV direct)
         if (isNBACountingStat(line.statType)) {
           const usagePct = playerUSGByPlayerId.get(line.playerId) ?? null;
-          const usgBaselinePct = NBA_USG_BASELINE_PCT[player.position ?? ""] ?? null;
+          // Prefer live-computed baseline (from real game logs this season);
+          // fall back to hardcoded when insufficient active-line sample size.
+          const usgBaselinePct =
+            computedUSGBaseline.get(player.position ?? "") ??
+            NBA_USG_BASELINE_PCT[player.position ?? ""] ??
+            null;
           const uf = usageRateFactor(usagePct, usgBaselinePct, line.statType);
           factors.push(uf);
           if (usagePct != null) usageRateIdx = usagePct; // store USG% proxy (0-100)
