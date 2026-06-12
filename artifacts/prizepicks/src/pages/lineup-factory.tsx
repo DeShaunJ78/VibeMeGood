@@ -39,6 +39,7 @@ import {
   type LineupFactoryConfigGppNarrativeFilters,
 } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
+import { PropDetailSheet } from "@/components/prop-detail-sheet";
 
 // ─── Persistence helpers ───────────────────────────────────────────────────────
 const CFG_KEY      = "lf_cfg";
@@ -684,13 +685,14 @@ function ConfidenceDot({ c }: { c: string }) {
 }
 
 // ─── Single lineup card ───────────────────────────────────────────────────────
-function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap }: {
+function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap, onOpenProp }: {
   lineup: GeneratedLineup;
   index: number;
   onLoad: (lu: GeneratedLineup) => void;
   isGppMode?: boolean;
   isStoryMode?: boolean;
   propsMap?: Map<number, FactoryScoredProp>;
+  onOpenProp?: (ppLineId: number) => void;
 }) {
   const evColor = lineup.ev >= 0 ? "text-emerald-400" : "text-red-400";
   const corrBg = lineup.correlationAdjusted
@@ -829,11 +831,24 @@ function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap }:
                   : isNegative
                   ? "Negative correlation — these players tend to cancel each other out"
                   : "Correlation direction unknown";
+                // Extract first player name (before " + ") and find matching pick
+                const firstName = pair.split(" + ")[0]?.trim() ?? "";
+                const matchedPick = lineup.picks.find(p =>
+                  p.playerName.toLowerCase() === firstName.toLowerCase()
+                );
+                const clickable = !!onOpenProp && !!matchedPick;
                 return (
                   <span
                     key={i}
-                    title={chipTitle}
-                    className={`text-[9px] font-mono border px-1.5 py-0.5 rounded cursor-help ${cls}`}
+                    role={clickable ? "button" : undefined}
+                    tabIndex={clickable ? 0 : undefined}
+                    onClick={clickable ? () => onOpenProp!(matchedPick!.ppLineId) : undefined}
+                    onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") onOpenProp!(matchedPick!.ppLineId); } : undefined}
+                    className={cn(
+                      `text-[9px] font-mono border px-1.5 py-0.5 rounded ${cls}`,
+                      clickable ? "cursor-pointer hover:brightness-125 transition-[filter]" : "cursor-help"
+                    )}
+                    title={clickable ? `Open ${firstName} prop details` : chipTitle}
                   >
                     {pair}
                   </span>
@@ -1658,6 +1673,7 @@ export default function LineupFactory() {
     return entries.length > 0 ? entries[0].id : null;
   });
   const [compareId, setCompareId] = useState<string | null>(null);
+  const [selectedPpLineId, setSelectedPpLineId] = useState<number | null>(null);
   const generate = useGenerateLineupFactory();
   const { addPick, setOptimizationObjective } = useEntry();
 
@@ -1817,6 +1833,7 @@ export default function LineupFactory() {
   const profileInfo = PROFILE_LABELS[cfg.varianceProfile];
 
   return (
+    <>
     <div className="flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
       {/* ── Header ── */}
       <div className="flex items-center gap-3 px-6 py-4 border-b border-border/50 shrink-0">
@@ -1965,7 +1982,7 @@ export default function LineupFactory() {
                   ) : (
                     <div className="grid gap-3">
                       {result.lineups.map((lu, i) => (
-                        <LineupCard key={lu.id} lineup={lu} index={i} onLoad={handleLoadLineup} isGppMode={isGppMode} isStoryMode={isStoryMode} propsMap={scoredPropsMap} />
+                        <LineupCard key={lu.id} lineup={lu} index={i} onLoad={handleLoadLineup} isGppMode={isGppMode} isStoryMode={isStoryMode} propsMap={scoredPropsMap} onOpenProp={setSelectedPpLineId} />
                       ))}
                     </div>
                   )}
@@ -2037,5 +2054,18 @@ export default function LineupFactory() {
         </div>
       </div>
     </div>
+
+    <PropDetailSheet
+      ppLineId={selectedPpLineId}
+      open={selectedPpLineId !== null}
+      onOpenChange={open => { if (!open) setSelectedPpLineId(null); }}
+      sharpSignal={null}
+      sharpConfidence={null}
+      sharpExplanation={null}
+      sharpSide={null}
+      sharpPublicPct={null}
+      calibrationCount={null}
+    />
+    </>
   );
 }
