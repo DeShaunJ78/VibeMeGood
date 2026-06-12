@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { gamesTable, teamsTable } from "@workspace/db/schema";
-import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { eq, and, gte, lte } from "drizzle-orm";
 import { logger } from "../logger";
 
 const SPORT_ENDPOINTS: Record<string, string> = {
@@ -155,10 +155,12 @@ async function syncSportForDate(
  */
 async function syncMlbProbableStarters(): Promise<number> {
   const today = new Date();
+  // Use UTC components so dateStr and the DB day window (setUTCHours below) are
+  // derived from the same calendar date regardless of the server's local timezone.
   const dateStr = [
-    today.getFullYear(),
-    String(today.getMonth() + 1).padStart(2, "0"),
-    String(today.getDate()).padStart(2, "0"),
+    today.getUTCFullYear(),
+    String(today.getUTCMonth() + 1).padStart(2, "0"),
+    String(today.getUTCDate()).padStart(2, "0"),
   ].join("-");
 
   const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${dateStr}&hydrate=probablePitcher`;
@@ -208,7 +210,6 @@ async function syncMlbProbableStarters(): Promise<number> {
   for (const g of games) {
     try {
       const homeAbbr = (g.teams?.home?.team?.abbreviation as string | undefined)?.toUpperCase();
-      const awayAbbr = (g.teams?.away?.team?.abbreviation as string | undefined)?.toUpperCase();
       const homeSP   = g.teams?.home?.probablePitcher?.fullName as string | undefined;
       const awaySP   = g.teams?.away?.probablePitcher?.fullName as string | undefined;
 
@@ -290,9 +291,13 @@ export async function syncGameSchedule(options?: {
 
   // Patch MLB games with today's probable starters so platoon/K-matchup/
   // pitcher-form factors can resolve the opposing pitcher per batter.
-  syncMlbProbableStarters().catch(e =>
-    logger.warn({ err: e }, "syncMlbProbableStarters fire-and-forget failed"),
-  );
+  // Awaited so the route reports success only after metadata is written.
+  try {
+    const starters = await syncMlbProbableStarters();
+    if (starters > 0) logger.info({ starters }, "MLB probable starters patched");
+  } catch (e) {
+    logger.warn({ err: e }, "syncMlbProbableStarters failed — continuing");
+  }
 
   return total;
 }
