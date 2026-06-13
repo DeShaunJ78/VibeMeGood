@@ -344,7 +344,24 @@ router.get("/market-intel", async (req, res) => {
       const varScore    = varScoreByPpLineId.get(row.line.id) ?? null;
       const recentMoves = recentMovesByPpLineId.get(row.line.id) ?? [];
       const allMoves    = allMovesByPpLineId.get(row.line.id) ?? [];
-      const sharpResult = allMoves.length >= 2 ? detectSharpMoney(allMoves) : null;
+      // Prefer the stored computed signal from the latest line_move_events row
+      // (written by POST /api/sharp/compute which runs detectAllSharpSignals and
+      // persists results back to the table). Fall back to on-the-fly detection
+      // when the sync hasn't been run yet (rows may only have raw "sharp_for" tags).
+      const COMPUTED_SIGNALS = new Set<string>(["sharp", "fade", "neutral"]);
+      const latestComputed = allMoves.find(
+        m => m.sharpSignal != null && COMPUTED_SIGNALS.has(m.sharpSignal),
+      );
+      const sharpResult = latestComputed
+        ? {
+            signal:             latestComputed.sharpSignal as "sharp" | "fade" | "neutral",
+            confidence:         (latestComputed.sharpConfidence ?? "low") as "low" | "medium" | "high",
+            explanation:        latestComputed.sharpExplanation ?? "",
+            estimatedPublicPct: 50,
+            sharpSide:          null as "over" | "under" | null,
+            publicSide:         null as "over" | "under" | null,
+          }
+        : allMoves.length >= 2 ? detectSharpMoney(allMoves) : null;
 
       const bookLines: Record<string, number> = {};
       for (const l of extLines) {
