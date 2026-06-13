@@ -1669,6 +1669,20 @@ export interface LiveGameScore {
   lastUpdate: string | null;
 }
 
+/**
+ * pre_game=not started; live=in-progress (no player stat feed); on_pace=final stat hit line; behind=final stat missed line; final=game over, no stat data
+ */
+export type LiveLegPacingStatus = typeof LiveLegPacingStatus[keyof typeof LiveLegPacingStatus];
+
+
+export const LiveLegPacingStatus = {
+  pre_game: 'pre_game',
+  live: 'live',
+  on_pace: 'on_pace',
+  behind: 'behind',
+  final: 'final',
+} as const;
+
 export interface LiveLeg {
   pickId: number;
   playerName: string;
@@ -1678,6 +1692,13 @@ export interface LiveLeg {
   result: string;
   /** @nullable */
   currentValue: number | null;
+  /**
+     * currentValue minus lineValue; positive means ahead of line
+     * @nullable
+     */
+  delta: number | null;
+  /** pre_game=not started; live=in-progress (no player stat feed); on_pace=final stat hit line; behind=final stat missed line; final=game over, no stat data */
+  pacingStatus: LiveLegPacingStatus;
   isLive: boolean;
   isFinal: boolean;
   gameScore: LiveGameScore | null;

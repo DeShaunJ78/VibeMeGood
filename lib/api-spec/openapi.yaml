@@ -3002,13 +3002,18 @@ components:
         direction:    { type: string }
         result:       { type: string }
         currentValue: { type: ["number", "null"] }
+        delta:        { type: ["number", "null"], description: "currentValue minus lineValue; positive means ahead of line" }
+        pacingStatus:
+          type: string
+          enum: [pre_game, live, on_pace, behind, final]
+          description: "pre_game=not started; live=in-progress (no player stat feed); on_pace=final stat hit line; behind=final stat missed line; final=game over, no stat data"
         isLive:       { type: boolean }
         isFinal:      { type: boolean }
         gameScore:
           oneOf:
             - { $ref: "#/components/schemas/LiveGameScore" }
             - { type: "null" }
-      required: [pickId, playerName, statType, lineValue, direction, result, currentValue, isLive, isFinal, gameScore]
+      required: [pickId, playerName, statType, lineValue, direction, result, currentValue, delta, pacingStatus, isLive, isFinal, gameScore]
 
     LiveEntry:
       type: object

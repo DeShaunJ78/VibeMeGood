@@ -2308,6 +2308,8 @@ export const GetLiveEntriesResponse = zod.object({
   "direction": zod.string(),
   "result": zod.string(),
   "currentValue": zod.number().nullable(),
+  "delta": zod.number().nullable().describe('currentValue minus lineValue; positive means ahead of line'),
+  "pacingStatus": zod.enum(['pre_game', 'live', 'on_pace', 'behind', 'final']).describe('pre_game=not started; live=in-progress (no player stat feed); on_pace=final stat hit line; behind=final stat missed line; final=game over, no stat data'),
   "isLive": zod.boolean(),
   "isFinal": zod.boolean(),
   "gameScore": zod.union([zod.object({

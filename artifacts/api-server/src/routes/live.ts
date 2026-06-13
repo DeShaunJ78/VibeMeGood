@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import {
   entriesTable, entryPicksTable, playersTable, gamesTable, teamsTable,
+  playerGameLogsTable,
 } from "@workspace/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 
@@ -59,8 +60,30 @@ router.get("/live/scores", async (_req, res) => {
   return void res.json({ games: all });
 });
 
+// Classify pick pacing given current/final stat vs line.
+// For completed games, ON_PACE = hit the line; BEHIND = missed.
+// For in-progress games, LIVE is returned (no player stat feed available).
+// For not-started games, PRE_GAME is returned.
+function classifyPacing(
+  isLive: boolean,
+  isFinal: boolean,
+  currentValue: number | null,
+  lineValue: number,
+  direction: string,
+): "pre_game" | "live" | "on_pace" | "behind" | "final" {
+  if (!isLive && !isFinal) return "pre_game";
+  if (isLive && !isFinal) return "live";
+  // completed game
+  if (currentValue == null) return "final";
+  const hit = direction === "less"
+    ? currentValue <= lineValue
+    : currentValue >= lineValue;
+  return hit ? "on_pace" : "behind";
+}
+
 // GET /api/live/entries
 // Returns today's pending entries with per-leg game context pulled from Odds API scores.
+// Populates currentValue from player_game_logs for completed legs.
 router.get("/live/entries", async (_req, res) => {
   const today = new Date().toISOString().split("T")[0]!;
 
@@ -78,6 +101,31 @@ router.get("/live/entries", async (_req, res) => {
     .from(entryPicksTable)
     .leftJoin(playersTable, eq(entryPicksTable.playerId, playersTable.id))
     .where(inArray(entryPicksTable.entryId, entryIds));
+
+  // Batch-fetch today's player game logs for all players in these picks.
+  // Used to populate currentValue for completed legs even before manual grading.
+  const playerIds = [...new Set(picks.map(p => p.pick.playerId).filter((id): id is number => id != null))];
+  const gameLogs = playerIds.length > 0
+    ? await db
+        .select({
+          playerId: playerGameLogsTable.playerId,
+          statType: playerGameLogsTable.statType,
+          value:    playerGameLogsTable.value,
+        })
+        .from(playerGameLogsTable)
+        .where(
+          and(
+            inArray(playerGameLogsTable.playerId, playerIds),
+            eq(playerGameLogsTable.gameDate, today),
+          ),
+        )
+    : [];
+
+  // logMap: "${playerId}:${statType}" → numeric final value
+  const logMap = new Map<string, number>();
+  for (const log of gameLogs) {
+    logMap.set(`${log.playerId}:${log.statType.toLowerCase()}`, parseFloat(log.value));
+  }
 
   const gameIds = [...new Set(picks.filter(p => p.pick.gameId != null).map(p => p.pick.gameId as number))];
 
@@ -130,20 +178,35 @@ router.get("/live/entries", async (_req, res) => {
   const result = entries.map(entry => {
     const entryPicks = picksByEntry.get(entry.id) ?? [];
     const legs = entryPicks.map(({ pick, player }) => {
-      const oddsGame = pick.gameId ? gameScoreMap.get(pick.gameId) : null;
-      const isLive    = oddsGame != null && !oddsGame.completed && (oddsGame.scores?.length ?? 0) > 0;
-      const isFinal   = oddsGame?.completed ?? false;
+      const oddsGame    = pick.gameId ? gameScoreMap.get(pick.gameId) : null;
+      const isLive      = oddsGame != null && !oddsGame.completed && (oddsGame.scores?.length ?? 0) > 0;
+      const isFinal     = oddsGame?.completed ?? false;
       if (isLive) hasAnyLive = true;
+
       const homeScore = oddsGame?.scores?.find(s => s.name === oddsGame.home_team)?.score ?? null;
       const awayScore = oddsGame?.scores?.find(s => s.name === oddsGame.away_team)?.score ?? null;
+
+      // Populate currentValue from today's game logs (available once a game finishes
+      // or if the stats provider has synced intra-game data).
+      const logKey = pick.playerId != null
+        ? `${pick.playerId}:${pick.statType.toLowerCase()}`
+        : null;
+      const currentValue = logKey != null ? (logMap.get(logKey) ?? null) : null;
+
+      const lineValue = Number(pick.lineValue);
+      const delta = currentValue != null ? Math.round((currentValue - lineValue) * 10) / 10 : null;
+      const pacingStatus = classifyPacing(isLive, isFinal, currentValue, lineValue, pick.direction ?? "more");
+
       return {
-        pickId:      pick.id,
-        playerName:  pick.playerName ?? player?.fullName ?? "Unknown",
-        statType:    pick.statType,
-        lineValue:   Number(pick.lineValue),
-        direction:   pick.direction,
-        result:      pick.result,
-        currentValue: null as null,
+        pickId:        pick.id,
+        playerName:    pick.playerName ?? player?.fullName ?? "Unknown",
+        statType:      pick.statType,
+        lineValue,
+        direction:     pick.direction,
+        result:        pick.result,
+        currentValue,
+        delta,
+        pacingStatus,
         isLive,
         isFinal,
         gameScore: oddsGame
