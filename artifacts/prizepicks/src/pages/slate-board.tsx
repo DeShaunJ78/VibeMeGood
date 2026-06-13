@@ -3,6 +3,7 @@ import {
   useGetSlate, getGetSlateQueryKey, useGetSlateSports,
   useAddToWatchlist, useRemoveFromWatchlist, useSetPpLineOverrides,
   useGetDataHealth, useGetMarketIntel, getGetMarketIntelQueryKey,
+  useGetMlbStarters, getGetMlbStartersQueryKey,
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -28,6 +29,7 @@ import { useUserSettings } from "@/hooks/use-user-settings";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
 
 type ProjectionFactor = { key: string; label: string; factor: number; explain: string };
+type MlbStarterInfo = { confirmed: boolean; homePitcher: string | null; awayPitcher: string | null; homeAbbr: string | null; awayAbbr: string | null };
 
 type OurProjection = {
   value: number;
@@ -663,6 +665,19 @@ export default function SlateBoard() {
   );
 
   const { data: dataHealth } = useGetDataHealth();
+
+  const { data: mlbStarters } = useGetMlbStarters({
+    query: { queryKey: getGetMlbStartersQueryKey(), staleTime: 5 * 60 * 1000 },
+  });
+  const mlbStarterByTeam = useMemo((): Map<string, MlbStarterInfo> => {
+    const m = new Map<string, MlbStarterInfo>();
+    for (const g of mlbStarters ?? []) {
+      const info: MlbStarterInfo = { confirmed: g.confirmed, homePitcher: g.homeStartingPitcher ?? null, awayPitcher: g.awayStartingPitcher ?? null, homeAbbr: g.homeTeamAbbr ?? null, awayAbbr: g.awayTeamAbbr ?? null };
+      if (g.homeTeamAbbr) m.set(g.homeTeamAbbr.toUpperCase(), info);
+      if (g.awayTeamAbbr) m.set(g.awayTeamAbbr.toUpperCase(), info);
+    }
+    return m;
+  }, [mlbStarters]);
   const boardFreshnessAt = dataHealth?.boardFreshnessAt ?? null;
   const boardAgeHours    = dataHealth?.boardAgeHours    ?? null;
   const ppNeverSynced    = !boardFreshnessAt;
@@ -857,6 +872,10 @@ export default function SlateBoard() {
   const { data: slate, isLoading: slateLoading } = useGetSlate(slateParams, {
     query: { queryKey: getGetSlateQueryKey(slateParams), enabled: sportResolved },
   });
+  const slateTeamByPpLineId = useMemo(
+    () => new Map((slate ?? []).map((r: any) => [r.ppLineId as number, { teamAbbr: r.teamAbbr as string | null, sport: r.sport as string }])),
+    [slate],
+  );
 
   const allSportSlateParams = {};
   const { data: allSportSlate } = useGetSlate(allSportSlateParams, {
@@ -2184,6 +2203,22 @@ export default function SlateBoard() {
                             <div>
                               <div className="font-bold text-sm leading-tight flex items-center gap-1.5">
                                 {row.playerName}
+                                {row.sport === "MLB" && (() => {
+                                  const info = mlbStarterByTeam.get(row.teamAbbr?.toUpperCase() ?? "");
+                                  if (!info || info.confirmed) return null;
+                                  return (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="inline-flex items-center gap-0.5 px-1 py-px bg-amber-900/40 border border-amber-700/40 rounded text-[9px] font-mono text-amber-400 cursor-help leading-none shrink-0">
+                                          <Clock className="w-2.5 h-2.5" />TBD
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="font-mono text-[11px] bg-slate-900 border-slate-700">
+                                        Starting pitcher not yet confirmed
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  );
+                                })()}
                                 {(() => {
                                   const gKey = makeGameMatchKey(row);
                                   if (!gKey) return null;
@@ -2996,6 +3031,10 @@ export default function SlateBoard() {
 
       {(() => {
         const sharpRow = selectedPropId ? miMap.get(selectedPropId) : undefined;
+        const selTeam = selectedPropId ? slateTeamByPpLineId.get(selectedPropId) : null;
+        const selectedMlbGame = selTeam?.sport === "MLB" && selTeam.teamAbbr
+          ? mlbStarterByTeam.get(selTeam.teamAbbr.toUpperCase()) ?? null
+          : null;
         return (
           <PropDetailSheet
             ppLineId={selectedPropId}
@@ -3008,6 +3047,7 @@ export default function SlateBoard() {
             sharpPublicPct={sharpRow?.sharpPublicPct ?? null}
             calibrationCount={sharpRow?.calibrationCount ?? null}
             focusFactors={focusFactors}
+            mlbStarterGame={selectedMlbGame}
           />
         );
       })()}

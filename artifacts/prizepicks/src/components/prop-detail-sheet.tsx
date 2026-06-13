@@ -16,6 +16,14 @@ import { PlayerAvatar } from "@/components/ui/player-avatar";
 import { VarianceBadge } from "@/components/ui/variance-badge";
 import { useUserSettings } from "@/hooks/use-user-settings";
 
+interface MlbStarterGame {
+  confirmed: boolean;
+  homePitcher: string | null;
+  awayPitcher: string | null;
+  homeAbbr: string | null;
+  awayAbbr: string | null;
+}
+
 interface PropDetailSheetProps {
   ppLineId: number | null;
   open: boolean;
@@ -27,6 +35,7 @@ interface PropDetailSheetProps {
   sharpPublicPct?:   number | null;
   calibrationCount?: number | null;
   focusFactors?: boolean;
+  mlbStarterGame?: MlbStarterGame | null;
 }
 
 interface HitRateWindow {
@@ -284,7 +293,7 @@ function WhyThisEdgePanel({ variance, gamePace, gamesUsed }: { variance: Varianc
   );
 }
 
-export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sharpConfidence, sharpExplanation, sharpSide, sharpPublicPct, calibrationCount, focusFactors }: PropDetailSheetProps) {
+export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sharpConfidence, sharpExplanation, sharpSide, sharpPublicPct, calibrationCount, focusFactors, mlbStarterGame }: PropDetailSheetProps) {
   const [data, setData] = useState<PropDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [explainText, setExplainText] = useState<string>("");
@@ -599,9 +608,18 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                         {" · "}{data.game.metadata.weather.temp}°F
                       </span>
                     )}
-                    {data.game?.metadata?.homePitcher && (
+                    {mlbStarterGame ? (
+                      <span className={`inline-flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                        mlbStarterGame.confirmed
+                          ? "bg-emerald-900/30 border-emerald-700/30 text-emerald-300"
+                          : "bg-amber-900/30 border-amber-700/30 text-amber-300"
+                      }`}>
+                        {mlbStarterGame.confirmed ? <CheckCircle className="w-2.5 h-2.5 shrink-0" /> : <AlertTriangle className="w-2.5 h-2.5 shrink-0" />}
+                        {mlbStarterGame.awayAbbr}: {mlbStarterGame.awayPitcher ?? "TBD"} vs {mlbStarterGame.homeAbbr}: {mlbStarterGame.homePitcher ?? "TBD"}
+                      </span>
+                    ) : data.game?.metadata?.homePitcher ? (
                       <span className="text-slate-400 text-[9px]">SP: {data.game.metadata.homePitcher}</span>
-                    )}
+                    ) : null}
                   </SheetDescription>
                   </div>
                 </div>
