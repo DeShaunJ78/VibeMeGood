@@ -122,6 +122,13 @@ export const FACTOR_CONFIG = {
     clamp: { min: 0.80, max: 1.20 },
     minGames: 20,
   },
+  recencyTrend: {
+    minGames: 3,
+    trivialThreshold: 0.05, // |pctDelta| below this is "neutral" (5%)
+    uiThreshold: 0.10,      // |pctDelta| must exceed this to show arrow in UI (10%)
+    weight: 40,             // pctDelta × weight → edgeScore pts (20% hot → +8 pts)
+    clamp: { min: -8, max: 8 },
+  },
 } as const;
 
 /** Baseline team total (points/runs/goals) per sport, used to scale implied-total. */
@@ -593,6 +600,40 @@ export function threePointDefenseFactor(input: {
     factor: round3(factor),
     explain: `Opp allows ${input.allowed3PM.toFixed(1)} 3PM/game vs league ${input.league3PM.toFixed(1)} (${dir}) → ×${factor.toFixed(3)}`,
   };
+}
+
+/**
+ * Recency trend — pct-delta of last N games vs the season mean.
+ * Distinct from formZScore (which is standard-deviation normalised): this
+ * measures the raw percentage shift so the UI can display "+18% above avg"
+ * in human-readable terms without requiring stdDev context.
+ *
+ * @param recentMean  Mean of the most-recent `games` values (most-recent first).
+ * @param seasonMean  Mean of all available game logs for this player+statType.
+ * @param games       Number of games used for `recentMean` (3–5).
+ */
+export function recencyTrendFactor(input: {
+  recentMean: number;
+  seasonMean: number;
+  games: number;
+}): {
+  direction: "up" | "down" | "neutral";
+  pctDelta: number;          // stored as % (e.g. 18.3 means +18.3%)
+  edgeContribution: number;  // edgeScore pts to add (bounded ±8)
+} | null {
+  const c = FACTOR_CONFIG.recencyTrend;
+  if (input.games < c.minGames || input.seasonMean <= 0) return null;
+  const ratio = input.recentMean / input.seasonMean - 1; // signed fraction
+  const pctDeltaRaw = Math.round(ratio * 1000) / 10;     // one decimal place
+  const direction: "up" | "down" | "neutral" =
+    ratio >  c.trivialThreshold ? "up"   :
+    ratio < -c.trivialThreshold ? "down" :
+    "neutral";
+  const rawContribution = ratio * c.weight;
+  const edgeContribution = Math.round(
+    Math.max(c.clamp.min, Math.min(c.clamp.max, rawContribution)) * 10,
+  ) / 10;
+  return { direction, pctDelta: pctDeltaRaw, edgeContribution };
 }
 
 // ── MLB Saber Sim helpers ────────────────────────────────────────────────────

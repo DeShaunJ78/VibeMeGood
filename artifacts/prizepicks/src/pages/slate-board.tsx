@@ -2203,6 +2203,25 @@ export default function SlateBoard() {
                             <div>
                               <div className="font-bold text-sm leading-tight flex items-center gap-1.5">
                                 {row.playerName}
+                                {(() => {
+                                  const rt = (row.scoring as Record<string, unknown> | null)?.recencyTrend as
+                                    { direction: string; pctDelta: number; games: number } | null | undefined;
+                                  if (!rt || rt.direction === "neutral" || Math.abs(rt.pctDelta) < 10) return null;
+                                  const isUp = rt.direction === "up";
+                                  const pct = Math.abs(rt.pctDelta).toFixed(0);
+                                  return (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className={`inline-flex items-center cursor-help ${isUp ? "text-emerald-400" : "text-rose-400"}`}>
+                                          {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="font-mono text-xs">
+                                        {isUp ? `+${pct}% above` : `−${pct}% below`} season avg (last {rt.games} games)
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  );
+                                })()}
                                 {row.sport === "MLB" && (() => {
                                   const info = mlbStarterByTeam.get(row.teamAbbr?.toUpperCase() ?? "");
                                   if (!info || info.confirmed) return null;

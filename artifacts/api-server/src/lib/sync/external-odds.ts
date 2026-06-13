@@ -12,6 +12,7 @@ import { pOverLine } from "../projection/normal-dist";
 import { calibratePOver, loadCalibrationMap } from "../projection/calibration";
 import { effectivePayoutMultiplier } from "../payout/multiplier";
 import { normalizeStatType } from "../stat-type";
+import { recencyTrendFactor } from "../projection/factors";
 
 const ODDS_BASE = process.env.ODDS_API_BASE || "https://api.the-odds-api.com/v4";
 const ODDS_KEY = process.env.ODDS_API_KEY || "";
@@ -679,6 +680,25 @@ export async function recalcPropScores(): Promise<void> {
         }
       }
 
+      // --- Recency trend (pct-delta, complement to z-score formContribution) ---
+      // Uses the same formLogs data but expresses the signal as a human-readable
+      // percentage shift instead of standard deviations. Stored in reasoning for
+      // UI display (trend arrow next to player name). Contributes a bounded ±8
+      // edgeScore adjustment on top of the existing z-score formContribution.
+      let recencyTrend: { direction: "up" | "down" | "neutral"; pctDelta: number; games: number } | null = null;
+      let recencyEdgeContribution = 0;
+      if (formLogs.length >= 3) {
+        const recentN = Math.min(5, formLogs.length);
+        const recentLogs = formLogs.slice(0, recentN);
+        const recentMean = recentLogs.reduce((a, b) => a + b, 0) / recentN;
+        const seasonMean = formLogs.reduce((a, b) => a + b, 0) / formLogs.length;
+        const rt = recencyTrendFactor({ recentMean, seasonMean, games: recentN });
+        if (rt) {
+          recencyTrend = { direction: rt.direction, pctDelta: rt.pctDelta, games: recentN };
+          recencyEdgeContribution = rt.edgeContribution;
+        }
+      }
+
       // --- Gate 1: Edge Score ---
       // Model contribution (0–100): pOver above 50% scaled to full range.
       // Market contribution (0–100): marketEdge is already a % (e.g. 2.5 = 2.5% edge);
@@ -688,7 +708,7 @@ export async function recalcPropScores(): Promise<void> {
       const baseEdge =
         Math.max(0, (pOver !== null ? (pOver - 50) * 2 : 0)) * 0.6 +
         Math.max(0, Math.min(100, marketEdge * 3)) * 0.4;
-      const rawEdge = Math.min(100, Math.max(0, baseEdge + formContribution));
+      const rawEdge = Math.min(100, Math.max(0, baseEdge + formContribution + recencyEdgeContribution));
 
       // Personal bias correction (optional, toggled per user setting).
       // When enabled and the personal bucket has ≥ 10 graded picks, apply a ±5
@@ -793,6 +813,7 @@ export async function recalcPropScores(): Promise<void> {
         minutesAvg,
         minutesStdDev,
         roleStability,
+        recencyTrend,
       };
 
       const scorePayload = {
