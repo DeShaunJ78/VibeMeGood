@@ -1239,6 +1239,49 @@ export interface HistoricalHitRates {
   vsThisOpponent: HitRateWindow;
 }
 
+export type LineupStoryPickDirection = typeof LineupStoryPickDirection[keyof typeof LineupStoryPickDirection];
+
+
+export const LineupStoryPickDirection = {
+  more: 'more',
+  less: 'less',
+} as const;
+
+export interface LineupStoryPick {
+  playerName: string;
+  statType: string;
+  direction: LineupStoryPickDirection;
+  lineValue: number;
+  hitProbability: number;
+  /** @nullable */
+  edgeScore?: number | null;
+  /** @nullable */
+  riskScore?: number | null;
+  lineType: string;
+  team: string;
+  sport: string;
+  /** @nullable */
+  paceTier?: string | null;
+  /** @nullable */
+  sharpSignal?: string | null;
+  /** @nullable */
+  gameTotal?: number | null;
+  /** @nullable */
+  volatilityRating?: string | null;
+}
+
+export interface LineupStoryRequest {
+  picks: LineupStoryPick[];
+  format: string;
+  ev: number;
+  hitProbability: number;
+  grossPayout: number;
+  stake: number;
+  correlationPairs?: string[] | null;
+  /** @nullable */
+  storyTemplate?: string | null;
+}
+
 export type LineupFactoryConfigFormat = typeof LineupFactoryConfigFormat[keyof typeof LineupFactoryConfigFormat];
 
 

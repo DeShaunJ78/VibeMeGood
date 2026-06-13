@@ -44,6 +44,7 @@ import auditRouter from "./audit";
 import intelFeedRouter from "./intel-feed";
 import statBiasRouter from "./stat-bias";
 import liveRouter from "./live";
+import lineupRouter from "./lineup";
 
 const router: IRouter = Router();
 
@@ -92,5 +93,6 @@ router.use(auditRouter);
 router.use(intelFeedRouter);
 router.use(statBiasRouter);
 router.use(liveRouter);
+router.use(lineupRouter);
 
 export default router;

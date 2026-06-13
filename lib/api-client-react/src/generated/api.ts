@@ -64,6 +64,7 @@ import type {
   LineupConfirmationInput,
   LineupFactoryConfig,
   LineupFactoryResult,
+  LineupStoryRequest,
   ListAlertsParams,
   ListDataPullLogsParams,
   ListEntriesParams,
@@ -6786,6 +6787,77 @@ export const useSyncPlatformLines = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getSyncPlatformLinesMutationOptions(options));
+    }
+
+export const getGenerateLineupStoryUrl = () => {
+
+
+
+
+  return `/api/lineup/story`
+}
+
+/**
+ * @summary Stream a Claude narrative for a generated lineup (SSE)
+ */
+export const generateLineupStory = async (lineupStoryRequest: LineupStoryRequest, options?: RequestInit): Promise<unknown> => {
+
+  return customFetch<unknown>(getGenerateLineupStoryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      lineupStoryRequest,)
+  }
+);}
+
+
+
+
+export const getGenerateLineupStoryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateLineupStory>>, TError,{data: BodyType<LineupStoryRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateLineupStory>>, TError,{data: BodyType<LineupStoryRequest>}, TContext> => {
+
+const mutationKey = ['generateLineupStory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateLineupStory>>, {data: BodyType<LineupStoryRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  generateLineupStory(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateLineupStoryMutationResult = NonNullable<Awaited<ReturnType<typeof generateLineupStory>>>
+    export type GenerateLineupStoryMutationBody = BodyType<LineupStoryRequest>
+    export type GenerateLineupStoryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Stream a Claude narrative for a generated lineup (SSE)
+ */
+export const useGenerateLineupStory = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateLineupStory>>, TError,{data: BodyType<LineupStoryRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateLineupStory>>,
+        TError,
+        {data: BodyType<LineupStoryRequest>},
+        TContext
+      > => {
+      return useMutation(getGenerateLineupStoryMutationOptions(options));
     }
 
 export const getGenerateLineupFactoryUrl = () => {

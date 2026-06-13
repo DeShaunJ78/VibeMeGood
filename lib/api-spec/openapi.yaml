@@ -1461,6 +1461,22 @@ paths:
               schema: { $ref: "#/components/schemas/SyncResult" }
 
   # ─── LINEUP FACTORY ─────────────────────────────────────────────────
+  /lineup/story:
+    post:
+      operationId: generateLineupStory
+      tags: [lineupFactory]
+      summary: Stream a Claude narrative for a generated lineup (SSE)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LineupStoryRequest" }
+      responses:
+        "200":
+          description: SSE stream of narrative text chunks
+          content:
+            text/event-stream: {}
+
   /lineup-factory/generate:
     post:
       operationId: generateLineupFactory
@@ -2694,6 +2710,38 @@ components:
       required: [playerName, statType, line, last10, last30, season, vsThisOpponent]
 
     # ─── LINEUP FACTORY ──────────────────────────────────────────────
+    LineupStoryPick:
+      type: object
+      properties:
+        playerName:       { type: string }
+        statType:         { type: string }
+        direction:        { type: string, enum: [more, less] }
+        lineValue:        { type: number }
+        hitProbability:   { type: number }
+        edgeScore:        { type: ["number", "null"] }
+        riskScore:        { type: ["number", "null"] }
+        lineType:         { type: string }
+        team:             { type: string }
+        sport:            { type: string }
+        paceTier:         { type: ["string", "null"] }
+        sharpSignal:      { type: ["string", "null"] }
+        gameTotal:        { type: ["number", "null"] }
+        volatilityRating: { type: ["string", "null"] }
+      required: [playerName, statType, direction, lineValue, hitProbability, lineType, team, sport]
+
+    LineupStoryRequest:
+      type: object
+      properties:
+        picks:            { type: array, items: { $ref: "#/components/schemas/LineupStoryPick" } }
+        format:           { type: string }
+        ev:               { type: number }
+        hitProbability:   { type: number }
+        grossPayout:      { type: number }
+        stake:            { type: number }
+        correlationPairs: { type: array, items: { type: string }, nullable: true }
+        storyTemplate:    { type: ["string", "null"] }
+      required: [picks, format, ev, hitProbability, grossPayout, stake]
+
     LineupFactoryConfig:
       type: object
       properties:

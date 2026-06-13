@@ -33,7 +33,7 @@ import {
 import {
   Factory, Zap, TrendingUp, DollarSign, AlertTriangle,
   ChevronRight, BarChart2, RefreshCw, CheckCircle2, Info, Pin, X, Lock, LockOpen,
-  History, Pencil, Check, Trash2, Clock, ArrowLeftRight, Trophy, Star, BookOpen,
+  History, Pencil, Check, Trash2, Clock, ArrowLeftRight, Trophy, Star, BookOpen, Sparkles,
 } from "lucide-react";
 import {
   type LineupFactoryConfigGppNarrativeFilters,
@@ -694,8 +694,140 @@ function ConfidenceDot({ c }: { c: string }) {
   return <span className={cn("inline-block w-1.5 h-1.5 rounded-full shrink-0", colors[c] ?? "bg-slate-500")} title={`${c} confidence`} />;
 }
 
+// ─── AI story panel ───────────────────────────────────────────────────────────
+function StoryPanel({
+  lineup,
+  propsMap,
+  autoGenerate,
+}: {
+  lineup: GeneratedLineup;
+  propsMap?: Map<number, FactoryScoredProp>;
+  autoGenerate?: boolean;
+}) {
+  const [storyText, setStoryText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [started, setStarted] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  async function generate() {
+    setStoryText("");
+    setLoading(true);
+    setStarted(true);
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+
+    const picks = lineup.picks.map(pick => {
+      const sp = propsMap?.get(pick.ppLineId);
+      return {
+        playerName:       pick.playerName,
+        statType:         pick.statType,
+        direction:        pick.direction as "more" | "less",
+        lineValue:        pick.ppLine,
+        hitProbability:   pick.hitProbability,
+        edgeScore:        pick.edgeScore ?? null,
+        riskScore:        sp?.riskScore ?? null,
+        lineType:         pick.lineType,
+        team:             sp?.team ?? "",
+        sport:            pick.sport,
+        paceTier:         sp?.paceTier ?? null,
+        sharpSignal:      sp?.sharpSignal ?? null,
+        gameTotal:        sp?.gameTotal ?? null,
+        volatilityRating: pick.volatilityRating ?? null,
+      };
+    });
+
+    const body = {
+      picks,
+      format:           lineup.format,
+      ev:               lineup.ev,
+      hitProbability:   lineup.hitProbability,
+      grossPayout:      lineup.grossPayout,
+      stake:            lineup.stake,
+      correlationPairs: lineup.correlationPairs ?? null,
+      storyTemplate:    lineup.storyTemplate ?? null,
+    };
+
+    try {
+      const res = await fetch("/api/lineup/story", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: abortRef.current.signal,
+      });
+      const reader = res.body?.getReader();
+      if (!reader) return;
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const payload = JSON.parse(line.slice(6)) as { text?: string; done?: boolean };
+              if (payload.text) setStoryText(prev => prev + payload.text!);
+            } catch {}
+          }
+        }
+      }
+    } catch (e: unknown) {
+      if ((e as Error).name !== "AbortError") {
+        setStoryText("Story generation failed. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (autoGenerate) void generate();
+    return () => { abortRef.current?.abort(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineup.id]);
+
+  if (!started) {
+    return (
+      <div className="mt-2 pt-2 border-t border-slate-800/60">
+        <button
+          onClick={() => void generate()}
+          className="flex items-center gap-1 text-[10px] font-mono text-violet-400/70 hover:text-violet-300 transition-colors"
+        >
+          <Sparkles className="h-2.5 w-2.5" />
+          Generate story
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 pt-2 border-t border-violet-900/30">
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-1">
+          <Sparkles className="h-2.5 w-2.5 text-violet-400 shrink-0" />
+          <span className="text-[9px] font-mono text-violet-400/80 uppercase tracking-wide">AI Narrative</span>
+        </div>
+        <button
+          onClick={() => void generate()}
+          disabled={loading}
+          title="Regenerate narrative"
+          className="text-[9px] font-mono text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-40 flex items-center gap-0.5"
+        >
+          <RefreshCw className={cn("h-2.5 w-2.5", loading && "animate-spin")} />
+        </button>
+      </div>
+      <p className="text-[10px] leading-relaxed text-slate-300/90 font-sans">
+        {storyText}
+        {loading && <span className="text-muted-foreground animate-pulse">▋</span>}
+      </p>
+    </div>
+  );
+}
+
 // ─── Single lineup card ───────────────────────────────────────────────────────
-function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap, onOpenProp }: {
+function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap, onOpenProp, autoGenerate }: {
   lineup: GeneratedLineup;
   index: number;
   onLoad: (lu: GeneratedLineup) => void;
@@ -703,6 +835,7 @@ function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap, o
   isStoryMode?: boolean;
   propsMap?: Map<number, FactoryScoredProp>;
   onOpenProp?: (ppLineId: number) => void;
+  autoGenerate?: boolean;
 }) {
   const evColor = lineup.ev >= 0 ? "text-emerald-400" : "text-red-400";
   const corrBg = lineup.correlationAdjusted
@@ -900,6 +1033,7 @@ function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap, o
             <span>{lineup.correlationNote}</span>
           </div>
         )}
+        <StoryPanel lineup={lineup} propsMap={propsMap} autoGenerate={autoGenerate} />
         {lineup.correlationPairs && lineup.correlationPairs.length > 0 && (
           <div className="mt-1.5 pt-1.5 border-t border-slate-800">
             <div className="flex items-center gap-1 mb-1">
@@ -1602,6 +1736,7 @@ function HistoryPanel({
   onDelete,
   onRename,
   onCompare,
+  onClearAll,
 }: {
   entries: SavedLineup[];
   activeId: string | null;
@@ -1610,6 +1745,7 @@ function HistoryPanel({
   onDelete: (id: string) => void;
   onRename: (id: string, label: string) => void;
   onCompare: (id: string | null) => void;
+  onClearAll: () => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -1637,6 +1773,13 @@ function HistoryPanel({
         <CardTitle className="text-xs uppercase font-mono text-muted-foreground tracking-wider flex items-center gap-1.5">
           <History className="w-3 h-3" />
           Saved Runs ({entries.length}/10)
+          <button
+            onClick={e => { e.stopPropagation(); onClearAll(); }}
+            title="Delete all saved runs"
+            className="ml-auto text-[9px] font-mono text-slate-600 hover:text-rose-400 transition-colors px-1 py-0.5 rounded hover:bg-rose-950/30 normal-case"
+          >
+            Clear all
+          </button>
         </CardTitle>
       </CardHeader>
       <CardContent className="px-2 pb-2 space-y-0.5">
@@ -1649,6 +1792,7 @@ function HistoryPanel({
           const pCash = Math.round(entry.result.portfolioStats.probAtLeastOneCashes * 100);
           const stake = entry.result.portfolioStats.totalStake;
           const fmtLabel = FORMAT_LABELS[entry.cfg.format] ?? entry.cfg.format;
+          const isStale = pCash > 90 && Date.now() - entry.savedAt > 3 * 60 * 60 * 1000;
 
           return (
             <div
@@ -1705,7 +1849,16 @@ function HistoryPanel({
                   <span className="px-1 py-px rounded text-[8px] font-mono bg-slate-800 border border-slate-700 text-slate-400">
                     {entry.cfg.picksPerEntry}-pick
                   </span>
-                  <span className="px-1 py-px rounded text-[8px] font-mono bg-emerald-950/60 border border-emerald-800/40 text-emerald-400">
+                  <span
+                    className={cn(
+                      "px-1 py-px rounded text-[8px] font-mono border flex items-center gap-0.5",
+                      isStale
+                        ? "bg-amber-950/40 border-amber-800/40 text-amber-400"
+                        : "bg-emerald-950/60 border-emerald-800/40 text-emerald-400",
+                    )}
+                    title={isStale ? "Probability data may be outdated — regenerate this lineup to recalibrate" : undefined}
+                  >
+                    {isStale && <AlertTriangle className="w-2 h-2 shrink-0" />}
                     {pCash}% cash
                   </span>
                   <span className="px-1 py-px rounded text-[8px] font-mono bg-slate-800 border border-slate-700 text-slate-400">
@@ -1713,7 +1866,7 @@ function HistoryPanel({
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+              <div className="flex items-center gap-0.5 shrink-0 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
                 {canCompare && !isActive && (
                   <button
                     onClick={e => { e.stopPropagation(); onCompare(isCompare ? null : entry.id); }}
@@ -1842,6 +1995,20 @@ export default function LineupFactory() {
     setCfg(DEFAULTS);
     saveCfg(DEFAULTS);
     handleClearPinned();
+  }
+
+  function handleClearAllSaved() {
+    localStorage.removeItem("lf_saved_lineups");
+    setSavedLineups([]);
+    setActiveId(null);
+    setCompareId(null);
+  }
+
+  function handleClearResult() {
+    localStorage.removeItem(RESULT_KEY);
+    setCachedResult(null);
+    setActiveId(null);
+    generate.reset();
   }
 
   function handleRemovePinned(ppLineId: number) {
@@ -1983,6 +2150,7 @@ export default function LineupFactory() {
             onDelete={id => { if (compareId === id) setCompareId(null); handleDeleteSaved(id); }}
             onRename={handleRenameSaved}
             onCompare={id => setCompareId(id)}
+            onClearAll={handleClearAllSaved}
           />
           <ConfigPanel cfg={cfg} onChange={setCfg} onGenerate={handleGenerate} onReset={handleReset} loading={generate.isPending} />
         </div>
@@ -2018,6 +2186,17 @@ export default function LineupFactory() {
 
           {result && !generate.isPending && !(activeEntry && compareEntry) && (
             <div className="space-y-5">
+              {/* Clear results button */}
+              <div className="flex justify-end">
+                <button
+                  onClick={handleClearResult}
+                  title="Clear results"
+                  className="flex items-center gap-1 text-[10px] font-mono text-slate-600 hover:text-rose-400 transition-colors"
+                >
+                  <X className="h-2.5 w-2.5" />
+                  Clear results
+                </button>
+              </div>
               {/* Stale result banner when viewing a history entry that isn't the newest */}
               {activeEntry && savedLineups.length > 0 && activeEntry.id !== savedLineups[0].id && (
                 <div className="flex items-center gap-2 rounded border border-slate-700/50 bg-slate-800/40 px-3 py-2 text-xs text-muted-foreground font-mono">
@@ -2084,7 +2263,7 @@ export default function LineupFactory() {
                   ) : (
                     <div className="grid gap-3">
                       {result.lineups.map((lu, i) => (
-                        <LineupCard key={lu.id} lineup={lu} index={i} onLoad={handleLoadLineup} isGppMode={isGppMode} isStoryMode={isStoryMode} propsMap={scoredPropsMap} onOpenProp={setSelectedPpLineId} />
+                        <LineupCard key={lu.id} lineup={lu} index={i} onLoad={handleLoadLineup} isGppMode={isGppMode} isStoryMode={isStoryMode} propsMap={scoredPropsMap} onOpenProp={setSelectedPpLineId} autoGenerate={i === 0} />
                       ))}
                     </div>
                   )}

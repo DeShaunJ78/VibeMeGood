@@ -1945,6 +1945,36 @@ export const SyncPlatformLinesResponse = zod.object({
 
 
 /**
+ * @summary Stream a Claude narrative for a generated lineup (SSE)
+ */
+export const GenerateLineupStoryBody = zod.object({
+  "picks": zod.array(zod.object({
+  "playerName": zod.string(),
+  "statType": zod.string(),
+  "direction": zod.enum(['more', 'less']),
+  "lineValue": zod.number(),
+  "hitProbability": zod.number(),
+  "edgeScore": zod.number().nullish(),
+  "riskScore": zod.number().nullish(),
+  "lineType": zod.string(),
+  "team": zod.string(),
+  "sport": zod.string(),
+  "paceTier": zod.string().nullish(),
+  "sharpSignal": zod.string().nullish(),
+  "gameTotal": zod.number().nullish(),
+  "volatilityRating": zod.string().nullish()
+})),
+  "format": zod.string(),
+  "ev": zod.number(),
+  "hitProbability": zod.number(),
+  "grossPayout": zod.number(),
+  "stake": zod.number(),
+  "correlationPairs": zod.array(zod.string()).nullish(),
+  "storyTemplate": zod.string().nullish()
+})
+
+
+/**
  * @summary Generate a portfolio of diversified PrizePicks lineups
  */
 export const generateLineupFactoryBodyPicksPerEntryMin = 2;
