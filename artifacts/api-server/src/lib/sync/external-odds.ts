@@ -857,12 +857,16 @@ export async function recalcPropScores(): Promise<void> {
   // ── Saber Sim evModifier → variance_scores ────────────────────────────────
   // For each active line, compute the product of sport-specific Saber Sim factor
   // multipliers from our_projections.adjustments and persist it to
-  // variance_scores.evModifier as a percentage adjustment (e.g. 1.15 → 15).
-  // This lets lineup-factory consume the signal for all sports (NBA/NFL/NHL)
-  // without re-running the factor engine at lineup-build time.
+  // variance_scores.evModifier as a decimal adjustment (e.g. 1.15 product → 0.15).
+  // Canonical unit: decimal matching computeEVModifier (explain.ts multiplies ×100
+  // for display; lineup-factory applies as hitProbability × (1 + mod)).
+  // This lets lineup-factory consume the signal for NBA/NFL/NHL without re-running
+  // the factor engine at lineup-build time. MLB is intentionally excluded:
+  // mlbPlatoon/strikeoutMatchup/pitcherForm are applied inline via mlbSaberMultiplier;
+  // writing them here too would double-apply (once in calcCompositeScore via
+  // mlbSaberMultiplier, and again in hitProbability via evModifier).
   // Null-context factors contribute 0 (never penalise missing data).
   const SABER_SIM_KEYS_BY_SPORT: Record<string, Set<string>> = {
-    MLB: new Set(["mlbPlatoon", "strikeoutMatchup", "pitcherForm"]),
     NBA: new Set(["minutes", "usageRate", "3pDefense"]),
     NFL: new Set(["nflAdvanced", "redZone", "snap"]),
     NHL: new Set(["nhlTOI", "nhlPP", "nhlCorsi"]),
@@ -902,7 +906,10 @@ export async function recalcPropScores(): Promise<void> {
         fired = true;
       }
     }
-    const evMod = fired ? Math.round((product - 1) * 100 * 10) / 10 : 0;
+    // Canonical unit: decimal (e.g. 0.15 for +15%) — matches computeEVModifier
+    // and explain.ts (which multiplies by 100 for display). Clamped to [-0.5, 0.5]
+    // to mirror the 0.5–1.5 range used in calcCompositeScore.
+    const evMod = fired ? Math.round((product - 1) * 1000) / 1000 : 0;
     varianceUpserts.push({
       ppLineId: line.id,
       playerId: line.playerId,

@@ -100,9 +100,10 @@ type ScoredProp = {
   // MLB Saber Sim matchup multiplier — product of platoon + K-matchup + pitcher-form
   // factors that fired for this prop.  null = no MLB factors fired (non-MLB or missing data).
   mlbSaberMultiplier: number | null;
-  // Saber Sim EV modifier (percentage, e.g. 15 = +15%) from variance_scores.evModifier.
-  // Persisted by recalcPropScores for all sports from sport-specific factor products.
-  // null = no variance_scores row exists; 0 = row exists but no Saber Sim factor fired.
+  // Saber Sim EV modifier (decimal, e.g. 0.15 = +15%) from variance_scores.evModifier.
+  // Persisted by recalcPropScores for NBA/NFL/NHL from sport-specific factor products.
+  // MLB is excluded — its factors use the mlbSaberMultiplier path instead.
+  // null = no variance_scores row; 0 = row exists but no Saber Sim factor fired.
   evModifier: number | null;
 };
 
@@ -229,42 +230,45 @@ function narrativeFit(prop: ScoredProp, template: StoryTemplate): number {
   // ── Saber Sim signal gates ────────────────────────────────────────────────
   // Each template gets an optional boost/penalty based on active Saber Sim factors.
   // Only applied when data is present (null = unknown → neutral, not excluded).
+  // evModifier is stored as decimal (0.15 = +15%); thresholds below match that unit.
+  // MLB uses mlbSaberMultiplier (computed inline); evModifier is NBA/NFL/NHL only.
+  // The two paths are mutually exclusive: mlbSaberMultiplier !== null → MLB prop,
+  // so evModifier checks only fire for non-MLB props (no double-counting).
 
   // "Pace Exploit" — fast-pace matchups, volume stats.
-  // Boost props where usage/minutes Saber Sim factors show a positive signal
-  // (evModifier > 0 means the factor product favours the over for this prop).
-  if (template.id === "pace_exploit" && prop.evModifier !== null) {
-    if (prop.evModifier > 10) score += 15;       // strong usage/TOI signal
-    else if (prop.evModifier > 0) score += 7;    // mild positive signal
-    else if (prop.evModifier < -5) score -= 10;  // factor headwind
+  // Boost props where usage/minutes Saber Sim factors show a positive signal.
+  if (template.id === "pace_exploit" && prop.evModifier !== null && prop.mlbSaberMultiplier === null) {
+    if (prop.evModifier > 0.10) score += 15;       // strong usage/TOI signal
+    else if (prop.evModifier > 0) score += 7;      // mild positive signal
+    else if (prop.evModifier < -0.05) score -= 10; // factor headwind
   }
 
   // "Shootout Stack" — high-total games, fast pace, overs.
   // For NFL, prefer props with active air yards/red zone factor signal.
   // For NBA, prefer high usage-rate props. Both are captured in evModifier.
-  if (template.id === "shootout" && prop.evModifier !== null) {
-    if (prop.evModifier > 8) score += 12;
+  if (template.id === "shootout" && prop.evModifier !== null && prop.mlbSaberMultiplier === null) {
+    if (prop.evModifier > 0.08) score += 12;
     else if (prop.evModifier > 0) score += 5;
   }
-  // MLB-specific: pitcher struggling (pitcherForm > 1) → batter boost is high-total friendly
+  // MLB-specific (uses mlbSaberMultiplier path): pitcher struggling → batter boost
   if (template.id === "shootout" && prop.mlbSaberMultiplier !== null) {
     if (prop.mlbSaberMultiplier > 1.08) score += 10;
     else if (prop.mlbSaberMultiplier < 0.93) score -= 8; // dominant pitcher = unfavorable
   }
 
   // "Underdog Special" — contrarian, low-owned, ceiling plays.
-  // Prefer props with a favorable Saber Sim matchup signal: these are low-owned
-  // but the model sees a real structural edge (platoon advantage, Corsi tilt, etc.).
+  // Prefer props with a favorable Saber Sim matchup signal: low-owned but structurally
+  // advantaged (platoon edge, Corsi tilt, AY-share spike, etc.).
   if (template.id === "underdog") {
     if (prop.mlbSaberMultiplier !== null && prop.mlbSaberMultiplier > 1.05) score += 15;
-    if (prop.evModifier !== null && prop.evModifier > 8) score += 12;
+    if (prop.evModifier !== null && prop.mlbSaberMultiplier === null && prop.evModifier > 0.08) score += 12;
   }
 
   // "Grind / Low Total" — defensive games, floor stats.
   // Penalise props where Saber Sim factors strongly favour scoring (we want floors).
   if (template.id === "grind") {
-    if (prop.evModifier !== null && prop.evModifier > 12) score -= 10;
-    if (prop.mlbSaberMultiplier !== null && prop.mlbSaberMultiplier > 1.1) score -= 8;
+    if (prop.evModifier !== null && prop.mlbSaberMultiplier === null && prop.evModifier > 0.12) score -= 10;
+    if (prop.mlbSaberMultiplier !== null && prop.mlbSaberMultiplier > 1.10) score -= 8;
   }
 
   return Math.max(0, Math.min(100, score));
@@ -415,14 +419,16 @@ function calcCompositeScore(prop: ScoredProp, objective: string, stake: number):
       //      mlbPlatoon × strikeoutMatchup × pitcherForm).
       // All other sports: derive from evModifier persisted to variance_scores by
       //      recalcPropScores (NBA: minutes/usage/3pDef; NFL: AY/redZone/snap;
-      //      NHL: TOI/PP/Corsi). Convert percentage (e.g. 15) → multiplier (1.15).
+      //      NHL: TOI/PP/Corsi). evModifier is decimal (0.15 = +15%) → add directly
+      //      to 1 to form a multiplier (1 + 0.15 = 1.15). MLB is excluded from the
+      //      evModifier write in recalcPropScores to avoid double-applying.
       // Null on either path means no Saber Sim data — fall back to 1 (no adjustment).
       // Clamp to [0.5, 1.5] so a single extreme factor can't dominate the ranking.
       let saberMult: number;
       if (prop.mlbSaberMultiplier !== null) {
         saberMult = Math.min(1.5, Math.max(0.5, prop.mlbSaberMultiplier));
       } else if (prop.evModifier !== null && prop.evModifier !== 0) {
-        saberMult = Math.min(1.5, Math.max(0.5, 1 + prop.evModifier / 100));
+        saberMult = Math.min(1.5, Math.max(0.5, 1 + prop.evModifier));
       } else {
         saberMult = 1;
       }
@@ -776,10 +782,11 @@ router.post("/lineup-factory/generate", async (req, res) => {
         confidence = "low";
       }
 
-      // Apply variance EV modifier
+      // Apply variance EV modifier — stored as decimal (0.06 = +6%), not percentage points.
+      // Use (1 + mod) directly; no /100 division needed.
       if (row.variance?.evModifier) {
         const mod = parseFloat(row.variance.evModifier.toString());
-        hitProbability = Math.min(0.97, Math.max(0.05, hitProbability * (1 + mod / 100)));
+        hitProbability = Math.min(0.97, Math.max(0.05, hitProbability * (1 + mod)));
       }
 
       // Line-type adjustments
