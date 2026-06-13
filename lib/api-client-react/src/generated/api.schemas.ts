@@ -746,6 +746,11 @@ export type ReviewStatsClvCoverageByMonthItem = {
   avgClv?: number | null;
 };
 
+export type ReviewStatsMarginDistributionItem = {
+  label: string;
+  count: number;
+};
+
 export type ReviewStatsStatBreakdownItem = {
   statType: string;
   pickCount: number;
@@ -784,6 +789,9 @@ export interface ReviewStats {
   clvCoverageByMonth?: ReviewStatsClvCoverageByMonthItem[];
   hitRateByPickCount?: unknown;
   hitRateByEntryType?: unknown;
+  /** @nullable */
+  avgMissMargin?: number | null;
+  marginDistribution?: ReviewStatsMarginDistributionItem[];
   statBreakdown?: ReviewStatsStatBreakdownItem[];
 }
 

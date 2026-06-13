@@ -1409,6 +1409,11 @@ export const GetReviewStatsResponse = zod.object({
 })).optional(),
   "hitRateByPickCount": zod.unknown().optional(),
   "hitRateByEntryType": zod.unknown().optional(),
+  "avgMissMargin": zod.number().nullish(),
+  "marginDistribution": zod.array(zod.object({
+  "label": zod.string(),
+  "count": zod.number()
+})).optional(),
   "statBreakdown": zod.array(zod.object({
   "statType": zod.string(),
   "pickCount": zod.number(),

@@ -2246,6 +2246,15 @@ components:
             required: [month, label, total, covered]
         hitRateByPickCount: {}
         hitRateByEntryType: {}
+        avgMissMargin: { type: ["number", "null"] }
+        marginDistribution:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              count: { type: integer }
+            required: [label, count]
         statBreakdown:
           type: array
           items:

@@ -1,4 +1,5 @@
 import { useGetReviewStats, useGetGppBacktest } from "@workspace/api-client-react";
+import type { ReviewStatsMarginDistributionItem } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -305,10 +306,10 @@ export default function Review() {
             })()}
             <StatCard
               label="Avg Miss Margin"
-              value={(s as any).avgMissMargin != null ? `${Number((s as any).avgMissMargin).toFixed(2)}` : "—"}
+              value={s.avgMissMargin != null ? `${Number(s.avgMissMargin).toFixed(2)}` : "—"}
               sub="avg shortfall (graded)"
               icon={TrendingDown}
-              color={(s as any).avgMissMargin != null && Number((s as any).avgMissMargin) > -0.5 ? "text-amber-400" : "text-rose-400"}
+              color={s.avgMissMargin != null && Number(s.avgMissMargin) > -0.5 ? "text-amber-400" : "text-rose-400"}
             />
             <StatCard
               label="Kelly Adherence"
@@ -634,7 +635,7 @@ export default function Review() {
           )}
 
           {/* Margin Distribution */}
-          {Array.isArray((s as any).marginDistribution) && (s as any).marginDistribution.some((b: any) => b.count > 0) && (
+          {Array.isArray(s.marginDistribution) && s.marginDistribution.some((b: ReviewStatsMarginDistributionItem) => b.count > 0) && (
             <Card className="bg-slate-900 border-slate-800">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-mono uppercase tracking-wider flex items-center gap-2">
@@ -650,7 +651,7 @@ export default function Review() {
                 <div className="h-40">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={(s as any).marginDistribution as Array<{ label: string; count: number }>}
+                      data={s.marginDistribution}
                       margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
@@ -667,7 +668,7 @@ export default function Review() {
                         }}
                       />
                       <Bar dataKey="count" radius={[3, 3, 0, 0]}>
-                        {((s as any).marginDistribution as Array<{ label: string; count: number }>).map((b: { label: string; count: number }, i: number) => {
+                        {s.marginDistribution.map((b: ReviewStatsMarginDistributionItem, i: number) => {
                           const color = b.label.startsWith("≤") || b.label.startsWith("−2") || b.label.startsWith("−1 to")
                             ? "#f43f5e"
                             : b.label === "−0.5 to 0"

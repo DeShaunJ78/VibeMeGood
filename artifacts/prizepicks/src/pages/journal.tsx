@@ -240,10 +240,22 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
   const { toast } = useToast();
   const updatePick = useUpdateEntryPick();
   const [regradingPickId, setRegradingPickId] = useState<number | null>(null);
+  const [actualInputs, setActualInputs] = useState<Record<number, string>>({});
 
   async function setPickResult(pickId: number, result: "hit" | "miss" | "dnp") {
+    const rawInput = actualInputs[pickId] ?? "";
+    const actualResult = result !== "dnp" && rawInput !== "" ? parseFloat(rawInput) : undefined;
     try {
-      await updatePick.mutateAsync({ entryId, pickId, data: { result } });
+      await updatePick.mutateAsync({
+        entryId,
+        pickId,
+        data: {
+          result,
+          ...(actualResult != null && !isNaN(actualResult) ? { actualResult } : {}),
+        },
+      });
+      setActualInputs(prev => { const next = { ...prev }; delete next[pickId]; return next; });
+      setRegradingPickId(null);
       await qc.invalidateQueries({ queryKey: getListEntriesQueryKey() });
     } catch {
       toast({ title: "Failed to update pick", variant: "destructive" });
@@ -317,6 +329,15 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
             <div className="ml-auto flex items-center gap-1 shrink-0">
               {pick.result === "pending" && pick.id ? (
                 <>
+                  <input
+                    type="number"
+                    step="0.5"
+                    placeholder="actual"
+                    value={actualInputs[pick.id] ?? ""}
+                    onChange={(e) => setActualInputs(prev => ({ ...prev, [pick.id]: e.target.value }))}
+                    title="Enter actual stat result (optional — enables margin tracking)"
+                    className="w-14 text-[10px] font-mono bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-slate-300 placeholder-slate-600 focus:outline-none focus:border-slate-500"
+                  />
                   <button
                     onClick={() => setPickResult(pick.id, "hit")}
                     disabled={updatePick.isPending}
@@ -336,18 +357,27 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
               ) : regradingPickId === pick.id ? (
                 <>
                   <span className="text-[10px] text-slate-500 font-mono mr-0.5">re-grade:</span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    placeholder="actual"
+                    value={actualInputs[pick.id] ?? ""}
+                    onChange={(e) => setActualInputs(prev => ({ ...prev, [pick.id]: e.target.value }))}
+                    title="Enter actual stat result (optional — enables margin tracking)"
+                    className="w-14 text-[10px] font-mono bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-slate-300 placeholder-slate-600 focus:outline-none focus:border-slate-500"
+                  />
                   <button
-                    onClick={() => { void setPickResult(pick.id, "hit"); setRegradingPickId(null); }}
+                    onClick={() => { void setPickResult(pick.id, "hit"); }}
                     disabled={updatePick.isPending}
                     className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-emerald-900/30 text-emerald-500 hover:bg-emerald-900/60 transition-colors border border-emerald-800/40"
                   >HIT</button>
                   <button
-                    onClick={() => { void setPickResult(pick.id, "miss"); setRegradingPickId(null); }}
+                    onClick={() => { void setPickResult(pick.id, "miss"); }}
                     disabled={updatePick.isPending}
                     className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-rose-900/30 text-rose-500 hover:bg-rose-900/60 transition-colors border border-rose-800/40"
                   >MISS</button>
                   <button
-                    onClick={() => { void setPickResult(pick.id, "dnp"); setRegradingPickId(null); }}
+                    onClick={() => { void setPickResult(pick.id, "dnp"); }}
                     disabled={updatePick.isPending}
                     className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors border border-slate-700"
                   >DNP</button>
