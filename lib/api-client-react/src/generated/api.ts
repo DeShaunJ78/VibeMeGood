@@ -5006,6 +5006,76 @@ export const useSyncExternalOdds = <TError = ErrorType<unknown>,
       return useMutation(getSyncExternalOddsMutationOptions(options));
     }
 
+export const getSyncMlbStartersUrl = () => {
+
+
+
+
+  return `/api/sync/mlb-starters`
+}
+
+/**
+ * @summary Refresh today's MLB probable starters from the free MLB Stats API and rescore props
+ */
+export const syncMlbStarters = async ( options?: RequestInit): Promise<SyncResult> => {
+
+  return customFetch<SyncResult>(getSyncMlbStartersUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSyncMlbStartersMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncMlbStarters>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncMlbStarters>>, TError,void, TContext> => {
+
+const mutationKey = ['syncMlbStarters'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncMlbStarters>>, void> = () => {
+
+
+          return  syncMlbStarters(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncMlbStartersMutationResult = NonNullable<Awaited<ReturnType<typeof syncMlbStarters>>>
+
+    export type SyncMlbStartersMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Refresh today's MLB probable starters from the free MLB Stats API and rescore props
+ */
+export const useSyncMlbStarters = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncMlbStarters>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof syncMlbStarters>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSyncMlbStartersMutationOptions(options));
+    }
+
 export const getSyncProjectionsUrl = () => {
 
 

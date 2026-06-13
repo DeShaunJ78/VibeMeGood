@@ -831,6 +831,11 @@ export interface CalibrationDiagnostics {
   statType?: string | null;
 }
 
+export type DataHealthMlbStarterCoverage = {
+  total: number;
+  confirmed: number;
+} | null;
+
 export interface DataHealth {
   providers: unknown[];
   lastPullLogs: DataPullLog[];
@@ -838,6 +843,7 @@ export interface DataHealth {
   systemHealthy?: boolean | null;
   boardFreshnessAt?: string | null;
   boardAgeHours?: number | null;
+  mlbStarterCoverage?: DataHealthMlbStarterCoverage;
 }
 
 export interface SyncResult {

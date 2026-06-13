@@ -15,7 +15,7 @@ import { syncInjuries } from "../lib/sync/injuries";
 import { syncProjections } from "../lib/projections/sync";
 import { syncNflAdvancedMetrics } from "../lib/sync/nfl-advanced";
 import { syncNhlPlayerContext } from "../lib/sync/nhl-player-context";
-import { syncGameSchedule } from "../lib/sync/games";
+import { syncGameSchedule, syncMlbProbableStarters } from "../lib/sync/games";
 import { syncGameOdds } from "../lib/sync/game-odds";
 import { syncWeather } from "../lib/sync/weather";
 import { computeMatchupHistory } from "../lib/sync/matchup-history";
@@ -613,6 +613,18 @@ router.post("/sync/nhl-player-context", async (req, res) => {
   // sees current factor state without a separate manual rescore step.
   recalcPropScores().catch(err =>
     req.log.warn({ err }, "recalcPropScores post-nhl-player-context failed (non-critical)"),
+  );
+});
+
+// MLB probable starters — lightweight, free MLB Stats API, no auth required.
+// Run independently of the full schedule sync so starters are refreshed as they
+// are confirmed throughout the day (often 1–2 h before first pitch).
+// After writing new pitcher names, kick off a prop rescore so the platoon /
+// K-matchup / pitcherForm factors see updated data before slates lock.
+router.post("/sync/mlb-starters", async (req, res) => {
+  await runSync("mlb-stats", "mlb-starters", syncMlbProbableStarters, res);
+  recalcPropScores().catch(err =>
+    req.log.warn({ err }, "recalcPropScores post-mlb-starters failed (non-critical)"),
   );
 });
 

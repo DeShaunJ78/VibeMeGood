@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { dataPullLogsTable, ppLinesTable } from "@workspace/db/schema";
-import { desc, eq, max, and, isNotNull } from "drizzle-orm";
+import { dataPullLogsTable, ppLinesTable, gamesTable } from "@workspace/db/schema";
+import { desc, eq, max, and, isNotNull, gte, lte } from "drizzle-orm";
 
 const router = Router();
 
@@ -19,6 +19,9 @@ const PROVIDERS = [
   { id: "espn",         label: "Game Schedule / Logs",    critical: false },
   { id: "internal",     label: "Internal (Variance / Fatigue / Matchups)", critical: false },
   { id: "nflverse",     label: "NFL Advanced Metrics",    critical: false },
+  // mlb-stats uses the free MLB Stats API (no credentials). Non-critical since
+  // it's a supplemental enrichment pass — the schedule sync still runs every 30 min.
+  { id: "mlb-stats",   label: "MLB Probable Starters",   critical: false },
 ];
 
 router.get("/dashboard/data-health", async (req, res) => {
@@ -71,6 +74,32 @@ router.get("/dashboard/data-health", async (req, res) => {
       ? Math.round((Date.now() - new Date(boardFreshnessAt).getTime()) / 36_000) / 100
       : null;
 
+    // MLB starter coverage — count today's games and how many have both pitchers confirmed.
+    // Uses the same UTC day window as syncMlbProbableStarters so counts are consistent.
+    const today = new Date();
+    const dayStart = new Date(today);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd = new Date(today);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+    dayEnd.setUTCHours(12, 0, 0, 0);
+
+    const mlbGames = await db
+      .select({ id: gamesTable.id, metadata: gamesTable.metadata })
+      .from(gamesTable)
+      .where(and(
+        eq(gamesTable.sport, "MLB"),
+        gte(gamesTable.startTime, dayStart),
+        lte(gamesTable.startTime, dayEnd),
+      ));
+
+    const mlbStarterCoverage = mlbGames.length > 0 ? {
+      total: mlbGames.length,
+      confirmed: mlbGames.filter(g => {
+        const m = (g.metadata ?? {}) as Record<string, unknown>;
+        return Boolean(m.homeStartingPitcher) && Boolean(m.awayStartingPitcher);
+      }).length,
+    } : null;
+
     // Overall health: degraded if any critical provider's last 3 runs all failed
     const criticalProviders = providers.filter(p => p.critical);
     const systemHealthy = criticalProviders.every(p => {
@@ -87,6 +116,7 @@ router.get("/dashboard/data-health", async (req, res) => {
       systemHealthy,
       lastPullLogs: allLogs.slice(0, 30),
       mode,
+      mlbStarterCoverage,
     });
   } catch (err) {
     req.log.error(err);

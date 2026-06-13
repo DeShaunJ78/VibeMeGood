@@ -1097,6 +1097,18 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SyncResult" }
 
+  /sync/mlb-starters:
+    post:
+      operationId: syncMlbStarters
+      tags: [sync]
+      summary: Refresh today's MLB probable starters from the free MLB Stats API and rescore props
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncResult" }
+
   /sync/projections:
     post:
       operationId: syncProjections
@@ -2298,6 +2310,13 @@ components:
         systemHealthy: { type: boolean, nullable: true }
         boardFreshnessAt: { type: string, format: date-time, nullable: true }
         boardAgeHours: { type: number, nullable: true }
+        mlbStarterCoverage:
+          nullable: true
+          type: object
+          properties:
+            total: { type: integer }
+            confirmed: { type: integer }
+          required: [total, confirmed]
       required: [providers, lastPullLogs, mode]
 
     # ─── SYNC ───────────────────────────────────────────────────────

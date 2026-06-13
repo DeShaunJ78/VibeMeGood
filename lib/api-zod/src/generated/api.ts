@@ -1482,7 +1482,11 @@ export const GetDataHealthResponse = zod.object({
   "mode": zod.string(),
   "systemHealthy": zod.boolean().nullish(),
   "boardFreshnessAt": zod.coerce.date().nullish(),
-  "boardAgeHours": zod.number().nullish()
+  "boardAgeHours": zod.number().nullish(),
+  "mlbStarterCoverage": zod.object({
+  "total": zod.number(),
+  "confirmed": zod.number()
+}).nullish()
 })
 
 
@@ -1553,6 +1557,19 @@ export const SyncInjuriesResponse = zod.object({
  * @summary Manually trigger external odds sync
  */
 export const SyncExternalOddsResponse = zod.object({
+  "success": zod.boolean(),
+  "provider": zod.string(),
+  "jobName": zod.string(),
+  "recordsProcessed": zod.number(),
+  "message": zod.string(),
+  "logId": zod.number().optional()
+})
+
+
+/**
+ * @summary Refresh today's MLB probable starters from the free MLB Stats API and rescore props
+ */
+export const SyncMlbStartersResponse = zod.object({
   "success": zod.boolean(),
   "provider": zod.string(),
   "jobName": zod.string(),

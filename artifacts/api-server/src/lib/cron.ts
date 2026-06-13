@@ -14,7 +14,7 @@ import { syncFatigueData } from "./sync/fatigue";
 import { syncInjuries } from "./sync/injuries";
 import { syncProjections } from "./projections/sync";
 import { syncNflAdvancedMetrics } from "./sync/nfl-advanced";
-import { syncGameSchedule } from "./sync/games";
+import { syncGameSchedule, syncMlbProbableStarters } from "./sync/games";
 import { syncGameOdds } from "./sync/game-odds";
 import { syncWeather } from "./sync/weather";
 import { computeMatchupHistory } from "./sync/matchup-history";
@@ -253,6 +253,21 @@ export function startCronJobs() {
   cron.schedule("*/30 * * * *", () =>
     logPull("espn", "game-schedule", syncGameSchedule)
   );
+
+  // MLB probable starters every 30 minutes — the MLB Stats API is free and
+  // requires no auth. Starters are often confirmed only 1–2 hours before
+  // first pitch, so polling at this cadence ensures the platoon / K-matchup /
+  // pitcherForm factors always have current pitcher data when props lock.
+  // Runs independently of the full schedule sync so a failed schedule pull
+  // never blocks a starter update.  After each write, recalcPropScores
+  // propagates the new pitcher signal into variance_scores.saberEvModifier so
+  // lineup builds see it immediately.
+  cron.schedule("*/30 * * * *", async () => {
+    await logPull("mlb-stats", "mlb-starters", syncMlbProbableStarters);
+    recalcPropScores().catch(err =>
+      logger.warn({ err }, "recalcPropScores post-mlb-starters cron failed (non-critical)"),
+    );
+  });
 
   // Game odds (spread/total) every 6 hours — bulk /odds endpoint, ~2 credits/sport.
   // Lines move slowly enough that 4 pulls/day is plenty; pre-lock covers urgency.

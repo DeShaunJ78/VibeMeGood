@@ -148,12 +148,14 @@ async function syncSportForDate(
  *
  * Called after every today-only schedule sync so matchup factors in the
  * projection engine (platoon splits, strikeout matchup, pitcher form) can
- * resolve the opposing pitcher for each batter.
+ * resolve the opposing pitcher for each batter.  Also exported so the cron
+ * and the /api/sync/mlb-starters route can call it independently without
+ * triggering a full schedule sync.
  *
  * The MLB Stats API is free and requires no auth:
  *   GET https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=YYYY-MM-DD&hydrate=probablePitcher
  */
-async function syncMlbProbableStarters(): Promise<number> {
+export async function syncMlbProbableStarters(): Promise<number> {
   const today = new Date();
   // Use UTC components so dateStr and the DB day window (setUTCHours below) are
   // derived from the same calendar date regardless of the server's local timezone.
