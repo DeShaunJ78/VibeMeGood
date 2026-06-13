@@ -484,21 +484,39 @@ export async function recalcPropScores(): Promise<void> {
   }
 
   // --- Batch-load all related data upfront (eliminates N+1 queries) ---
+  // Chunk large ID arrays to stay within Postgres's ~65k parameter limit.
+  // With 14k+ PP lines the player set can easily exceed 5k unique IDs.
   const uniquePlayerIds = [...new Set(lines.map(r => r.line.playerId))];
+
+  async function chunkQuery<T>(ids: number[], fn: (chunk: number[]) => Promise<T[]>): Promise<T[]> {
+    const CHUNK = 1000;
+    if (ids.length <= CHUNK) return fn(ids);
+    const results: T[] = [];
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const batch = await fn(ids.slice(i, i + CHUNK));
+      results.push(...batch);
+    }
+    return results;
+  }
+
   const [allExtLines, allProjections, allGameLogs] = await Promise.all([
-    db.select().from(externalLinesTable).where(inArray(externalLinesTable.ppLineId, activeIds)),
-    db.select().from(ourProjectionsTable).where(
-      inArray(ourProjectionsTable.playerId, uniquePlayerIds),
+    activeIds.length <= 1000
+      ? db.select().from(externalLinesTable).where(inArray(externalLinesTable.ppLineId, activeIds))
+      : chunkQuery(activeIds, chunk => db.select().from(externalLinesTable).where(inArray(externalLinesTable.ppLineId, chunk))),
+    chunkQuery(uniquePlayerIds, chunk =>
+      db.select().from(ourProjectionsTable).where(inArray(ourProjectionsTable.playerId, chunk)),
     ),
-    db.select({
-      playerId: playerGameLogsTable.playerId,
-      statType: playerGameLogsTable.statType,
-      value: playerGameLogsTable.value,
-      gameDate: playerGameLogsTable.gameDate,
-      minutes: playerGameLogsTable.minutes,
-    }).from(playerGameLogsTable)
-      .where(inArray(playerGameLogsTable.playerId, uniquePlayerIds))
-      .orderBy(desc(playerGameLogsTable.gameDate)),
+    chunkQuery(uniquePlayerIds, chunk =>
+      db.select({
+        playerId: playerGameLogsTable.playerId,
+        statType: playerGameLogsTable.statType,
+        value: playerGameLogsTable.value,
+        gameDate: playerGameLogsTable.gameDate,
+        minutes: playerGameLogsTable.minutes,
+      }).from(playerGameLogsTable)
+        .where(inArray(playerGameLogsTable.playerId, chunk))
+        .orderBy(desc(playerGameLogsTable.gameDate)),
+    ),
   ]);
 
   // Index game logs: "playerId:statType" → values[] (most recent first)
