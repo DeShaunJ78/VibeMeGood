@@ -791,7 +791,11 @@ router.patch("/entries/:entryId/picks/:pickId", async (req, res): Promise<void> 
         .from(entryPicksTable)
         .where(and(eq(entryPicksTable.id, pickId), eq(entryPicksTable.entryId, entryId)));
 
-      const resultMargin = (parsed.data.actualResult != null && existing)
+      // DNP = no margin ever (player didn't play). For hit/miss, compute margin
+      // only when actualResult is supplied; otherwise clear stale margin data so a
+      // re-grade that omits actualResult never shows a margin from a previous grade.
+      const isDnp = parsed.data.result === "dnp";
+      const resultMargin = (!isDnp && parsed.data.actualResult != null && existing)
         ? Math.round((parsed.data.actualResult - Number(existing.lineValue)) * 100) / 100
         : null;
 
@@ -800,8 +804,10 @@ router.patch("/entries/:entryId/picks/:pickId", async (req, res): Promise<void> 
           result: parsed.data.result,
           gradedBy: "manual",
           gradedAt: new Date(),
-          ...(parsed.data.actualResult != null ? { actualResult: String(parsed.data.actualResult) } : {}),
-          ...(resultMargin != null ? { resultMargin: String(resultMargin) } : {}),
+          // DNP: clear actual + margin. hit/miss with value: store both. hit/miss
+          // without value: clear margin to prevent stale data from a prior grade.
+          actualResult: isDnp ? null : parsed.data.actualResult != null ? String(parsed.data.actualResult) : undefined,
+          resultMargin: (isDnp || parsed.data.actualResult == null) ? null : String(resultMargin),
         })
         .where(and(
           eq(entryPicksTable.id, pickId),

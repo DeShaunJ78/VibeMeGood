@@ -361,7 +361,12 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
                   <span className={`font-bold uppercase ${PICK_RESULT_STYLES[pick.result] ?? "text-muted-foreground"}`}>
                     {pick.result}
                   </span>
-                  {pick.result !== "dnp" && (() => {
+                  {pick.result === "dnp" ? (
+                    <span
+                      className="text-[10px] font-mono px-1.5 py-0.5 rounded border shrink-0 bg-slate-800/60 border-slate-700 text-slate-400"
+                      title="Did not play — no margin applicable"
+                    >DNP</span>
+                  ) : (() => {
                     const margin = pick.resultMargin != null
                       ? Number(pick.resultMargin)
                       : pick.actualResult != null
