@@ -537,23 +537,21 @@ export function minutesFactor(
 
 /**
  * NBA/WNBA usage rate factor.
- * Computes a USG%-proxy signal: (player's avg val/game) / (position avg val/game)
- * normalized to the position's USG% baseline (PG≈28%, SG≈25%, SF≈22%, PF≈20%, C≈18%).
- * Both inputs should be in the same 0-100 percentage scale.
- *
- * True USG% (FGA + 0.44·FTA + TOV) is not computable from PrizePicks stat rows
- * alone (FGA/FTA aren't tracked as separate props), so per-game output normalized
- * by position is the highest-fidelity proxy available from local game-log data.
+ * Compares the player's per-minute production rate for this statType against the
+ * position-average val/min baseline computed from all available game logs.
+ * Both inputs are in the same units (stat units per minute played).
+ * Silently returns null when the position baseline is unavailable (< 50 sample games)
+ * or the player has insufficient minutes data.
  */
 export function usageRateFactor(
-  usagePct: number | null,            // player's estimated USG% proxy (0-100)
-  positionBaselinePct: number | null, // position avg USG% (0-100); e.g. PG=28, C=18
+  playerValPerMin: number | null,          // player's avg (statType value) per minute
+  positionBaselineValPerMin: number | null, // position-avg val/min from game logs
   statType: string,
 ): FactorResult | null {
-  if (usagePct == null || positionBaselinePct == null || positionBaselinePct <= 0) return null;
+  if (playerValPerMin == null || positionBaselineValPerMin == null || positionBaselineValPerMin <= 0) return null;
   if (!isNBACountingStat(statType)) return null;
   const c = FACTOR_CONFIG.usageRate;
-  const ratio = usagePct / positionBaselinePct;
+  const ratio = playerValPerMin / positionBaselineValPerMin;
   const adj = (ratio - 1) * c.weight;
   if (Math.abs(adj) < 0.03) return null;
   const factor = clamp(1 + adj, c.clamp.min, c.clamp.max);
@@ -562,7 +560,7 @@ export function usageRateFactor(
     key: "usageRate",
     label: "Usage rate",
     factor: round3(factor),
-    explain: `${dir}-usage: USG% proxy ${usagePct.toFixed(1)}% vs position avg ${positionBaselinePct.toFixed(1)}% → ×${factor.toFixed(3)}`,
+    explain: `${dir}-usage: ${playerValPerMin.toFixed(3)} val/min vs position avg ${positionBaselineValPerMin.toFixed(3)} → ×${factor.toFixed(3)}`,
   };
 }
 

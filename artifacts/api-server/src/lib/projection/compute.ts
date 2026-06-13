@@ -32,13 +32,6 @@ import {
 import { logger } from "../logger";
 import { normalizeStatType } from "../stat-type";
 
-// Position-average USG% (possession share), 2024-25 NBA season.
-// Used as the normalization target so computed proxy is in USG% scale (0-100).
-const NBA_USG_BASELINE_PCT: Record<string, number> = {
-  PG: 28, SG: 25, SF: 22, PF: 20, C: 18,
-};
-
-
 export interface ProjectionOutput {
   mean: number;
   stdDev: number;
@@ -452,7 +445,7 @@ export async function computeAllProjections(): Promise<number> {
   const teamAbbrMap = new Map(teams.map(t => [t.id, t.abbreviation]));
 
   // --- Batch-load all factor context in parallel ---
-  const [fatigueRows, paceRows, nflUsageMap, dvpRows, lineupConfirmRows, pitcherProfileRows, nhlContextRows] = await Promise.all([
+  const [fatigueRows, paceRows, nflUsageMap, dvpRows, lineupConfirmRows, pitcherProfileRows, nhlContextRows, posBaselineRows] = await Promise.all([
     // Latest fatigue row per player (ordered desc; we keep the first seen).
     queryInChunks(playerIds, chunk =>
       db.select().from(fatigueDataTable)
@@ -490,6 +483,25 @@ export async function computeAllProjections(): Promise<number> {
       db.select().from(nhlPlayerContextTable)
         .where(inArray(nhlPlayerContextTable.playerId, chunk))
     ),
+    // NBA/WNBA position val/min baselines — computed from ALL available game logs
+    // (not just active-line players), keyed by sport:position:statType.
+    // Replaces the hardcoded per-position USG% constant with live game-log data.
+    db.select({
+      sport:   playersTable.sport,
+      position: playersTable.position,
+      statType: playerGameLogsTable.statType,
+      vpm:  sql<string>`SUM(${playerGameLogsTable.value}::float) / NULLIF(SUM(${playerGameLogsTable.minutes}::float), 0)`,
+      games: sql<string>`count(*)`,
+    })
+    .from(playerGameLogsTable)
+    .innerJoin(playersTable, eq(playersTable.id, playerGameLogsTable.playerId))
+    .where(and(
+      inArray(playersTable.sport, ["NBA", "WNBA"]),
+      isNotNull(playerGameLogsTable.minutes),
+      sql`${playerGameLogsTable.minutes}::float > 0`,
+      isNotNull(playersTable.position),
+    ))
+    .groupBy(playersTable.sport, playersTable.position, playerGameLogsTable.statType),
   ]);
 
   // Index fatigue (first row per player = latest).
@@ -499,6 +511,16 @@ export async function computeAllProjections(): Promise<number> {
   // Index NHL player context (one row per player).
   const nhlContextByPlayer = new Map<number, typeof nhlPlayerContextTable.$inferSelect>();
   for (const ctx of nhlContextRows) nhlContextByPlayer.set(ctx.playerId, ctx);
+
+  // Index position val/min baselines — keyed by `${sport}:${position}:${statType}`.
+  // Only include positions with ≥ 50 sample games to avoid noisy single-player buckets.
+  const positionBaselineVPM = new Map<string, number>();
+  for (const r of posBaselineRows) {
+    if (!r.position || !r.sport || Number(r.games) < 50) continue;
+    const vpm = Number(r.vpm);
+    if (!isFinite(vpm) || vpm <= 0) continue;
+    positionBaselineVPM.set(`${r.sport}:${r.position}:${r.statType}`, vpm);
+  }
 
   // Index NBA pace by abbreviation (first = most recent season), fall back to seed.
   const paceByAbbr = new Map<string, number>();
@@ -602,7 +624,7 @@ export async function computeAllProjections(): Promise<number> {
     avgMinutesByPlayer.set(playerId, arr.reduce((a, b) => a + b, 0) / arr.length);
   }
 
-  // Per-game average per (player, statType) — used by USG% computation below.
+  // Per-game average per (player, statType) — used by val/min usage rate factor.
   // Requires ≥3 recent games to emit a signal.
   const avgValPerGameByKey = new Map<string, number>(); // `${playerId}:${statType}` → avg val/game
   for (const [key, logs] of gameLogsByKey) {
@@ -610,68 +632,6 @@ export async function computeAllProjections(): Promise<number> {
     if (recent.length < 3) continue;
     const avgVal = recent.reduce((s, l) => s + parseFloat(l.value.toString()), 0) / recent.length;
     if (avgVal >= 0) avgValPerGameByKey.set(key, avgVal);
-  }
-
-  // NBA/WNBA USG% proxy per player.
-  // Formula: USG% = 100 × (FGA_est + 0.44×FTA_est + TOV) × (Tm_MP/5) / (MP_avg × Tm_possUsed)
-  // FGA is estimated from Points + 3PM (FGA not tracked as a PrizePicks prop):
-  //   2PA ≈ (Points − 3PM×3) / 2 / 0.53   (2-pt FGM ÷ 2pt FG%)
-  //   3PA ≈ 3PM / 0.36                     (3PM ÷ league-avg 3P%)
-  // FTA is estimated from Points (FT ≈ 15% of NBA scoring at 77% FT%).
-  // Turnovers are read directly from the "Turnovers" game-log rows (IS a tracked stat).
-  const NBA_TM_POSS_USED = 112.0; // NBA avg: FGA + 0.44×FTA + TOV per team per game
-  const NBA_TM_MP        = 240;   // 5 players × 48 min
-  const playerUSGByPlayerId = new Map<number, number>(); // playerId → USG% (0–100)
-  for (const [pidStr] of avgValPerGameByKey) {
-    const pId = parseInt(pidStr.split(":")[0], 10);
-    if (playerUSGByPlayerId.has(pId)) continue; // already computed for this player
-    const pts     = avgValPerGameByKey.get(`${pId}:Points`) ?? null;
-    if (pts == null) continue;
-    const tov    = avgValPerGameByKey.get(`${pId}:Turnovers`) ?? 0;
-    const threepm = avgValPerGameByKey.get(`${pId}:3-PT Made`) ?? 0;
-    const mpAvg  = avgMinutesByPlayer.get(pId);
-    if (!mpAvg || mpAvg <= 0) continue;
-    // FGA estimation
-    const twoFGM = Math.max(0, pts - 3 * threepm);
-    const twoPA  = twoFGM / 2 / 0.53;
-    const threePA = threepm / 0.36;
-    const fgaEst = twoPA + threePA;
-    // FTA estimation
-    const ftaEst = pts * 0.15 / 0.77;
-    // USG%
-    const possUsed = fgaEst + 0.44 * ftaEst + tov;
-    const usg = 100 * possUsed * (NBA_TM_MP / 5) / (mpAvg * NBA_TM_POSS_USED);
-    playerUSGByPlayerId.set(pId, Math.round(Math.max(5, Math.min(50, usg)) * 10) / 10);
-  }
-
-  // ── NBA position-average USG% computed from live game logs ─────────────────
-  // Build a position → USG% baseline from the players we just computed USG% for.
-  // This replaces the hardcoded NBA_USG_BASELINE_PCT when ≥5 players exist per
-  // position so the factor tracks real season-to-date role distributions rather
-  // than static historical averages.
-  //
-  // Step 1: map playerId → position for NBA/WNBA active-line players
-  const nbaPlayerPositionById = new Map<number, string>();
-  for (const r of activeLines) {
-    if ((r.player.sport === "NBA" || r.player.sport === "WNBA") && r.player.position) {
-      nbaPlayerPositionById.set(r.line.playerId, r.player.position);
-    }
-  }
-  // Step 2: group computed USG% values by position
-  const positionUSGSamples = new Map<string, number[]>();
-  for (const [pId, usg] of playerUSGByPlayerId) {
-    const pos = nbaPlayerPositionById.get(pId);
-    if (!pos) continue;
-    if (!positionUSGSamples.has(pos)) positionUSGSamples.set(pos, []);
-    positionUSGSamples.get(pos)!.push(usg);
-  }
-  // Step 3: mean per position; fall back to hardcoded NBA_USG_BASELINE_PCT when
-  // <5 samples so the factor doesn't collapse with a thin active-line roster.
-  const computedUSGBaseline = new Map<string, number>();
-  for (const [pos, vals] of positionUSGSamples) {
-    if (vals.length < 5) continue;
-    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-    computedUSGBaseline.set(pos, Math.round(mean * 10) / 10);
   }
 
   // ── MLB Saber Sim pre-computations ─────────────────────────────────────────
@@ -1106,18 +1066,21 @@ export async function computeAllProjections(): Promise<number> {
         const seasonAvgMin = avgMinutesByPlayer.get(line.playerId) ?? null;
         factors.push(minutesFactor(expMin, seasonAvgMin, line.statType));
 
-        // 2. Usage rate factor — USG% proxy (FGA/FTA estimated from Points+3PM; TOV direct)
+        // 2. Usage rate factor — val/min: player's avg stat output per minute vs position baseline.
+        // Baseline is queried from ALL game logs (not just active-line players), so WNBA and thin
+        // slates get accurate baselines. Silently skips when position has < 50 sample games.
         if (isNBACountingStat(line.statType)) {
-          const usagePct = playerUSGByPlayerId.get(line.playerId) ?? null;
-          // Prefer live-computed baseline (from real game logs this season);
-          // fall back to hardcoded when insufficient active-line sample size.
-          const usgBaselinePct =
-            computedUSGBaseline.get(player.position ?? "") ??
-            NBA_USG_BASELINE_PCT[player.position ?? ""] ??
-            null;
-          const uf = usageRateFactor(usagePct, usgBaselinePct, line.statType);
+          const avgVal = avgValPerGameByKey.get(`${line.playerId}:${line.statType}`) ?? null;
+          const avgMin = avgMinutesByPlayer.get(line.playerId) ?? null;
+          const playerVPM = avgVal != null && avgMin != null && avgMin > 0
+            ? avgVal / avgMin
+            : null;
+          const positionVPM = player.position
+            ? positionBaselineVPM.get(`${sport}:${player.position}:${line.statType}`) ?? null
+            : null;
+          const uf = usageRateFactor(playerVPM, positionVPM, line.statType);
           factors.push(uf);
-          if (usagePct != null) usageRateIdx = usagePct; // store USG% proxy (0-100)
+          if (playerVPM != null) usageRateIdx = playerVPM; // store val/min signal
         }
 
         // 3. 3-point defense factor (team-wide 3PM allowed vs sport-partitioned league avg)
