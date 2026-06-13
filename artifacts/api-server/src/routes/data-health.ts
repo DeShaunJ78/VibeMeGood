@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { dataPullLogsTable, ppLinesTable, gamesTable } from "@workspace/db/schema";
+import { dataPullLogsTable, ppLinesTable, gamesTable, externalLinesTable, playersTable } from "@workspace/db/schema";
 import { desc, eq, max, and, isNotNull, gte, lte } from "drizzle-orm";
+import { SPORT_STAT_MARKETS } from "../lib/sync/external-odds";
 
 const router = Router();
 
@@ -100,6 +101,38 @@ router.get("/dashboard/data-health", async (req, res) => {
       }).length,
     } : null;
 
+    // --- Market gap stats for the external-odds provider ---
+    // Compute on-demand so Settings data-health can distinguish "synced but no
+    // book offered this market" from "stat type has no market key mapped at all".
+    // Uses the same 4-hour freshness window as the Slate Board stale-odds banner.
+    let marketGaps: { processed: number; noMarketOffered: number; noKeyMapped: number; total: number } | null = null;
+    try {
+      const recentCutoff = new Date(Date.now() - 4 * 60 * 60 * 1000);
+      const [activeLines, recentExtIds] = await Promise.all([
+        db
+          .select({ lineId: ppLinesTable.id, sport: playersTable.sport, statType: ppLinesTable.statType })
+          .from(ppLinesTable)
+          .innerJoin(playersTable, eq(ppLinesTable.playerId, playersTable.id))
+          .where(eq(ppLinesTable.isActive, true)),
+        db
+          .select({ ppLineId: externalLinesTable.ppLineId })
+          .from(externalLinesTable)
+          .where(gte(externalLinesTable.pulledAt, recentCutoff))
+          .then(rows => new Set(rows.map(r => r.ppLineId).filter((id): id is number => id != null))),
+      ]);
+      let noMarketOffered = 0;
+      let noKeyMapped = 0;
+      let processed = 0;
+      for (const { lineId, sport, statType } of activeLines) {
+        const hasKey = Boolean(SPORT_STAT_MARKETS[sport]?.[statType]);
+        if (!hasKey) { noKeyMapped++; continue; }
+        if (recentExtIds.has(lineId)) { processed++; } else { noMarketOffered++; }
+      }
+      marketGaps = { processed, noMarketOffered, noKeyMapped, total: activeLines.length };
+    } catch {
+      // non-fatal — marketGaps stays null
+    }
+
     // Overall health: degraded if any critical provider's last 3 runs all failed
     const criticalProviders = providers.filter(p => p.critical);
     const systemHealthy = criticalProviders.every(p => {
@@ -117,6 +150,7 @@ router.get("/dashboard/data-health", async (req, res) => {
       lastPullLogs: allLogs.slice(0, 30),
       mode,
       mlbStarterCoverage,
+      marketGaps,
     });
   } catch (err) {
     req.log.error(err);

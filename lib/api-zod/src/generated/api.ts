@@ -1511,7 +1511,13 @@ export const GetDataHealthResponse = zod.object({
   "mlbStarterCoverage": zod.object({
   "total": zod.number(),
   "confirmed": zod.number()
-}).nullish()
+}).nullish(),
+  "marketGaps": zod.object({
+  "processed": zod.number().describe('Props with a known market key AND a recent external line'),
+  "noMarketOffered": zod.number().describe('Props with a known market key but no book returned a line in last sync'),
+  "noKeyMapped": zod.number().describe('Props whose stat type has no Odds API market key configured'),
+  "total": zod.number().describe('Total active props')
+}).nullish().describe('Per-stat breakdown of external-odds market coverage. Only lines pulled in the last 4 h count as covered.')
 })
 
 

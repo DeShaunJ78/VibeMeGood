@@ -865,6 +865,20 @@ export type DataHealthMlbStarterCoverage = {
   confirmed: number;
 } | null;
 
+/**
+ * Per-stat breakdown of external-odds market coverage. Only lines pulled in the last 4 h count as covered.
+ */
+export type DataHealthMarketGaps = {
+  /** Props with a known market key AND a recent external line */
+  processed: number;
+  /** Props with a known market key but no book returned a line in last sync */
+  noMarketOffered: number;
+  /** Props whose stat type has no Odds API market key configured */
+  noKeyMapped: number;
+  /** Total active props */
+  total: number;
+} | null;
+
 export interface DataHealth {
   providers: unknown[];
   lastPullLogs: DataPullLog[];
@@ -873,6 +887,8 @@ export interface DataHealth {
   boardFreshnessAt?: string | null;
   boardAgeHours?: number | null;
   mlbStarterCoverage?: DataHealthMlbStarterCoverage;
+  /** Per-stat breakdown of external-odds market coverage. Only lines pulled in the last 4 h count as covered. */
+  marketGaps?: DataHealthMarketGaps;
 }
 
 export interface SyncResult {

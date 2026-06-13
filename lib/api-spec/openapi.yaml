@@ -2357,6 +2357,16 @@ components:
             total: { type: integer }
             confirmed: { type: integer }
           required: [total, confirmed]
+        marketGaps:
+          nullable: true
+          type: object
+          description: Per-stat breakdown of external-odds market coverage. Only lines pulled in the last 4 h count as covered.
+          properties:
+            processed:       { type: integer, description: "Props with a known market key AND a recent external line" }
+            noMarketOffered: { type: integer, description: "Props with a known market key but no book returned a line in last sync" }
+            noKeyMapped:     { type: integer, description: "Props whose stat type has no Odds API market key configured" }
+            total:           { type: integer, description: "Total active props" }
+          required: [processed, noMarketOffered, noKeyMapped, total]
       required: [providers, lastPullLogs, mode]
 
     # ─── SYNC ───────────────────────────────────────────────────────

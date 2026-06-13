@@ -51,7 +51,7 @@ const BASKETBALL_MARKETS: Record<string, string> = {
  * below is verified valid on the per-EVENT odds endpoint. Only include verified keys: a
  * single unsupported market makes the Odds API reject the whole event request.
  */
-const SPORT_STAT_MARKETS: Record<string, Record<string, string>> = {
+export const SPORT_STAT_MARKETS: Record<string, Record<string, string>> = {
   MLB: {
     "Hits": "batter_hits",
     "Total Bases": "batter_total_bases",

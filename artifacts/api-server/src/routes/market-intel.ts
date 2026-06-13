@@ -188,13 +188,18 @@ router.get("/market-intel", async (req, res) => {
         .groupBy(probabilityCalibrationTable.sport, probabilityCalibrationTable.statType),
 
       // Global market coverage counts (unfiltered, across all active lines).
+      // Only counts external lines pulled within the last 4 hours so stale
+      // historical rows from previous syncs don't inflate the coverage number.
       // Returned as marketCoverage so the banner can show "X / Y props have market lines".
       Promise.all([
         db
           .select({ count: sql<number>`count(distinct ${ppLinesTable.id})` })
           .from(ppLinesTable)
           .innerJoin(playersTable, eq(ppLinesTable.playerId, playersTable.id))
-          .innerJoin(externalLinesTable, eq(externalLinesTable.ppLineId, ppLinesTable.id))
+          .innerJoin(externalLinesTable, and(
+            eq(externalLinesTable.ppLineId, ppLinesTable.id),
+            gte(externalLinesTable.pulledAt, new Date(Date.now() - 4 * 60 * 60 * 1000)),
+          ))
           .where(eq(ppLinesTable.isActive, true))
           .then(r => Number(r[0]?.count ?? 0)),
         db
