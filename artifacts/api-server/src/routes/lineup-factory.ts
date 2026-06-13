@@ -100,6 +100,10 @@ type ScoredProp = {
   // MLB Saber Sim matchup multiplier — product of platoon + K-matchup + pitcher-form
   // factors that fired for this prop.  null = no MLB factors fired (non-MLB or missing data).
   mlbSaberMultiplier: number | null;
+  // Saber Sim EV modifier (percentage, e.g. 15 = +15%) from variance_scores.evModifier.
+  // Persisted by recalcPropScores for all sports from sport-specific factor products.
+  // null = no variance_scores row exists; 0 = row exists but no Saber Sim factor fired.
+  evModifier: number | null;
 };
 
 type GeneratedLineup = {
@@ -221,6 +225,48 @@ function narrativeFit(prop: ScoredProp, template: StoryTemplate): number {
     else if (own <= 20 && ceil >= 55) score += 15;
     else if (own > 30) score -= 20;
   }
+
+  // ── Saber Sim signal gates ────────────────────────────────────────────────
+  // Each template gets an optional boost/penalty based on active Saber Sim factors.
+  // Only applied when data is present (null = unknown → neutral, not excluded).
+
+  // "Pace Exploit" — fast-pace matchups, volume stats.
+  // Boost props where usage/minutes Saber Sim factors show a positive signal
+  // (evModifier > 0 means the factor product favours the over for this prop).
+  if (template.id === "pace_exploit" && prop.evModifier !== null) {
+    if (prop.evModifier > 10) score += 15;       // strong usage/TOI signal
+    else if (prop.evModifier > 0) score += 7;    // mild positive signal
+    else if (prop.evModifier < -5) score -= 10;  // factor headwind
+  }
+
+  // "Shootout Stack" — high-total games, fast pace, overs.
+  // For NFL, prefer props with active air yards/red zone factor signal.
+  // For NBA, prefer high usage-rate props. Both are captured in evModifier.
+  if (template.id === "shootout" && prop.evModifier !== null) {
+    if (prop.evModifier > 8) score += 12;
+    else if (prop.evModifier > 0) score += 5;
+  }
+  // MLB-specific: pitcher struggling (pitcherForm > 1) → batter boost is high-total friendly
+  if (template.id === "shootout" && prop.mlbSaberMultiplier !== null) {
+    if (prop.mlbSaberMultiplier > 1.08) score += 10;
+    else if (prop.mlbSaberMultiplier < 0.93) score -= 8; // dominant pitcher = unfavorable
+  }
+
+  // "Underdog Special" — contrarian, low-owned, ceiling plays.
+  // Prefer props with a favorable Saber Sim matchup signal: these are low-owned
+  // but the model sees a real structural edge (platoon advantage, Corsi tilt, etc.).
+  if (template.id === "underdog") {
+    if (prop.mlbSaberMultiplier !== null && prop.mlbSaberMultiplier > 1.05) score += 15;
+    if (prop.evModifier !== null && prop.evModifier > 8) score += 12;
+  }
+
+  // "Grind / Low Total" — defensive games, floor stats.
+  // Penalise props where Saber Sim factors strongly favour scoring (we want floors).
+  if (template.id === "grind") {
+    if (prop.evModifier !== null && prop.evModifier > 12) score -= 10;
+    if (prop.mlbSaberMultiplier !== null && prop.mlbSaberMultiplier > 1.1) score -= 8;
+  }
+
   return Math.max(0, Math.min(100, score));
 }
 
@@ -364,15 +410,22 @@ function calcCompositeScore(prop: ScoredProp, objective: string, stake: number):
       // prevents division-by-near-zero distortion without completely excluding them.
       const safeEdge = Math.max(0.1, edge);
       const base = (ceiling / own) * safeEdge;
-      // MLB Saber Sim: directly scale GPP score by the combined matchup multiplier
-      // (platoon split + K-rate matchup + pitcher form) when it fired.
-      // A favorable matchup (e.g. 1.15) boosts the prop up the pool; an unfavorable
-      // one (e.g. 0.85) suppresses it — both changes are proportional to the
-      // underlying factor strength so the ranking signal is crisp.
-      // Clamp to [0.5, 1.5] to prevent a single extreme factor from dominating.
-      const saberMult = prop.mlbSaberMultiplier !== null
-        ? Math.min(1.5, Math.max(0.5, prop.mlbSaberMultiplier))
-        : 1;
+      // Saber Sim multiplier — incorporates sport-specific factor signals.
+      // MLB: use mlbSaberMultiplier (computed inline from our_projections.adjustments:
+      //      mlbPlatoon × strikeoutMatchup × pitcherForm).
+      // All other sports: derive from evModifier persisted to variance_scores by
+      //      recalcPropScores (NBA: minutes/usage/3pDef; NFL: AY/redZone/snap;
+      //      NHL: TOI/PP/Corsi). Convert percentage (e.g. 15) → multiplier (1.15).
+      // Null on either path means no Saber Sim data — fall back to 1 (no adjustment).
+      // Clamp to [0.5, 1.5] so a single extreme factor can't dominate the ranking.
+      let saberMult: number;
+      if (prop.mlbSaberMultiplier !== null) {
+        saberMult = Math.min(1.5, Math.max(0.5, prop.mlbSaberMultiplier));
+      } else if (prop.evModifier !== null && prop.evModifier !== 0) {
+        saberMult = Math.min(1.5, Math.max(0.5, 1 + prop.evModifier / 100));
+      } else {
+        saberMult = 1;
+      }
       return base * saberMult;
     }
     default:                return ev;
@@ -911,6 +964,9 @@ router.post("/lineup-factory/generate", async (req, res) => {
         projMean:           pMean,
         projStdDev:         pStd,
         mlbSaberMultiplier,
+        evModifier: row.variance?.evModifier != null
+          ? parseFloat(row.variance.evModifier.toString())
+          : null,
       });
     }
 

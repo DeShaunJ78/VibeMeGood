@@ -3,6 +3,7 @@ import {
   externalLinesTable, ppLinesTable, playersTable, propScoresTable,
   lineMoveEventsTable, ourProjectionsTable, dataPullLogsTable,
   playerGameLogsTable, userSettingsTable, entryPicksTable,
+  varianceScoresTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { logger } from "../logger";
@@ -852,4 +853,78 @@ export async function recalcPropScores(): Promise<void> {
       await tx.insert(propScoresTable).values(scorePayloads.slice(i, i + 500));
     }
   });
+
+  // ── Saber Sim evModifier → variance_scores ────────────────────────────────
+  // For each active line, compute the product of sport-specific Saber Sim factor
+  // multipliers from our_projections.adjustments and persist it to
+  // variance_scores.evModifier as a percentage adjustment (e.g. 1.15 → 15).
+  // This lets lineup-factory consume the signal for all sports (NBA/NFL/NHL)
+  // without re-running the factor engine at lineup-build time.
+  // Null-context factors contribute 0 (never penalise missing data).
+  const SABER_SIM_KEYS_BY_SPORT: Record<string, Set<string>> = {
+    MLB: new Set(["mlbPlatoon", "strikeoutMatchup", "pitcherForm"]),
+    NBA: new Set(["minutes", "usageRate", "3pDefense"]),
+    NFL: new Set(["nflAdvanced", "redZone", "snap"]),
+    NHL: new Set(["nhlTOI", "nhlPP", "nhlCorsi"]),
+  };
+
+  const varianceUpserts: {
+    ppLineId: number;
+    playerId: number;
+    statType: string;
+    evModifier: string;
+    computedAt: Date;
+  }[] = [];
+
+  const now = new Date();
+  for (const { line, player } of lines) {
+    const sportKeys = SABER_SIM_KEYS_BY_SPORT[player.sport];
+    if (!sportKeys) continue; // sport not in Saber Sim set — skip
+    const nStat = normalizeStatType(line.statType);
+    const proj = projByPlayerStat.get(`${line.playerId}:${nStat}`);
+    const adjustments = proj?.adjustments as Array<{ key: string; factor: number }> | null | undefined;
+    if (!Array.isArray(adjustments)) {
+      // No adjustments — write 0 to clear any stale value
+      varianceUpserts.push({
+        ppLineId: line.id,
+        playerId: line.playerId,
+        statType: line.statType,
+        evModifier: "0",
+        computedAt: now,
+      });
+      continue;
+    }
+    let product = 1;
+    let fired = false;
+    for (const adj of adjustments) {
+      if (sportKeys.has(adj.key) && typeof adj.factor === "number") {
+        product *= adj.factor;
+        fired = true;
+      }
+    }
+    const evMod = fired ? Math.round((product - 1) * 100 * 10) / 10 : 0;
+    varianceUpserts.push({
+      ppLineId: line.id,
+      playerId: line.playerId,
+      statType: line.statType,
+      evModifier: String(evMod),
+      computedAt: now,
+    });
+  }
+
+  if (varianceUpserts.length > 0) {
+    for (let i = 0; i < varianceUpserts.length; i += 500) {
+      await db
+        .insert(varianceScoresTable)
+        .values(varianceUpserts.slice(i, i + 500))
+        .onConflictDoUpdate({
+          target: varianceScoresTable.ppLineId,
+          set: {
+            evModifier: sql`excluded.ev_modifier`,
+            computedAt: sql`excluded.computed_at`,
+          },
+        });
+    }
+    logger.info({ count: varianceUpserts.length }, "recalcPropScores: persisted Saber Sim evModifier to variance_scores");
+  }
 }
