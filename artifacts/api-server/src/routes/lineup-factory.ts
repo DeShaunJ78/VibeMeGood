@@ -4,7 +4,7 @@ import {
   ppLinesTable, playersTable, propScoresTable, ourProjectionsTable,
   varianceScoresTable, externalLinesTable, syncRunsTable,
   entryPicksTable, entriesTable, gamesTable, lineMoveEventsTable,
-  teamPaceRatingsTable, teamsTable, crowdOwnershipTable,
+  teamPaceRatingsTable, teamsTable, crowdOwnershipTable, gameEnvironmentTable,
 } from "@workspace/db/schema";
 import { eq, and, inArray, desc, isNotNull } from "drizzle-orm";
 import { logger } from "../lib/logger";
@@ -487,9 +487,10 @@ router.post("/lineup-factory/generate", async (req, res) => {
       extByLineId.get(el.ppLineId)!.push(el);
     }
 
-    // ── 2b. Bulk query game totals from games table ────────────────────────
+    // ── 2b. Bulk query game totals and implied pace from games + game_environment ──
     // syncGameOdds writes consensus totals onto games.total from the Odds API.
-    // game_environment is a legacy table and is never populated; read games directly.
+    // game_environment stores per-game impliedPace (possessions/plays) and gameTotal
+    // — seeded with realistic values so GPP pace and total filters are exercised locally.
     const gameIds = [...new Set(rows.map(r => r.line.gameId).filter((id): id is number => id !== null))];
     const allGameRows = gameIds.length
       ? await db.select({ id: gamesTable.id, total: gamesTable.total })
@@ -499,6 +500,35 @@ router.post("/lineup-factory/generate", async (req, res) => {
     const gameTotalById = new Map<number, number>();
     for (const g of allGameRows) {
       if (g.total != null) gameTotalById.set(g.id, parseFloat(g.total.toString()));
+    }
+
+    // Also load game_environment for per-game impliedPace (game-specific pace signal
+    // more accurate than season-average team pace ratings) and gameTotal fallback.
+    const allGameEnvRows = gameIds.length
+      ? await db.select({
+          gameId:      gameEnvironmentTable.gameId,
+          gameTotal:   gameEnvironmentTable.gameTotal,
+          impliedPace: gameEnvironmentTable.impliedPace,
+        })
+          .from(gameEnvironmentTable)
+          .where(inArray(gameEnvironmentTable.gameId, gameIds))
+      : [];
+    // Map: gameId → { impliedPace, gameTotal } — used for game-level pace tier + total fallback
+    const gameEnvByGameId = new Map<number, { impliedPace: number | null; gameTotal: number | null }>();
+    for (const ge of allGameEnvRows) {
+      if (ge.gameId != null) {
+        gameEnvByGameId.set(ge.gameId, {
+          impliedPace: ge.impliedPace != null ? parseFloat(ge.impliedPace.toString()) : null,
+          gameTotal:   ge.gameTotal  != null ? parseFloat(ge.gameTotal.toString())  : null,
+        });
+      }
+    }
+    // Back-fill gameTotalById from game_environment when games.total is not yet populated
+    // (e.g. before external-odds sync has run).
+    for (const [gid, env] of gameEnvByGameId) {
+      if (!gameTotalById.has(gid) && env.gameTotal != null) {
+        gameTotalById.set(gid, env.gameTotal);
+      }
     }
 
     // ── 2c. Bulk query team pace ratings (keyed by teamId via teams.abbreviation) ──
@@ -769,24 +799,46 @@ router.post("/lineup-factory/generate", async (req, res) => {
         ownershipSource = "estimated";
       }
 
-      // Pace tier: from team_pace_ratings (via player teamId → teams.abbreviation → pace table)
-      const paceTier = row.player.teamId ? (paceByTeamId.get(row.player.teamId) ?? null) : null;
+      // Pace tier: prefer game_environment.impliedPace (per-game, more accurate) over
+      // team_pace_ratings (season average).  Sport-aware thresholds match the different
+      // possession-rate scales used in each sport:
+      //   NBA: possessions/48 min (~95-110); fast >104, slow <100
+      //   NFL: offensive plays/game (~55-70); fast >65, slow <63
+      //   Other sports: fall back to team pace rating when no game-env data present
+      const teamPaceTier = row.player.teamId ? (paceByTeamId.get(row.player.teamId) ?? null) : null;
+      const gameEnv = row.line.gameId ? (gameEnvByGameId.get(row.line.gameId) ?? null) : null;
+      let paceTier: "fast" | "normal" | "slow" | null = teamPaceTier;
+      if (gameEnv?.impliedPace != null) {
+        const ip = gameEnv.impliedPace;
+        if (row.player.sport === "NBA") {
+          paceTier = ip > 104 ? "fast" : ip < 100 ? "slow" : "normal";
+        } else if (row.player.sport === "NFL") {
+          paceTier = ip > 65 ? "fast" : ip < 63 ? "slow" : "normal";
+        }
+        // Other sports: keep teamPaceTier (already set as default above)
+      }
 
-      // Game total from pre-fetched game environment
+      // Game total: gameTotalById already merges games.total + game_environment.gameTotal fallback
       const gameTotal = row.line.gameId ? (gameTotalById.get(row.line.gameId) ?? null) : null;
 
-      // Sharp signal — direction-aware: map (stored signal, moveDirection, pickDirection) → sharp_for/sharp_against/public/neutral
-      // Line moves UP = books raised the line = sharp money was betting the OVER (more)
-      // Line moves DOWN = books lowered the line = sharp money was betting the UNDER (less)
+      // Sharp signal — direction-aware mapping using (sharpSignal, moveDirection, pickDirection).
+      // Both "sharp" (sharp-with-public) and "fade" (sharp-against-public) encode the
+      // actual sharp position via moveDirection:
+      //   moveDirection "up"   → line rose → sharp money was on the OVER (more)
+      //   moveDirection "down" → line fell → sharp money was on the UNDER (less)
+      // "fade" rows from the seed (Jokic Assists, Curry 3PT, CMC Rush) use "down" + "fade"
+      // meaning sharp money faded the over — those produce "sharp_against" for a "more" pick.
       const rawSharp = latestSharpByLine.get(row.line.id) ?? null;
       let sharpSignal: string | null = null;
       if (rawSharp) {
-        if (rawSharp.signal === "sharp" && rawSharp.moveDirection) {
+        if ((rawSharp.signal === "sharp" || rawSharp.signal === "fade") && rawSharp.moveDirection) {
           const sharpOnOver = rawSharp.moveDirection === "up";  // line moved up → sharp bet over
           const pickIsOver  = direction === "more";
           sharpSignal = sharpOnOver === pickIsOver ? "sharp_for" : "sharp_against";
         } else if (rawSharp.signal === "sharp") {
-          sharpSignal = "sharp_for";  // no direction data → assume aligned (conservative)
+          sharpSignal = "sharp_for";    // no direction data → assume sharp-aligned (conservative)
+        } else if (rawSharp.signal === "fade") {
+          sharpSignal = "sharp_against"; // no direction data → assume fade = opposing (conservative)
         } else if (rawSharp.signal === "public") {
           sharpSignal = "public";
         } else {
