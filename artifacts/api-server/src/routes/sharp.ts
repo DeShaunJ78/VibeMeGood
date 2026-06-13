@@ -37,7 +37,7 @@ router.post("/sharp/compute", async (req, res) => {
         explanation: result.explanation,
       });
       if (result.signal === "sharp")   sharpCount++;
-      else if (result.signal === "public") publicCount++;
+      else if (result.signal === "fade") publicCount++;
       else                             neutralCount++;
     }
 
@@ -169,7 +169,7 @@ router.get("/sharp/summary", async (req, res) => {
     let sharp = 0, publicCount = 0, neutral = 0;
     for (const r of signalMap.values()) {
       if (r.signal === "sharp")        sharp++;
-      else if (r.signal === "public")  publicCount++;
+      else if (r.signal === "fade")    publicCount++;
       else                             neutral++;
     }
     res.json({ sharp, public: publicCount, neutral, total: signalMap.size });

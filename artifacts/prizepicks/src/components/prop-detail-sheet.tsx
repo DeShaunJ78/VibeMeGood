@@ -1321,14 +1321,14 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
                     <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Sharp Signal</div>
                     <span className={`ml-auto text-[9px] font-mono px-1.5 py-0.5 rounded border ${
                       sharpSignal === "sharp" && sharpConfidence === "high"
-                        ? "bg-amber-900/50 text-amber-300 border-amber-700/40"
+                        ? "bg-emerald-900/50 text-emerald-300 border-emerald-700/40"
                         : sharpSignal === "sharp" && sharpConfidence === "medium"
-                        ? "bg-orange-900/50 text-orange-300 border-orange-700/40"
-                        : sharpSignal === "public"
-                        ? "bg-slate-800 text-slate-400 border-slate-700"
+                        ? "bg-emerald-900/40 text-emerald-400 border-emerald-800/40"
+                        : sharpSignal === "fade"
+                        ? "bg-amber-950/40 text-amber-400 border-amber-700/40"
                         : "bg-slate-800 text-slate-500 border-slate-800"
                     }`}>
-                      {sharpSignal === "sharp" ? `${(sharpConfidence ?? "low").toUpperCase()} CONF` : "PUBLIC STEAM"}
+                      {sharpSignal === "sharp" ? `${(sharpConfidence ?? "low").toUpperCase()} CONF` : "FADE ↓"}
                     </span>
                   </div>
                   <div className={`text-xs font-mono p-3 rounded border leading-relaxed ${

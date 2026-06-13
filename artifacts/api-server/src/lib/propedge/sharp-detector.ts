@@ -24,14 +24,14 @@ export interface RawLineMoveEvent {
 }
 
 export interface SharpDetectionResult {
-  signal: "sharp" | "public" | "neutral";
+  signal: "sharp" | "fade" | "neutral";
   confidence: "low" | "medium" | "high";
   explanation: string;
   /** Estimated % of betting action on the dominant (public) side 0-100 */
   estimatedPublicPct: number;
   /** Side the sharp money is on (only set when signal === "sharp") */
   sharpSide: "over" | "under" | null;
-  /** Approximate public side when signal === "public" */
+  /** Approximate public side when signal === "fade" */
   publicSide: "over" | "under" | null;
 }
 
@@ -74,13 +74,13 @@ export function detectSharpMoney(moves: RawLineMoveEvent[]): SharpDetectionResul
   const publicPct = Math.round(Math.max(upRatio, downRatio) * 100);
 
   if (sharpMoves.length === 0) {
-    // Pure consensus — public steam
+    // Pure consensus — public steam (fade signal: consider fading the public)
     return {
-      signal: "public",
+      signal: "fade",
       confidence: publicPct >= 80 ? "high" : publicPct >= 65 ? "medium" : "low",
       explanation:
         `📊 Public steam — ${publicPct}% of book moves toward ${publicSide}. ` +
-        `Line moved with consensus. No reverse line movement detected.`,
+        `Line moved with consensus. No reverse line movement detected. Consider fading the public.`,
       estimatedPublicPct: publicPct,
       sharpSide: null,
       publicSide,

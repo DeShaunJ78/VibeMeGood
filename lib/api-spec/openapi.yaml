@@ -2574,7 +2574,7 @@ components:
         ownershipSource: { type: string, enum: [real, estimated], description: "real = live crowd data from crowd_ownership_snapshots; estimated = tier-based fallback" }
         leverageScore: { type: ["number", "null"], description: "GPP leverage = ceiling-weighted EV / ownership_est; higher = contrarian upside" }
         paceTier: { type: ["string", "null"], description: "fast / normal / slow — derived from the projection pace factor" }
-        sharpSignal: { type: ["string", "null"], description: "Direction-aware sharp signal: sharp_for (sharp money agrees with pick direction) / sharp_against (opposes) / public (public chalk) / neutral" }
+        sharpSignal: { type: ["string", "null"], description: "Sharp signal from line move analysis: sharp (reverse line movement detected) / fade (public steam — consider fading) / neutral (insufficient data)" }
         gameTotal: { type: ["number", "null"], description: "Implied game total from game_environment" }
         crowdingFreq: { type: ["number", "null"], description: "Proportion of generated lineups this prop appears in (0–1). Null before a run is generated." }
       required: [ppLineId, playerId, playerName, team, sport, statType, direction, lineType, ppLine, hitProbability, probabilitySource, confidence, expectedValue, bookCount, marketDataStatus, reasonCodes, compositeScore]

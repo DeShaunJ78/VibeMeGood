@@ -1228,7 +1228,7 @@ export interface FactoryScoredProp {
      */
   paceTier?: string | null;
   /**
-     * Direction-aware sharp signal: sharp_for (sharp money agrees with pick direction) / sharp_against (opposes) / public (public chalk) / neutral
+     * Sharp signal from line move analysis: sharp (reverse line movement detected) / fade (public steam — consider fading) / neutral (insufficient data)
      * @nullable
      */
   sharpSignal?: string | null;

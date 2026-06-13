@@ -2032,7 +2032,7 @@ export const GenerateLineupFactoryResponse = zod.object({
   "ownershipSource": zod.enum(['real', 'estimated']).optional().describe('real = live crowd data from crowd_ownership_snapshots; estimated = tier-based fallback'),
   "leverageScore": zod.number().nullish().describe('GPP leverage = ceiling-weighted EV \/ ownership_est; higher = contrarian upside'),
   "paceTier": zod.string().nullish().describe('fast \/ normal \/ slow — derived from the projection pace factor'),
-  "sharpSignal": zod.string().nullish().describe('Direction-aware sharp signal: sharp_for (sharp money agrees with pick direction) \/ sharp_against (opposes) \/ public (public chalk) \/ neutral'),
+  "sharpSignal": zod.string().nullish().describe('Sharp signal from line move analysis: sharp (reverse line movement detected) \/ fade (public steam — consider fading) \/ neutral (insufficient data)'),
   "gameTotal": zod.number().nullish().describe('Implied game total from game_environment'),
   "crowdingFreq": zod.number().nullish().describe('Proportion of generated lineups this prop appears in (0–1). Null before a run is generated.')
 })),

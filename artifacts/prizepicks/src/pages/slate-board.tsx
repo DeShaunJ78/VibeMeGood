@@ -72,7 +72,7 @@ type MarketIntelRow = {
   ourProjection: OurProjection | null;
   streak: { count: number; type: string | null } | null;
   recentMoves: { book: string; from: unknown; to: unknown; direction: string | null; at: unknown }[];
-  sharpSignal:      "sharp" | "public" | "neutral" | null;
+  sharpSignal:      "sharp" | "fade" | "neutral" | null;
   sharpConfidence:  "low" | "medium" | "high" | null;
   sharpExplanation: string | null;
   sharpSide:        "over" | "under" | null;
@@ -914,7 +914,7 @@ export default function SlateBoard() {
       ourProjection: mi?.ourProjection ?? null,
       streak: mi?.streak ?? null,
       recentMoves: mi?.recentMoves ?? [],
-      sharpSignal:      (mi?.sharpSignal      ?? null) as "sharp" | "public" | "neutral" | null,
+      sharpSignal:      (mi?.sharpSignal      ?? null) as "sharp" | "fade" | "neutral" | null,
       sharpConfidence:  (mi?.sharpConfidence  ?? null) as "low" | "medium" | "high" | null,
       sharpExplanation: mi?.sharpExplanation ?? null,
       sharpSide:        (mi?.sharpSide        ?? null) as "over" | "under" | null,
@@ -969,7 +969,7 @@ export default function SlateBoard() {
       ourProjection: mi.ourProjection,
       streak: mi.streak,
       recentMoves: mi.recentMoves,
-      sharpSignal:      (mi.sharpSignal      ?? null) as "sharp" | "public" | "neutral" | null,
+      sharpSignal:      (mi.sharpSignal      ?? null) as "sharp" | "fade" | "neutral" | null,
       sharpConfidence:  (mi.sharpConfidence  ?? null) as "low" | "medium" | "high" | null,
       sharpExplanation: mi.sharpExplanation ?? null,
       sharpSide:        (mi.sharpSide        ?? null) as "over" | "under" | null,
@@ -2678,15 +2678,15 @@ export default function SlateBoard() {
                                 return <ActionTagBadge tag={row.actionTag} />;
                               })()}
                               {row.sharpSignal && row.sharpSignal !== "neutral" && (() => {
-                                const isSharp  = row.sharpSignal === "sharp";
-                                const isPublic = row.sharpSignal === "public";
-                                const label    = isSharp  ? "⚡ SHARP" : "📊 PUBLIC";
-                                const cls      = isSharp
+                                const isSharp = row.sharpSignal === "sharp";
+                                const isFade  = row.sharpSignal === "fade";
+                                const label   = isSharp ? "⚡ SHARP ↑" : "📊 FADE ↓";
+                                const cls     = isSharp
                                   ? "text-emerald-400 bg-emerald-950/40 border-emerald-700/50"
                                   : "text-amber-400  bg-amber-950/30  border-amber-700/40";
                                 const tipHeader = isSharp
                                   ? `Sharp Signal — ${row.sharpConfidence ?? "low"} confidence`
-                                  : "Public Steam";
+                                  : "Public Steam (Fade)";
                                 return (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
@@ -2697,8 +2697,8 @@ export default function SlateBoard() {
                                     </TooltipTrigger>
                                     <TooltipContent side="left" className="font-mono text-xs max-w-xs">
                                       <p className={`font-bold mb-1 ${isSharp ? "text-emerald-400" : "text-amber-400"}`}>{tipHeader}</p>
-                                      {isPublic && <p className="text-slate-400 text-[10px] mb-1">Public consensus — no reverse-line movement detected.</p>}
-                                      <p className="text-slate-300 leading-relaxed">{row.sharpExplanation ?? (isSharp ? "Sharp money detected." : "Public steam on this side.")}</p>
+                                      {isFade && <p className="text-slate-400 text-[10px] mb-1">Public consensus — no reverse-line movement detected. Consider fading.</p>}
+                                      <p className="text-slate-300 leading-relaxed">{row.sharpExplanation ?? (isSharp ? "Sharp money detected." : "Public steam — potential fade target.")}</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 );

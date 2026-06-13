@@ -839,8 +839,6 @@ router.post("/lineup-factory/generate", async (req, res) => {
           sharpSignal = "sharp_for";    // no direction data → assume sharp-aligned (conservative)
         } else if (rawSharp.signal === "fade") {
           sharpSignal = "sharp_against"; // no direction data → assume fade = opposing (conservative)
-        } else if (rawSharp.signal === "public") {
-          sharpSignal = "public";
         } else {
           sharpSignal = "neutral";
         }
