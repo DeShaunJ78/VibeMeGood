@@ -1182,14 +1182,37 @@ export async function computeAllProjections(): Promise<number> {
     }
   }
 
-  // Bulk upsert all computed projections in chunked batches.
-  // Drizzle ORM builds INSERT SQL by recursively merging chunks; a single
-  // INSERT with thousands of rows overflows Node's call stack (RangeError:
-  // Maximum call stack size exceeded in mergeQueries). 500 rows per batch
-  // keeps the recursion depth well within the default limit.
+  // Deduplicate by (playerId, statType) — the unique constraint on our_projections.
+  // Multiple PP tiers (demon/goblin/normal) generate multiple payloads for the same
+  // player+statType. PostgreSQL's ON CONFLICT DO UPDATE cannot resolve duplicates that
+  // exist within the same VALUES list; only conflicts against existing DB rows are
+  // handled. Keep the best entry per key: prefer real data over prior_only, then
+  // prefer higher gamesUsed.
+  const dedupMap = new Map<string, typeof ourProjectionsTable.$inferInsert>();
+  for (const p of projectionPayloads) {
+    const key = `${p.playerId}:${p.statType}`;
+    const existing = dedupMap.get(key);
+    if (!existing) {
+      dedupMap.set(key, p);
+    } else {
+      const existingIsPrior = existing.sourceLabel === "prior_only";
+      const newIsPrior = p.sourceLabel === "prior_only";
+      const existingGames = Number(existing.gamesUsed ?? 0);
+      const newGames = Number(p.gamesUsed ?? 0);
+      if (existingIsPrior && !newIsPrior) {
+        dedupMap.set(key, p);
+      } else if (!existingIsPrior && !newIsPrior && newGames > existingGames) {
+        dedupMap.set(key, p);
+      }
+    }
+  }
+  const uniquePayloads = [...dedupMap.values()];
+
+  // Bulk upsert in chunked batches to avoid Drizzle's recursive SQL builder
+  // overflowing the call stack with large VALUES lists.
   const PROJ_CHUNK = 500;
-  for (let i = 0; i < projectionPayloads.length; i += PROJ_CHUNK) {
-    await db.insert(ourProjectionsTable).values(projectionPayloads.slice(i, i + PROJ_CHUNK))
+  for (let i = 0; i < uniquePayloads.length; i += PROJ_CHUNK) {
+    await db.insert(ourProjectionsTable).values(uniquePayloads.slice(i, i + PROJ_CHUNK))
       .onConflictDoUpdate({
         target: [ourProjectionsTable.playerId, ourProjectionsTable.statType],
         set: {
