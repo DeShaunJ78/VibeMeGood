@@ -719,6 +719,7 @@ function StoryPanel({
     const picks = lineup.picks.map(pick => {
       const sp = propsMap?.get(pick.ppLineId);
       return {
+        ppLineId:         pick.ppLineId,
         playerName:       pick.playerName,
         statType:         pick.statType,
         direction:        pick.direction as "more" | "less",
@@ -754,6 +755,10 @@ function StoryPanel({
         body: JSON.stringify(body),
         signal: abortRef.current.signal,
       });
+      if (!res.ok) {
+        setStoryText("Story generation failed. Please try again.");
+        return;
+      }
       const reader = res.body?.getReader();
       if (!reader) return;
       const decoder = new TextDecoder();
@@ -785,8 +790,7 @@ function StoryPanel({
   useEffect(() => {
     if (autoGenerate) void generate();
     return () => { abortRef.current?.abort(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lineup.id]);
+  }, [lineup.id]); // intentionally omit `generate` — stable on lineup.id change
 
   if (!started) {
     return (
@@ -2263,7 +2267,7 @@ export default function LineupFactory() {
                   ) : (
                     <div className="grid gap-3">
                       {result.lineups.map((lu, i) => (
-                        <LineupCard key={lu.id} lineup={lu} index={i} onLoad={handleLoadLineup} isGppMode={isGppMode} isStoryMode={isStoryMode} propsMap={scoredPropsMap} onOpenProp={setSelectedPpLineId} autoGenerate={i === 0} />
+                        <LineupCard key={lu.id} lineup={lu} index={i} onLoad={handleLoadLineup} isGppMode={isGppMode} isStoryMode={isStoryMode} propsMap={scoredPropsMap} onOpenProp={setSelectedPpLineId} autoGenerate={true} />
                       ))}
                     </div>
                   )}

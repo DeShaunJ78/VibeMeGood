@@ -1248,6 +1248,8 @@ export const LineupStoryPickDirection = {
 } as const;
 
 export interface LineupStoryPick {
+  /** PrizePicks line ID — used by the server for DB enrichment (injuries, variance scores) */
+  ppLineId?: number;
   playerName: string;
   statType: string;
   direction: LineupStoryPickDirection;

@@ -1949,6 +1949,7 @@ export const SyncPlatformLinesResponse = zod.object({
  */
 export const GenerateLineupStoryBody = zod.object({
   "picks": zod.array(zod.object({
+  "ppLineId": zod.number().optional().describe('PrizePicks line ID — used by the server for DB enrichment (injuries, variance scores)'),
   "playerName": zod.string(),
   "statType": zod.string(),
   "direction": zod.enum(['more', 'less']),

@@ -2713,6 +2713,7 @@ components:
     LineupStoryPick:
       type: object
       properties:
+        ppLineId:         { type: integer, description: "PrizePicks line ID — used by the server for DB enrichment (injuries, variance scores)" }
         playerName:       { type: string }
         statType:         { type: string }
         direction:        { type: string, enum: [more, less] }
