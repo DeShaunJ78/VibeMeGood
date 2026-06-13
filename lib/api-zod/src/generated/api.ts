@@ -2410,7 +2410,11 @@ export const GetMarketIntelResponse = zod.object({
   "page": zod.number(),
   "limit": zod.number(),
   "hasMore": zod.boolean(),
-  "lastOddsSync": zod.string().nullish()
+  "lastOddsSync": zod.string().nullish(),
+  "marketCoverage": zod.object({
+  "withMarket": zod.number(),
+  "total": zod.number()
+}).optional()
 })
 
 

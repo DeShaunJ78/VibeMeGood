@@ -2537,6 +2537,12 @@ components:
         limit:       { type: integer }
         hasMore:     { type: boolean }
         lastOddsSync: { type: ["string", "null"] }
+        marketCoverage:
+          type: object
+          properties:
+            withMarket: { type: integer }
+            total:      { type: integer }
+          required: [withMarket, total]
       required: [data, total, page, limit, hasMore]
 
     MarketIntelOurProjection:

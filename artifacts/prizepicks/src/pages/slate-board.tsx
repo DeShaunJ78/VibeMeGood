@@ -102,6 +102,7 @@ type MarketIntelPage = {
   limit: number;
   hasMore: boolean;
   lastOddsSync?: string | null;
+  marketCoverage?: { withMarket: number; total: number } | null;
 };
 
 
@@ -652,6 +653,7 @@ export default function SlateBoard() {
   const [sortCol, setSortCol] = useState<string>("projGap");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [lastOddsSync, setLastOddsSync] = useState<string | null | undefined>(undefined);
+  const [marketCoverage, setMarketCoverage] = useState<{ withMarket: number; total: number } | null>(null);
   // Line corrections + demon/goblin payout multipliers persist server-side, keyed by
   // ppLineId so a standard-line fix never bleeds onto its goblin/demon siblings, and the
   // optimizer sees the same corrections.
@@ -901,10 +903,13 @@ export default function SlateBoard() {
   const miPageData = rawMiQuery.data as MarketIntelPage | undefined;
   const miLoading = rawMiQuery.isLoading;
 
-  // Accumulate pages as they load; capture lastOddsSync from page 1
+  // Accumulate pages as they load; capture lastOddsSync + marketCoverage from page 1
   useEffect(() => {
     if (!miPageData) return;
-    if (miPage === 1) setLastOddsSync(miPageData.lastOddsSync ?? null);
+    if (miPage === 1) {
+      setLastOddsSync(miPageData.lastOddsSync ?? null);
+      setMarketCoverage(miPageData.marketCoverage ?? null);
+    }
     setAllMiRows(prev => miPage === 1 ? miPageData.data : [...prev, ...miPageData.data]);
     setMiTotal(miPageData.total);
     setMiHasMore(miPageData.hasMore);
@@ -2038,16 +2043,29 @@ export default function SlateBoard() {
         </div>
       )}
 
-      {/* Stale odds banner (FS2) */}
-      {oddsStale && (
+      {/* Odds coverage banner — always show when stale, show partial-coverage note when fresh but incomplete */}
+      {oddsStale ? (
         <div className="flex items-center justify-between gap-3 text-amber-300 bg-amber-950/20 border border-amber-500/30 rounded px-3 py-2 text-xs font-mono">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
-            Odds data is stale (last sync: {lastOddsSync ? new Date(lastOddsSync).toLocaleString() : "never"}). True Edge column hidden.
+            <span>
+              Odds data is stale (last sync: {lastOddsSync ? new Date(lastOddsSync).toLocaleString() : "never"}).
+              {marketCoverage != null && marketCoverage.total > 0 && (
+                <> {marketCoverage.withMarket} / {marketCoverage.total} props have market lines.</>
+              )}
+            </span>
           </div>
           <SyncOddsButton />
         </div>
-      )}
+      ) : marketCoverage != null && marketCoverage.total > 0 && marketCoverage.withMarket < marketCoverage.total ? (
+        <div className="flex items-center justify-between gap-3 text-slate-400 bg-slate-900/60 border border-slate-700/40 rounded px-3 py-2 text-xs font-mono">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-slate-500" />
+            <span>{marketCoverage.withMarket} / {marketCoverage.total} props have market lines — True Edge shows <span className="text-slate-500">—</span> for uncovered rows.</span>
+          </div>
+          <SyncOddsButton onDone={() => {}} />
+        </div>
+      ) : null}
 
       {/* Not synced banner — only when there are also no seeded props to show */}
       {notSynced && !isLoading && playerRows.length === 0 && (
@@ -2077,16 +2095,14 @@ export default function SlateBoard() {
                   <SortTh col="ppLine" label="PP Line" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="w-16 text-right" />
                   <TableHead className="w-20 font-mono text-xs text-center">Type</TableHead>
                   <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-right">Mkt Avg</TableHead>
-                  {!oddsStale && (
-                    <SortTh col="trueEdge" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-22 text-right">
-                      <Tooltip>
-                        <TooltipTrigger className="cursor-pointer">True Edge{sortCol === "trueEdge" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</TooltipTrigger>
-                        <TooltipContent className="text-xs max-w-xs">
-                          Our model P(over) vs consensus no-vig market probability. Vig stripped from external book lines.
-                        </TooltipContent>
-                      </Tooltip>
-                    </SortTh>
-                  )}
+                  <SortTh col="trueEdge" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-22 text-right">
+                    <Tooltip>
+                      <TooltipTrigger className="cursor-pointer">True Edge{sortCol === "trueEdge" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</TooltipTrigger>
+                      <TooltipContent className="text-xs max-w-xs">
+                        Our model P(over) vs consensus no-vig market probability. Vig stripped from external book lines. Shows — for props without market data.
+                      </TooltipContent>
+                    </Tooltip>
+                  </SortTh>
                   <TableHead className="hidden lg:table-cell w-16 font-mono text-xs text-right">Hold%</TableHead>
                   <SortTh col="projGap" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-28 text-right" label="Our Proj ⇕" />
                   <SortTh col="vor" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="hidden lg:table-cell w-16 text-right">
@@ -2141,14 +2157,14 @@ export default function SlateBoard() {
                 {isLoading ? (
                   Array.from({ length: 10 }).map((_, i) => (
                     <TableRow key={i} className="border-slate-800">
-                      {Array.from({ length: (varianceEnabled ? 20 : 18) - (oddsStale ? 1 : 0) }).map((_, j) => (
+                      {Array.from({ length: varianceEnabled ? 20 : 18 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full bg-slate-800" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : playerRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={(varianceEnabled ? 20 : 18) - (oddsStale ? 1 : 0)} className="h-48 text-center text-muted-foreground font-mono">
+                    <TableCell colSpan={varianceEnabled ? 20 : 18} className="h-48 text-center text-muted-foreground font-mono">
                       {sport !== "all" ? `No ${sport} props on the board — try All Sports` : "No props — click Force Sync to load live slate"}
                     </TableCell>
                   </TableRow>
@@ -2421,33 +2437,29 @@ export default function SlateBoard() {
                           )}
                         </TableCell>
 
-                        {/* True edge — hidden when odds are stale (FS2) */}
-                        {!oddsStale && (
-                          <TableCell className="hidden lg:table-cell font-mono text-xs text-right">
-                            {row.marketDataStatus === "not_synced" ? (
-                              <span className="text-slate-600 text-[10px]">no data</span>
-                            ) : row.trueEdge != null ? (
-                              <div className="flex flex-col items-end gap-0.5">
-                                <span className={`font-bold flex items-center justify-end gap-0.5 ${row.trueEdge > 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                                  <MarketStatusDot status={row.marketDataStatus} />
-                                  {row.trueEdge > 0 ? "+" : ""}{row.trueEdge.toFixed(1)}%
-                                </span>
-                                {row.calibrationCount != null && row.calibrationCount < 30 && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span className="text-[9px] font-mono text-amber-400 bg-amber-950/30 border border-amber-800/30 rounded px-1 cursor-help leading-tight">LOW SAMPLE</span>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="font-mono text-xs max-w-xs">
-                                      Edge score based on limited calibration data ({row.calibrationCount} results). Treat with caution until 30+ logged.
-                                    </TooltipContent>
-                                  </Tooltip>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-slate-600 text-[10px]">no data</span>
-                            )}
-                          </TableCell>
-                        )}
+                        {/* True edge — always visible; shows — for uncovered props */}
+                        <TableCell className="hidden lg:table-cell font-mono text-xs text-right">
+                          {row.trueEdge != null ? (
+                            <div className="flex flex-col items-end gap-0.5">
+                              <span className={`font-bold flex items-center justify-end gap-0.5 ${row.trueEdge > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                                <MarketStatusDot status={row.marketDataStatus} />
+                                {row.trueEdge > 0 ? "+" : ""}{row.trueEdge.toFixed(1)}%
+                              </span>
+                              {row.calibrationCount != null && row.calibrationCount < 30 && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="text-[9px] font-mono text-amber-400 bg-amber-950/30 border border-amber-800/30 rounded px-1 cursor-help leading-tight">LOW SAMPLE</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="font-mono text-xs max-w-xs">
+                                    Edge score based on limited calibration data ({row.calibrationCount} results). Treat with caution until 30+ logged.
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-600">—</span>
+                          )}
+                        </TableCell>
 
                         {/* Hold% */}
                         <TableCell className="hidden lg:table-cell font-mono text-xs text-right">

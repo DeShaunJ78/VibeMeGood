@@ -80,6 +80,8 @@ const SPORT_STAT_MARKETS: Record<string, Record<string, string>> = {
     "Blocked Shots": "player_blocked_shots",
     "Power Play Points": "player_power_play_points",
     "Goalie Saves": "player_total_saves",
+    "Hits": "player_hits",
+    "Faceoffs Won": "player_faceoffs_won",
   },
   NFL: {
     "Pass Yards": "player_pass_yds",
@@ -93,6 +95,10 @@ const SPORT_STAT_MARKETS: Record<string, Record<string, string>> = {
     "Pass Attempts": "player_pass_attempts",
     "Rush Attempts": "player_rush_attempts",
     "Anytime TD Scorer": "player_anytime_td",
+    "Kicking Points": "player_kicking_points",
+    "Longest Reception": "player_longest_reception",
+    "Interceptions": "player_interceptions",
+    "Sacks": "player_sacks",
   },
 };
 
@@ -387,6 +393,37 @@ async function runSyncExternalOdds(force = false): Promise<number> {
   // game logs (updated nightly at 2am) and are unaffected by new odds data.
   // The projections cron (6am/11am/2pm) handles full projection refreshes.
   await recalcPropScores();
+
+  // --- Gap logging: count props with a known market key but no external line returned ---
+  // Distinguishes "market not offered by any book" from "sync never ran".
+  try {
+    const allActive = await db
+      .select({ lineId: ppLinesTable.id, sport: playersTable.sport, statType: ppLinesTable.statType })
+      .from(ppLinesTable)
+      .innerJoin(playersTable, eq(ppLinesTable.playerId, playersTable.id))
+      .where(eq(ppLinesTable.isActive, true));
+
+    const allExtLineIds = new Set(
+      (await db.select({ ppLineId: externalLinesTable.ppLineId }).from(externalLinesTable))
+        .map(r => r.ppLineId)
+        .filter((id): id is number => id != null),
+    );
+
+    let noMarketOffered = 0;
+    let noKeyMapped = 0;
+    for (const { lineId, sport, statType } of allActive) {
+      const marketKey = SPORT_STAT_MARKETS[sport]?.[statType];
+      if (!marketKey) { noKeyMapped++; continue; }
+      if (!allExtLineIds.has(lineId)) noMarketOffered++;
+    }
+    logger.info(
+      { processed, noMarketOffered, noKeyMapped, totalActive: allActive.length },
+      "external-odds: sync gap summary — noMarketOffered = lines with known market key but no book returned a line",
+    );
+  } catch (e) {
+    logger.warn({ err: e }, "external-odds: gap logging failed (non-fatal)");
+  }
+
   return processed;
 }
 

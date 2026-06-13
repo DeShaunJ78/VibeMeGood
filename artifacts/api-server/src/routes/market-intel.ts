@@ -146,7 +146,7 @@ router.get("/market-intel", async (req, res) => {
         ),
       );
 
-    const [countResult, rows, lastOddsRun, allCalibCounts] = await Promise.all([
+    const [countResult, rows, lastOddsRun, allCalibCounts, globalCoverageResult] = await Promise.all([
       db
         .select({ total: sql<number>`count(*)` })
         .from(ppLinesTable)
@@ -186,6 +186,23 @@ router.get("/market-intel", async (req, res) => {
         })
         .from(probabilityCalibrationTable)
         .groupBy(probabilityCalibrationTable.sport, probabilityCalibrationTable.statType),
+
+      // Global market coverage counts (unfiltered, across all active lines).
+      // Returned as marketCoverage so the banner can show "X / Y props have market lines".
+      Promise.all([
+        db
+          .select({ count: sql<number>`count(distinct ${ppLinesTable.id})` })
+          .from(ppLinesTable)
+          .innerJoin(playersTable, eq(ppLinesTable.playerId, playersTable.id))
+          .innerJoin(externalLinesTable, eq(externalLinesTable.ppLineId, ppLinesTable.id))
+          .where(eq(ppLinesTable.isActive, true))
+          .then(r => Number(r[0]?.count ?? 0)),
+        db
+          .select({ count: sql<number>`count(*)` })
+          .from(ppLinesTable)
+          .where(eq(ppLinesTable.isActive, true))
+          .then(r => Number(r[0]?.count ?? 0)),
+      ]),
     ]);
 
     const total = Number(countResult[0]?.total ?? 0);
@@ -626,6 +643,8 @@ router.get("/market-intel", async (req, res) => {
       };
     });
 
+    const [globalWithMarket, globalTotal] = globalCoverageResult;
+
     res.json({
       data: result,
       total,
@@ -633,6 +652,7 @@ router.get("/market-intel", async (req, res) => {
       limit: limitNum,
       hasMore: offset + limitNum < total,
       lastOddsSync: lastOddsRun?.finishedAt?.toISOString() ?? null,
+      marketCoverage: { withMarket: globalWithMarket, total: globalTotal },
     });
   } catch (err) {
     logger.error(err);

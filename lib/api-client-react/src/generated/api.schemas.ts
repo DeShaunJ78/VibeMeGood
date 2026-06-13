@@ -1034,6 +1034,11 @@ export interface SharpSummary {
   total: number;
 }
 
+export type MarketIntelPageMarketCoverage = {
+  withMarket: number;
+  total: number;
+};
+
 export type MarketIntelRowMarketDataStatus = typeof MarketIntelRowMarketDataStatus[keyof typeof MarketIntelRowMarketDataStatus];
 
 
@@ -1175,6 +1180,7 @@ export interface MarketIntelPage {
   hasMore: boolean;
   /** @nullable */
   lastOddsSync?: string | null;
+  marketCoverage?: MarketIntelPageMarketCoverage;
 }
 
 export interface PlatformLineEntry {
