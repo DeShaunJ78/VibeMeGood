@@ -490,11 +490,11 @@ export async function recalcPropScores(): Promise<void> {
 
   async function chunkQuery<T>(ids: number[], fn: (chunk: number[]) => Promise<T[]>): Promise<T[]> {
     const CHUNK = 1000;
+    if (ids.length === 0) return [];
     if (ids.length <= CHUNK) return fn(ids);
-    const results: T[] = [];
+    let results: T[] = [];
     for (let i = 0; i < ids.length; i += CHUNK) {
-      const batch = await fn(ids.slice(i, i + CHUNK));
-      results.push(...batch);
+      results = results.concat(await fn(ids.slice(i, i + CHUNK)));
     }
     return results;
   }
