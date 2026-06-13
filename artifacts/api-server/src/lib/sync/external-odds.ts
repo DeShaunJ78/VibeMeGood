@@ -876,7 +876,7 @@ export async function recalcPropScores(): Promise<void> {
     ppLineId: number;
     playerId: number;
     statType: string;
-    evModifier: string;
+    saberEvModifier: string;
     computedAt: Date;
   }[] = [];
 
@@ -893,7 +893,7 @@ export async function recalcPropScores(): Promise<void> {
         ppLineId: line.id,
         playerId: line.playerId,
         statType: line.statType,
-        evModifier: "0",
+        saberEvModifier: "0",
         computedAt: now,
       });
       continue;
@@ -914,7 +914,7 @@ export async function recalcPropScores(): Promise<void> {
       ppLineId: line.id,
       playerId: line.playerId,
       statType: line.statType,
-      evModifier: String(evMod),
+      saberEvModifier: String(evMod),
       computedAt: now,
     });
   }
@@ -927,11 +927,11 @@ export async function recalcPropScores(): Promise<void> {
         .onConflictDoUpdate({
           target: varianceScoresTable.ppLineId,
           set: {
-            evModifier: sql`excluded.ev_modifier`,
+            saberEvModifier: sql`excluded.saber_ev_modifier`,
             computedAt: sql`excluded.computed_at`,
           },
         });
     }
-    logger.info({ count: varianceUpserts.length }, "recalcPropScores: persisted Saber Sim evModifier to variance_scores");
+    logger.info({ count: varianceUpserts.length }, "recalcPropScores: persisted Saber Sim saberEvModifier to variance_scores");
   }
 }

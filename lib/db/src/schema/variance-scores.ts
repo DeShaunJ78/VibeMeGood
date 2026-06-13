@@ -17,6 +17,11 @@ export const varianceScoresTable = pgTable("variance_scores", {
   ceilingRating: integer("ceiling_rating"),
   floorRating: integer("floor_rating"),
   evModifier: numeric("ev_modifier").default("0"),
+  // Saber Sim EV modifier — written exclusively by recalcPropScores (NBA/NFL/NHL factor products).
+  // Kept in a dedicated column so computeAllVarianceScores can write evModifier
+  // independently without either path clobbering the other.
+  // Lineup-factory sums evModifier + saberEvModifier at read time.
+  saberEvModifier: numeric("saber_ev_modifier").default("0"),
   signals: jsonb("signals"),
   warnings: jsonb("warnings"),
   whyItMoves: text("why_it_moves"),

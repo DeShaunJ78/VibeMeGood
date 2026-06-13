@@ -100,10 +100,12 @@ type ScoredProp = {
   // MLB Saber Sim matchup multiplier — product of platoon + K-matchup + pitcher-form
   // factors that fired for this prop.  null = no MLB factors fired (non-MLB or missing data).
   mlbSaberMultiplier: number | null;
-  // Saber Sim EV modifier (decimal, e.g. 0.15 = +15%) from variance_scores.evModifier.
-  // Persisted by recalcPropScores for NBA/NFL/NHL from sport-specific factor products.
-  // MLB is excluded — its factors use the mlbSaberMultiplier path instead.
-  // null = no variance_scores row; 0 = row exists but no Saber Sim factor fired.
+  // Combined EV modifier (decimal, e.g. 0.15 = +15%) — sum of variance_scores.evModifier
+  // (fatigue/blowout/usage from computeAllVarianceScores) + saberEvModifier
+  // (NBA/NFL/NHL Saber Sim factor product from recalcPropScores).
+  // Stored in separate columns so the two pipelines never clobber each other;
+  // summed at read time here. MLB Saber factors use mlbSaberMultiplier instead.
+  // null = no variance_scores row exists for this line.
   evModifier: number | null;
 };
 
@@ -782,11 +784,15 @@ router.post("/lineup-factory/generate", async (req, res) => {
         confidence = "low";
       }
 
-      // Apply variance EV modifier — stored as decimal (0.06 = +6%), not percentage points.
-      // Use (1 + mod) directly; no /100 division needed.
-      if (row.variance?.evModifier) {
-        const mod = parseFloat(row.variance.evModifier.toString());
-        hitProbability = Math.min(0.97, Math.max(0.05, hitProbability * (1 + mod)));
+      // Apply combined EV modifier (variance-pipeline evModifier + Saber Sim saberEvModifier).
+      // Both columns default to "0"; sum them inline. Decimal unit: 0.06 = +6%.
+      if (row.variance != null) {
+        const combinedMod =
+          parseFloat((row.variance.evModifier ?? "0").toString())
+          + parseFloat((row.variance.saberEvModifier ?? "0").toString());
+        if (combinedMod !== 0) {
+          hitProbability = Math.min(0.97, Math.max(0.05, hitProbability * (1 + combinedMod)));
+        }
       }
 
       // Line-type adjustments
@@ -971,8 +977,12 @@ router.post("/lineup-factory/generate", async (req, res) => {
         projMean:           pMean,
         projStdDev:         pStd,
         mlbSaberMultiplier,
-        evModifier: row.variance?.evModifier != null
-          ? parseFloat(row.variance.evModifier.toString())
+        // Sum variance-pipeline signal + Saber Sim signal at read time.
+        // Both default to "0" so absence of either path still yields 0.
+        // null only when no variance_scores row exists for this line at all.
+        evModifier: row.variance != null
+          ? parseFloat((row.variance.evModifier ?? "0").toString())
+            + parseFloat((row.variance.saberEvModifier ?? "0").toString())
           : null,
       });
     }

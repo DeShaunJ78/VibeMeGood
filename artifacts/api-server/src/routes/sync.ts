@@ -174,7 +174,13 @@ router.post("/sync/historical-stats", async (req, res) => {
       if (nfl && result.nfl > 0) {
         logger.info("Auto-triggering NFL advanced metrics after backfill");
         syncNflAdvancedMetrics()
-          .then(n => broadcastSyncStatus("nfl-advanced-metrics", "success", `${n} records (auto)`))
+          .then(n => {
+            broadcastSyncStatus("nfl-advanced-metrics", "success", `${n} records (auto)`);
+            // Saber Sim factors updated — refresh prop scores so lineup-factory sees new data
+            recalcPropScores().catch(err =>
+              logger.warn({ err }, "recalcPropScores post-nfl-advanced auto-chain failed (non-critical)"),
+            );
+          })
           .catch(err => {
             logger.warn({ err }, "NFL advanced auto-chain failed (non-critical)");
             broadcastSyncStatus("nfl-advanced-metrics", "error",
@@ -186,7 +192,13 @@ router.post("/sync/historical-stats", async (req, res) => {
       if (nhl && result.nhl > 0) {
         logger.info("Auto-triggering NHL player context sync after backfill");
         syncNhlPlayerContext()
-          .then(n => broadcastSyncStatus("nhl-player-context", "success", `${n} records (auto)`))
+          .then(n => {
+            broadcastSyncStatus("nhl-player-context", "success", `${n} records (auto)`);
+            // Saber Sim factors updated — refresh prop scores so lineup-factory sees new data
+            recalcPropScores().catch(err =>
+              logger.warn({ err }, "recalcPropScores post-nhl-context auto-chain failed (non-critical)"),
+            );
+          })
           .catch(err => {
             logger.warn({ err }, "NHL player context auto-chain failed (non-critical)");
             broadcastSyncStatus("nhl-player-context", "error",
@@ -597,6 +609,11 @@ router.post("/sync/scores", async (req, res) => {
 
 router.post("/sync/nhl-player-context", async (req, res) => {
   await runSync("nhl-stats", "nhl-player-context", syncNhlPlayerContext, res);
+  // Saber Sim NHL factors (TOI/PP/Corsi) updated — refresh prop scores so lineup-factory
+  // sees current factor state without a separate manual rescore step.
+  recalcPropScores().catch(err =>
+    req.log.warn({ err }, "recalcPropScores post-nhl-player-context failed (non-critical)"),
+  );
 });
 
 router.post("/sync/fatigue", async (req, res) => {
@@ -625,6 +642,11 @@ router.post("/admin/sync/nfl-advanced", async (req, res) => {
       .where(eq(dataPullLogsTable.id, log.id));
     req.log.info({ totalUpserted }, "NFL advanced metrics sync OK");
     broadcastSyncStatus("nfl-advanced-metrics", "success", `${totalUpserted} records`);
+    // Saber Sim adjustments updated — kick off a rescore so lineup-factory
+    // sees fresh factor data without requiring a separate manual rescore.
+    recalcPropScores().catch(err =>
+      req.log.warn({ err }, "recalcPropScores post-nfl-advanced failed (non-critical)"),
+    );
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
     req.log.error({ err }, "NFL advanced metrics sync failed");
