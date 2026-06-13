@@ -1035,6 +1035,137 @@ export async function backfillHistoricalStats(
   return results;
 }
 
+// ─── Pitcher-only MLB stats backfill ─────────────────────────────────────────
+//
+// Fetches pitching game logs from the MLB Stats API for players whose position
+// is SP, RP, or P.  Writes the same stat types as the pitching block inside
+// backfillMLB() but runs in minutes instead of 30+ minutes because it skips
+// all batter hitting-log calls.  Safe to re-run: upserts on (playerId, gameDate,
+// statType).
+export async function backfillMlbPitcherStats(seasons = [2023, 2024, 2025]): Promise<number> {
+  const BASE = "https://statsapi.mlb.com/api/v1";
+  let grandTotal = 0;
+
+  const PITCHER_POSITIONS = new Set(["SP", "RP", "P"]);
+
+  // Load existing MLB players from DB so we can map names→ids
+  let allMlbPlayers = await db.select().from(playersTable).where(eq(playersTable.sport, "MLB"));
+  const existingNorm = new Set(allMlbPlayers.map(p => normalizeName(p.fullName)));
+
+  for (const season of seasons) {
+    try {
+      // Fetch the official MLB roster (free, no auth) to get mlbId → name mappings
+      const rosterRes = await getJson(`${BASE}/sports/1/players?season=${season}&limit=2500`);
+      type RosterEntry = { id: number; fullName: string; firstName?: string; lastName?: string; position: string | null };
+      const mlbRoster: RosterEntry[] = (rosterRes?.people ?? []).map((p: any) => ({
+        id:        p.id,
+        fullName:  p.fullName,
+        firstName: p.firstName,
+        lastName:  p.lastName,
+        position:  p.primaryPosition?.abbreviation ?? null,
+      }));
+
+      // Filter to pitcher positions only
+      const pitcherRoster = mlbRoster.filter(p => p.position && PITCHER_POSITIONS.has(p.position));
+
+      // Auto-insert any pitchers not already in the players table
+      const toInsert: typeof playersTable.$inferInsert[] = [];
+      for (const r of pitcherRoster) {
+        if (!r.fullName) continue;
+        const norm = normalizeName(r.fullName);
+        if (existingNorm.has(norm)) continue;
+        existingNorm.add(norm);
+        toInsert.push({
+          sport:     "MLB",
+          fullName:  r.fullName,
+          firstName: r.firstName ?? r.fullName.split(" ")[0] ?? "",
+          lastName:  r.lastName  ?? r.fullName.split(" ").slice(1).join(" ") ?? "",
+          position:  r.position ?? null,
+          status:    "active",
+        });
+      }
+      if (toInsert.length > 0) {
+        for (let i = 0; i < toInsert.length; i += 100) {
+          await db.insert(playersTable).values(toInsert.slice(i, i + 100)).onConflictDoNothing();
+        }
+        logger.info({ season, inserted: toInsert.length }, "MLB pitchers: roster pre-population complete");
+        // Reload after inserts so the normToDbId map includes new rows
+        allMlbPlayers = await db.select().from(playersTable).where(eq(playersTable.sport, "MLB"));
+      }
+
+      // Build normalised-name → DB id map (all MLB players, including freshly inserted)
+      const normToDbId = new Map<string, number>(allMlbPlayers.map(p => [normalizeName(p.fullName), p.id]));
+
+      // Build targets: pitchers that have a DB id (exact match or Lev ≤2 fallback)
+      type PitcherTarget = { dbId: number; mlbId: number };
+      const targets: PitcherTarget[] = [];
+      for (const r of pitcherRoster) {
+        if (!r.fullName) continue;
+        const normKey = normalizeName(r.fullName);
+        let dbId = normToDbId.get(normKey);
+        if (!dbId) {
+          let bestD = 3;
+          for (const [n, id] of normToDbId) {
+            const d = lev(normKey, n);
+            if (d < bestD) { bestD = d; dbId = id; }
+          }
+        }
+        if (dbId) targets.push({ dbId, mlbId: r.id });
+      }
+
+      logger.info({ season, pitcherCount: targets.length }, "MLB pitcher stats sync: fetching game logs");
+
+      const seasonTotal = await batch(targets, 5, async ({ dbId, mlbId }) => {
+        let count = 0;
+        const source = `mlb_api_${season}`;
+        try {
+          const pitchData = await getJson(
+            `${BASE}/people/${mlbId}/stats?stats=gameLog&season=${season}&group=pitching`,
+          );
+          for (const split of (pitchData?.stats?.[0]?.splits ?? [])) {
+            const gameDate = split.date as string | undefined;
+            const s = split.stat;
+            if (!gameDate || !s) continue;
+            if (!s.gamesStarted || s.gamesStarted < 1) continue;
+
+            const soP      = s.strikeOuts ?? 0;
+            const bbP      = s.baseOnBalls ?? 0;
+            const hAllowed = s.hits ?? 0;
+            const er       = s.earnedRuns ?? 0;
+            const hraP     = s.homeRuns ?? 0;
+            const ipStr    = (s.inningsPitched as string | undefined) ?? "0";
+            const ipParts  = ipStr.split(".");
+            const outs     = (parseInt(ipParts[0] ?? "0") * 3) + parseInt(ipParts[1] ?? "0");
+
+            const logs: [string, number][] = [
+              ["Pitcher Strikeouts",  soP],
+              ["Walks Allowed",       bbP],
+              ["Hits Allowed",        hAllowed],
+              ["Earned Runs Allowed", er],
+              ["Home Runs Allowed",   hraP],
+              ["Pitching Outs",       outs],
+            ];
+
+            for (const [statType, value] of logs) {
+              await upsertLog(dbId, gameDate, statType, value, source);
+              count++;
+            }
+          }
+        } catch { /* pitching log unavailable for this player */ }
+        return count;
+      }, 100);
+
+      grandTotal += seasonTotal;
+      logger.info({ season, seasonTotal }, "MLB pitcher stats season sync complete");
+    } catch (e) {
+      logger.warn({ err: e, season }, "MLB pitcher stats season sync failed");
+    }
+  }
+
+  logger.info({ grandTotal }, "MLB pitcher stats backfill complete");
+  return grandTotal;
+}
+
 // ─── One-time pitcher hand backfill (DB-only, no API calls) ──────────────────
 //
 // Infers pitcher_hand on existing batter game logs using pitcher game logs

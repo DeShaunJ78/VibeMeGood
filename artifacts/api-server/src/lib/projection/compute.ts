@@ -725,8 +725,10 @@ export async function computeAllProjections(): Promise<number> {
   }
 
   // Pitcher game-log stats (K%, ERA, FIP) — computed from player_game_logs where
-  // MLB pitchers exist as players with positions SP/P/RP.  Currently empty until
-  // a pitcher-log sync is added; factors gracefully return null when data is absent.
+  // MLB pitchers exist as players with positions SP/P/RP.  Populated by the MLB
+  // historical-stats backfill (POST /api/sync/historical-stats) or the dedicated
+  // pitcher-only sync (POST /api/sync/mlb-pitcher-stats).  Factors return null
+  // when pitcher data is absent (no pitch log yet in the DB).
   const pitcherGameStatsMap = new Map<string, PitcherStats>();
   const mlbPitcherPlayers = await db.select({ id: playersTable.id, fullName: playersTable.fullName })
     .from(playersTable)

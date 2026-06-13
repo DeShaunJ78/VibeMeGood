@@ -28,6 +28,7 @@ const router = Router();
 let historicalStatsInFlight: Promise<void> | null = null;
 let projectionsInFlight: Promise<void> | null = null;
 let calibrationInFlight: Promise<void> | null = null;
+let mlbPitcherStatsInFlight: Promise<void> | null = null;
 
 /**
  * Mark any data_pull_logs / sync_runs rows that are stuck in "running" for
@@ -192,6 +193,20 @@ router.post("/sync/historical-stats", async (req, res) => {
               err instanceof Error ? err.message : "Auto-chain failed");
           });
       }
+      // Auto-chain MLB pitcher stats whenever MLB batter logs were synced.
+      // Runs the pitcher-only fast path so K% / ERA / FIP data is current
+      // without waiting for another full 30-min historical backfill.
+      if (mlb && result.mlb > 0) {
+        logger.info("Auto-triggering MLB pitcher stats sync after backfill");
+        import("../lib/sync/historical-stats")
+          .then(m => m.backfillMlbPitcherStats())
+          .then(n => broadcastSyncStatus("mlb-pitcher-stats", "success", `${n} pitcher log records (auto)`))
+          .catch(err => {
+            logger.warn({ err }, "MLB pitcher stats auto-chain failed (non-critical)");
+            broadcastSyncStatus("mlb-pitcher-stats", "error",
+              err instanceof Error ? err.message : "Auto-chain failed");
+          });
+      }
       // Auto-chain MLB pitcher hand backfill whenever MLB logs were synced.
       // DB-only (no API calls) — infers pitcher_hand on batter logs from existing
       // pitcher game logs + pitcher_profiles.  Safe to re-run.
@@ -217,6 +232,29 @@ router.post("/sync/historical-stats", async (req, res) => {
       broadcastSyncStatus("historical-stats", "error", e instanceof Error ? e.message : "Unknown error");
     } finally {
       historicalStatsInFlight = null;
+    }
+  })();
+});
+
+// MLB pitcher stats sync — fetches pitching game logs for SP/RP players only.
+// Much faster than running the full historical-stats backfill (pitchers only,
+// not all batters). Safe to re-run: upserts on (playerId, gameDate, statType).
+router.post("/sync/mlb-pitcher-stats", async (req, res) => {
+  if (mlbPitcherStatsInFlight) {
+    res.json({ status: "skipped", reason: "already running" });
+    return;
+  }
+  res.json({ status: "started" });
+  mlbPitcherStatsInFlight = (async () => {
+    try {
+      const { backfillMlbPitcherStats } = await import("../lib/sync/historical-stats");
+      const count = await backfillMlbPitcherStats();
+      broadcastSyncStatus("mlb-pitcher-stats", "success", `${count} pitcher log records`);
+    } catch (e) {
+      logger.error({ err: e }, "MLB pitcher stats sync failed");
+      broadcastSyncStatus("mlb-pitcher-stats", "error", e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      mlbPitcherStatsInFlight = null;
     }
   })();
 });
