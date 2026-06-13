@@ -59,7 +59,7 @@ export async function computeStreaks(): Promise<number> {
       .from(playerGameLogsTable)
       .where(inArray(playerGameLogsTable.playerId, chunk))
       .orderBy(desc(playerGameLogsTable.gameDate));
-    allLogs.push(...rows);
+    for (const row of rows) allLogs.push(row);
   }
 
   // ── 2. Index logs by "playerId:statType" → values (most-recent first) ───

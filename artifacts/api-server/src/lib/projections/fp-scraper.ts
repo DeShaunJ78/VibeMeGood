@@ -71,7 +71,7 @@ async function fetchNHLAll<T>(path: string, sort: string, total: number): Promis
       getJson(
         `https://api.nhle.com/stats/rest/en/${path}?limit=${PAGE}&start=${i * PAGE}` +
         `&cayenneExp=seasonId=20242025%20and%20gameTypeId=2&sort=${sort}&dir=DESC`,
-      ).then(d => results.push(...(d.data as T[]))).catch(() => {}),
+      ).then(d => { for (const item of (d.data as T[])) results.push(item); }).catch(() => {}),
     ),
   );
   return results;
