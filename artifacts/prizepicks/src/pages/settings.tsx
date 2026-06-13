@@ -339,6 +339,7 @@ export default function Settings() {
   const [syncingPreLock, setSyncingPreLock] = useState(false);
   const [syncingJob, setSyncingJob] = useState<string | null>(null);
   const [ppFetching, setPpFetching] = useState<"idle" | "fetching" | "done" | "error">("idle");
+  const [ppErrorMsg, setPpErrorMsg] = useState<string | null>(null);
   const { data: userSettings } = useUserSettings();
   const updateSettings = useUpdateUserSettings();
 
@@ -431,6 +432,7 @@ export default function Settings() {
 
   async function fetchPPDirect() {
     setPpFetching("fetching");
+    setPpErrorMsg(null);
     try {
       const importRes = await fetch("/api/sync/pp-lines-import", { method: "POST" });
       if (!importRes.ok) {
@@ -446,10 +448,12 @@ export default function Settings() {
         void refetch();
       }, 2000);
     } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
       setPpFetching("error");
+      setPpErrorMsg(msg);
       toast({
         title: "Fetch failed",
-        description: e instanceof Error ? e.message : "Unknown error",
+        description: msg,
         variant: "destructive",
       });
     }
@@ -604,7 +608,10 @@ export default function Settings() {
                         }`}
                   </span>
                   <span className="text-[10px] font-mono text-slate-500 mt-0.5 block">
-                    Visit prizepicks.com first, then click Sync to import the live board
+                    {ppFetching === "error" && ppErrorMsg
+                      ? <span className="text-rose-400/90">⚠ {ppErrorMsg} — check you&apos;re still logged in at app.prizepicks.com</span>
+                      : "Make sure you're logged in at app.prizepicks.com first, then click Sync"
+                    }
                   </span>
                 </div>
               </div>
