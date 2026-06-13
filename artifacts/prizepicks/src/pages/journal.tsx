@@ -373,7 +373,7 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
                         ? Number(pick.actualResult) - Number(pick.lineValue)
                         : null;
                     if (margin == null) return null;
-                    const positive = margin >= 0;
+                    const isHit = pick.result === "hit";
                     const isNearMiss = pick.result === "miss" && Math.abs(margin) <= 0.5;
                     return (
                       <>
@@ -385,13 +385,13 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
                         )}
                         <span
                           className={`text-[10px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${
-                            positive
+                            isHit
                               ? "bg-emerald-900/20 border-emerald-800/40 text-emerald-400"
                               : "bg-rose-900/20 border-rose-800/40 text-rose-400"
                           }`}
-                          title={`Actual: ${Number(pick.actualResult ?? 0).toFixed(1)} · Line: ${Number(pick.lineValue).toFixed(1)} · Margin: ${positive ? "+" : ""}${margin.toFixed(2)}`}
+                          title={`Actual: ${Number(pick.actualResult ?? 0).toFixed(1)} · Line: ${Number(pick.lineValue).toFixed(1)} · Margin: ${margin >= 0 ? "+" : ""}${margin.toFixed(2)}`}
                         >
-                          {positive ? "+" : ""}{margin.toFixed(1)} {positive ? "over" : "miss"}
+                          {margin >= 0 ? "+" : ""}{margin.toFixed(1)} {margin >= 0 ? "over" : "miss"}
                         </span>
                       </>
                     );
