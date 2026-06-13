@@ -558,10 +558,10 @@ export interface EntryPick {
      */
   actualResult?: number | null;
   /**
-     * actualResult minus lineValue — positive = cleared the line, negative = fell short
+     * Stored margin: actualResult - lineValue at grade time. Positive = cleared line, negative = fell short. Null when actualResult was not supplied.
      * @nullable
      */
-  margin?: number | null;
+  resultMargin?: number | null;
   createdAt: string;
 }
 

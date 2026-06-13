@@ -929,7 +929,7 @@ export const GetEntryResponse = zod.object({
   "closingLine": zod.number().nullish(),
   "clv": zod.number().nullish(),
   "actualResult": zod.number().nullish().describe('The player\'s actual stat value for this pick (populated when graded)'),
-  "margin": zod.number().nullish().describe('actualResult minus lineValue — positive = cleared the line, negative = fell short'),
+  "resultMargin": zod.number().nullish().describe('Stored margin: actualResult - lineValue at grade time. Positive = cleared line, negative = fell short. Null when actualResult was not supplied.'),
   "createdAt": zod.coerce.date()
 }))
 })
@@ -1001,7 +1001,7 @@ export const ListEntryPicksResponseItem = zod.object({
   "closingLine": zod.number().nullish(),
   "clv": zod.number().nullish(),
   "actualResult": zod.number().nullish().describe('The player\'s actual stat value for this pick (populated when graded)'),
-  "margin": zod.number().nullish().describe('actualResult minus lineValue — positive = cleared the line, negative = fell short'),
+  "resultMargin": zod.number().nullish().describe('Stored margin: actualResult - lineValue at grade time. Positive = cleared line, negative = fell short. Null when actualResult was not supplied.'),
   "createdAt": zod.coerce.date()
 })
 export const ListEntryPicksResponse = zod.array(ListEntryPicksResponseItem)
@@ -1061,7 +1061,7 @@ export const UpdateEntryPickResponse = zod.object({
   "closingLine": zod.number().nullish(),
   "clv": zod.number().nullish(),
   "actualResult": zod.number().nullish().describe('The player\'s actual stat value for this pick (populated when graded)'),
-  "margin": zod.number().nullish().describe('actualResult minus lineValue — positive = cleared the line, negative = fell short'),
+  "resultMargin": zod.number().nullish().describe('Stored margin: actualResult - lineValue at grade time. Positive = cleared line, negative = fell short. Null when actualResult was not supplied.'),
   "createdAt": zod.coerce.date()
 })
 

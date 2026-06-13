@@ -258,7 +258,7 @@ export default function Review() {
       ) : s ? (
         <>
           {/* KPI Row */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
             <StatCard
               label="Total P&L"
               value={`${s.totalPnl >= 0 ? "+" : ""}$${Number(s.totalPnl).toFixed(2)}`}
@@ -303,6 +303,13 @@ export default function Review() {
                 </TooltipProvider>
               );
             })()}
+            <StatCard
+              label="Avg Miss Margin"
+              value={(s as any).avgMissMargin != null ? `${Number((s as any).avgMissMargin).toFixed(2)}` : "—"}
+              sub="avg shortfall (graded)"
+              icon={TrendingDown}
+              color={(s as any).avgMissMargin != null && Number((s as any).avgMissMargin) > -0.5 ? "text-amber-400" : "text-rose-400"}
+            />
             <StatCard
               label="Kelly Adherence"
               value={(s as any).kellyAdherenceRate != null ? `${((s as any).kellyAdherenceRate * 100).toFixed(0)}%` : "—"}
@@ -621,6 +628,64 @@ export default function Review() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Margin Distribution */}
+          {Array.isArray((s as any).marginDistribution) && (s as any).marginDistribution.some((b: any) => b.count > 0) && (
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-mono uppercase tracking-wider flex items-center gap-2">
+                  <Target className="w-3.5 h-3.5 text-primary" />
+                  Margin Distribution
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  How far graded picks landed from the line (actual − line). Negative = fell short, positive = cleared.
+                  Only includes picks where the actual result was recorded.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={(s as any).marginDistribution as Array<{ label: string; count: number }>}
+                      margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                      <XAxis dataKey="label" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+                      <ReferenceLine x="−0.5 to 0" stroke="#f59e0b" strokeDasharray="4 4" strokeOpacity={0.5} />
+                      <ReferenceLine x="0 to +0.5" stroke="#f59e0b" strokeDasharray="4 4" strokeOpacity={0.5} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: "#020617", borderColor: "#1e293b", color: "#f8fafc", fontFamily: "monospace", fontSize: 11 }}
+                        formatter={(v: any, _: any, props: any) => {
+                          const label = props.payload?.label ?? "";
+                          const isNearMiss = label === "−0.5 to 0";
+                          return [`${v} pick${v !== 1 ? "s" : ""}${isNearMiss ? " (near-miss zone)" : ""}`, "Count"];
+                        }}
+                      />
+                      <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+                        {((s as any).marginDistribution as Array<{ label: string; count: number }>).map((b: { label: string; count: number }, i: number) => {
+                          const color = b.label.startsWith("≤") || b.label.startsWith("−2") || b.label.startsWith("−1 to")
+                            ? "#f43f5e"
+                            : b.label === "−0.5 to 0"
+                            ? "#f97316"
+                            : b.label === "0 to +0.5"
+                            ? "#84cc16"
+                            : "#10b981";
+                          return <Cell key={i} fill={color} fillOpacity={0.8} />;
+                        })}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex items-center gap-4 mt-2 text-[10px] font-mono text-muted-foreground flex-wrap">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-rose-500 inline-block" />Fell short</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-orange-500 inline-block" />Near-miss (≤0.5)</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-lime-500 inline-block" />Narrow cover</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block" />Comfortable cover</span>
                 </div>
               </CardContent>
             </Card>

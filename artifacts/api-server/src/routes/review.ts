@@ -120,6 +120,38 @@ router.get("/dashboard/review", async (req, res) => {
       }))
       .sort((a, b) => b.pickCount - a.pickCount);
 
+    // Near-miss margin stats — only picks where actualResult was recorded
+    const gradedWithActual = gradedPicks.filter(p => p.actualResult != null);
+    const missWithActual   = gradedWithActual.filter(p => p.result === "miss");
+
+    const avgMissMargin = missWithActual.length > 0
+      ? Math.round(
+          (missWithActual.reduce((sum, p) => sum + (Number(p.actualResult) - Number(p.lineValue)), 0) / missWithActual.length)
+          * 100) / 100
+      : null;
+
+    const MARGIN_BUCKETS: { label: string; min: number; max: number }[] = [
+      { label: "≤−2",        min: -Infinity, max: -2 },
+      { label: "−2 to −1",   min: -2,        max: -1 },
+      { label: "−1 to −0.5", min: -1,        max: -0.5 },
+      { label: "−0.5 to 0",  min: -0.5,      max: 0 },
+      { label: "0 to +0.5",  min: 0,         max: 0.5 },
+      { label: "+0.5 to +1", min: 0.5,       max: 1 },
+      { label: ">+1",        min: 1,         max: Infinity },
+    ];
+    const marginDistribution = MARGIN_BUCKETS.map(b => ({
+      label: b.label,
+      count: gradedWithActual.filter(p => {
+        const m = Number(p.actualResult) - Number(p.lineValue);
+        return m > b.min && m <= b.max;
+      }).length,
+    }));
+    // Fix the -Infinity lower-bound bucket: include exact -Infinity
+    marginDistribution[0].count = gradedWithActual.filter(p => {
+      const m = Number(p.actualResult) - Number(p.lineValue);
+      return m <= -2;
+    }).length;
+
     // Pick-level stats
     const completedPicks = picks.filter(p => p.result !== "pending");
     const hitPicks = completedPicks.filter(p => p.result === "hit");
@@ -236,6 +268,8 @@ router.get("/dashboard/review", async (req, res) => {
       modelAccuracy,
       emotionWinRates,
       statBreakdown,
+      avgMissMargin,
+      marginDistribution,
     });
   } catch (err) {
     req.log.error(err);

@@ -27,6 +27,10 @@ export const entryPicksTable = pgTable("entry_picks", {
   // reflects the model's confidence at the moment the bet was made.
   snapshotEdgeScore: numeric("snapshot_edge_score"),
   snapshotTier: text("snapshot_tier"), // A | B | C | D
+  // Stored margin: actualResult - lineValue at grade time.
+  // Positive = cleared the line (over), negative = fell short (under/miss).
+  // Null when actualResult was not supplied at grade time.
+  resultMargin: numeric("result_margin"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

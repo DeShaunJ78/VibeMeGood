@@ -361,16 +361,34 @@ function PicksList({ entryId, picks }: { entryId: number; picks: any[] }) {
                   <span className={`font-bold uppercase ${PICK_RESULT_STYLES[pick.result] ?? "text-muted-foreground"}`}>
                     {pick.result}
                   </span>
-                  {pick.actualResult != null && pick.result !== "dnp" && (() => {
-                    const margin = Number(pick.actualResult) - Number(pick.lineValue);
+                  {pick.result !== "dnp" && (() => {
+                    const margin = pick.resultMargin != null
+                      ? Number(pick.resultMargin)
+                      : pick.actualResult != null
+                        ? Number(pick.actualResult) - Number(pick.lineValue)
+                        : null;
+                    if (margin == null) return null;
                     const positive = margin >= 0;
+                    const isNearMiss = pick.result === "miss" && Math.abs(margin) <= 0.5;
                     return (
-                      <span
-                        className={`text-[10px] font-mono shrink-0 ${positive ? "text-emerald-400/80" : "text-rose-400/80"}`}
-                        title={`Actual: ${Number(pick.actualResult).toFixed(1)} · Line: ${Number(pick.lineValue).toFixed(1)} · Margin: ${positive ? "+" : ""}${margin.toFixed(1)}`}
-                      >
-                        {positive ? "+" : ""}{margin.toFixed(1)}
-                      </span>
+                      <>
+                        {isNearMiss && (
+                          <span
+                            className="text-[10px] font-bold font-mono px-1 py-0.5 rounded border border-amber-700/50 bg-amber-900/30 text-amber-300 shrink-0"
+                            title="Near-miss: fell short by ≤ 0.5"
+                          >~</span>
+                        )}
+                        <span
+                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${
+                            positive
+                              ? "bg-emerald-900/20 border-emerald-800/40 text-emerald-400"
+                              : "bg-rose-900/20 border-rose-800/40 text-rose-400"
+                          }`}
+                          title={`Actual: ${Number(pick.actualResult ?? 0).toFixed(1)} · Line: ${Number(pick.lineValue).toFixed(1)} · Margin: ${positive ? "+" : ""}${margin.toFixed(2)}`}
+                        >
+                          {positive ? "+" : ""}{margin.toFixed(1)} {positive ? "over" : "miss"}
+                        </span>
+                      </>
                     );
                   })()}
                   {pick.id && (

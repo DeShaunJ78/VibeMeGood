@@ -785,12 +785,23 @@ router.patch("/entries/:entryId/picks/:pickId", async (req, res): Promise<void> 
     let resultPick: typeof entryPicksTable.$inferSelect | null = null;
 
     await db.transaction(async (tx) => {
+      // Pre-fetch lineValue so we can compute and store resultMargin atomically.
+      const [existing] = await tx
+        .select({ lineValue: entryPicksTable.lineValue })
+        .from(entryPicksTable)
+        .where(and(eq(entryPicksTable.id, pickId), eq(entryPicksTable.entryId, entryId)));
+
+      const resultMargin = (parsed.data.actualResult != null && existing)
+        ? Math.round((parsed.data.actualResult - Number(existing.lineValue)) * 100) / 100
+        : null;
+
       const [pick] = await tx.update(entryPicksTable)
         .set({
           result: parsed.data.result,
           gradedBy: "manual",
           gradedAt: new Date(),
           ...(parsed.data.actualResult != null ? { actualResult: String(parsed.data.actualResult) } : {}),
+          ...(resultMargin != null ? { resultMargin: String(resultMargin) } : {}),
         })
         .where(and(
           eq(entryPicksTable.id, pickId),

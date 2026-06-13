@@ -2027,7 +2027,7 @@ components:
         closingLine: { type: ["number", "null"] }
         clv: { type: ["number", "null"] }
         actualResult: { type: ["number", "null"], description: "The player's actual stat value for this pick (populated when graded)" }
-        margin: { type: ["number", "null"], description: "actualResult minus lineValue — positive = cleared the line, negative = fell short" }
+        resultMargin: { type: ["number", "null"], description: "Stored margin: actualResult - lineValue at grade time. Positive = cleared line, negative = fell short. Null when actualResult was not supplied." }
         createdAt: { type: string, format: date-time }
       required: [id, entryId, statType, direction, lineValue, lineType, result, createdAt]
 
