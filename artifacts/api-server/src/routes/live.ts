@@ -145,9 +145,20 @@ function gameProgressFraction(sport: string, period: number, displayClock: strin
   const secsRemaining = (parseInt(mStr ?? "0", 10) * 60) + parseInt(sStr ?? "0", 10);
   const s = sport.toUpperCase();
 
-  if (s === "NBA" || s === "WNBA" || s === "NCAAB") {
-    const ps = 12 * 60; // seconds per period
+  if (s === "NBA") {
+    // 4 quarters × 12 min = 48 min
+    const ps = 12 * 60;
     return Math.min((Math.min(period - 1, 4) * ps + Math.max(0, ps - secsRemaining)) / (4 * ps), 1.0);
+  }
+  if (s === "WNBA") {
+    // 4 quarters × 10 min = 40 min
+    const ps = 10 * 60;
+    return Math.min((Math.min(period - 1, 4) * ps + Math.max(0, ps - secsRemaining)) / (4 * ps), 1.0);
+  }
+  if (s === "NCAAB") {
+    // 2 halves × 20 min = 40 min (ESPN period 1 = first half, period 2 = second half)
+    const ps = 20 * 60;
+    return Math.min((Math.min(period - 1, 2) * ps + Math.max(0, ps - secsRemaining)) / (2 * ps), 1.0);
   }
   if (s === "NHL") {
     const ps = 20 * 60;
