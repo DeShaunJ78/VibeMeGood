@@ -407,6 +407,23 @@ const MLB_BATTING_STATS = ["hits", "home runs", "total bases", "rbis", "runs", "
 
 interface WeatherMeta { isOutdoor?: boolean; windSpeed?: number; temp?: number }
 
+// Splits a large ID array into 1000-item chunks and runs the DB query for each
+// chunk, concatenating results. Prevents Drizzle ORM's mergeQueries() from
+// recursing too deep when building large IN (...) SQL clauses — overflows at
+// roughly >1000 IDs depending on column count in the surrounding query.
+const IN_CHUNK = 1000;
+async function queryInChunks<T>(
+  ids: number[],
+  queryFn: (chunk: number[]) => Promise<T[]>,
+): Promise<T[]> {
+  if (ids.length === 0) return [];
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += IN_CHUNK) {
+    out.push(...await queryFn(ids.slice(i, i + IN_CHUNK)));
+  }
+  return out;
+}
+
 export async function computeAllProjections(): Promise<number> {
   const activeLines = await db
     .select({ line: ppLinesTable, player: playersTable })
@@ -437,11 +454,11 @@ export async function computeAllProjections(): Promise<number> {
   // --- Batch-load all factor context in parallel ---
   const [fatigueRows, paceRows, nflUsageMap, dvpRows, lineupConfirmRows, pitcherProfileRows, nhlContextRows] = await Promise.all([
     // Latest fatigue row per player (ordered desc; we keep the first seen).
-    playerIds.length
-      ? db.select().from(fatigueDataTable)
-          .where(inArray(fatigueDataTable.playerId, playerIds))
-          .orderBy(desc(fatigueDataTable.computedForDate))
-      : Promise.resolve([] as (typeof fatigueDataTable.$inferSelect)[]),
+    queryInChunks(playerIds, chunk =>
+      db.select().from(fatigueDataTable)
+        .where(inArray(fatigueDataTable.playerId, chunk))
+        .orderBy(desc(fatigueDataTable.computedForDate))
+    ),
     // NBA team pace ratings.
     db.select().from(teamPaceRatingsTable).where(eq(teamPaceRatingsTable.sport, "NBA"))
       .orderBy(desc(teamPaceRatingsTable.season)),
@@ -461,18 +478,18 @@ export async function computeAllProjections(): Promise<number> {
       .where(and(isNotNull(playerGameLogsTable.opponentTeamId), isNotNull(playersTable.position)))
       .groupBy(playerGameLogsTable.opponentTeamId, playersTable.sport, playersTable.position, playerGameLogsTable.statType),
     // Lineup confirmations for NBA/WNBA minutes projection factor.
-    playerIds.length
-      ? db.select().from(lineupConfirmationsTable)
-          .where(inArray(lineupConfirmationsTable.playerId, playerIds))
-          .orderBy(desc(lineupConfirmationsTable.confirmedAt))
-      : Promise.resolve([] as (typeof lineupConfirmationsTable.$inferSelect)[]),
+    queryInChunks(playerIds, chunk =>
+      db.select().from(lineupConfirmationsTable)
+        .where(inArray(lineupConfirmationsTable.playerId, chunk))
+        .orderBy(desc(lineupConfirmationsTable.confirmedAt))
+    ),
     // MLB pitcher hand profiles (for platoon split factor).
     db.select().from(pitcherProfilesTable).where(eq(pitcherProfilesTable.sport, "MLB")),
     // NHL player context (TOI, PP unit, Corsi) for NHL Saber Sim factors.
-    playerIds.length
-      ? db.select().from(nhlPlayerContextTable)
-          .where(inArray(nhlPlayerContextTable.playerId, playerIds))
-      : Promise.resolve([] as (typeof nhlPlayerContextTable.$inferSelect)[]),
+    queryInChunks(playerIds, chunk =>
+      db.select().from(nhlPlayerContextTable)
+        .where(inArray(nhlPlayerContextTable.playerId, chunk))
+    ),
   ]);
 
   // Index fatigue (first row per player = latest).
@@ -549,11 +566,11 @@ export async function computeAllProjections(): Promise<number> {
 
   // ── Batch-load per-player data to eliminate N+1 queries in the inner loop ──
   // One query per data type instead of one per player.
-  const allGameLogs = playerIds.length
-    ? await db.select().from(playerGameLogsTable)
-        .where(inArray(playerGameLogsTable.playerId, playerIds))
-        .orderBy(desc(playerGameLogsTable.gameDate))
-    : [] as (typeof playerGameLogsTable.$inferSelect)[];
+  const allGameLogs = await queryInChunks(playerIds, chunk =>
+    db.select().from(playerGameLogsTable)
+      .where(inArray(playerGameLogsTable.playerId, chunk))
+      .orderBy(desc(playerGameLogsTable.gameDate))
+  );
 
   const gameLogsByKey = new Map<string, (typeof playerGameLogsTable.$inferSelect)[]>();
   const allLogsByPlayer = new Map<number, (typeof playerGameLogsTable.$inferSelect)[]>();
@@ -839,12 +856,14 @@ export async function computeAllProjections(): Promise<number> {
       }),
   )];
 
-  const matchupBatchRows = playerIds.length && opponentIds.length
-    ? await db.select().from(matchupHistoryTable)
-        .where(and(
-          inArray(matchupHistoryTable.playerId, playerIds),
-          inArray(matchupHistoryTable.opponentTeamId, opponentIds),
-        ))
+  const matchupBatchRows = opponentIds.length
+    ? await queryInChunks(playerIds, chunk =>
+        db.select().from(matchupHistoryTable)
+          .where(and(
+            inArray(matchupHistoryTable.playerId, chunk),
+            inArray(matchupHistoryTable.opponentTeamId, opponentIds),
+          ))
+      )
     : [] as (typeof matchupHistoryTable.$inferSelect)[];
 
   const matchupByKey = new Map<string, typeof matchupHistoryTable.$inferSelect>();
@@ -852,11 +871,11 @@ export async function computeAllProjections(): Promise<number> {
     matchupByKey.set(`${m.playerId}:${m.opponentTeamId}:${m.statType}`, m);
   }
 
-  const injuryBatchRows = playerIds.length
-    ? await db.select().from(injuriesTable)
-        .where(inArray(injuriesTable.playerId, playerIds))
-        .orderBy(desc(injuriesTable.reportedAt))
-    : [] as (typeof injuriesTable.$inferSelect)[];
+  const injuryBatchRows = await queryInChunks(playerIds, chunk =>
+    db.select().from(injuriesTable)
+      .where(inArray(injuriesTable.playerId, chunk))
+      .orderBy(desc(injuriesTable.reportedAt))
+  );
 
   const injuryByPlayer = new Map<number, typeof injuriesTable.$inferSelect>();
   for (const inj of injuryBatchRows) {

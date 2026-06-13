@@ -183,6 +183,22 @@ export async function computeVarianceForLine(ppLineId: number): Promise<void> {
   });
 }
 
+// Splits a large ID array into 1000-item chunks and runs the DB query for each
+// chunk, concatenating results. Prevents Drizzle ORM's mergeQueries() from
+// recursing too deep when building large IN (...) SQL clauses.
+const IN_CHUNK = 1000;
+async function queryInChunks<T>(
+  ids: number[],
+  queryFn: (chunk: number[]) => Promise<T[]>,
+): Promise<T[]> {
+  if (ids.length === 0) return [];
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += IN_CHUNK) {
+    out.push(...await queryFn(ids.slice(i, i + IN_CHUNK)));
+  }
+  return out;
+}
+
 export async function computeAllVarianceScores(): Promise<number> {
   const today = new Date().toISOString().split("T")[0];
 
@@ -197,32 +213,37 @@ export async function computeAllVarianceScores(): Promise<number> {
   const playerIds = [...new Set(rows.map(r => r.player.id))];
   const gameIds = [...new Set(rows.filter(r => r.line.gameId != null).map(r => r.line.gameId as number))];
 
-  // 2. Batch-load all supporting data in parallel.
-  const [games, fatigueRows, gameEnvRows, minLogs] = await Promise.all([
+  // 2. Batch-load all supporting data.
+  //    Game-keyed queries run in parallel (gameIds is always small).
+  //    Player-keyed queries use queryInChunks to avoid Drizzle stack overflow
+  //    when playerIds exceeds ~1000 after a full history backfill.
+  const [games, gameEnvRows] = await Promise.all([
     gameIds.length
       ? db.select().from(gamesTable).where(inArray(gamesTable.id, gameIds))
       : Promise.resolve([] as (typeof gamesTable.$inferSelect)[]),
-    playerIds.length
-      ? db.select().from(fatigueDataTable)
-          .where(and(
-            inArray(fatigueDataTable.playerId, playerIds),
-            eq(fatigueDataTable.computedForDate, today),
-          ))
-          .orderBy(desc(fatigueDataTable.computedAt))
-      : Promise.resolve([] as (typeof fatigueDataTable.$inferSelect)[]),
     gameIds.length
       ? db.select().from(gameEnvironmentTable).where(inArray(gameEnvironmentTable.gameId, gameIds))
       : Promise.resolve([] as (typeof gameEnvironmentTable.$inferSelect)[]),
-    playerIds.length
-      ? db.select({
-            playerId: playerGameLogsTable.playerId,
-            minutes: playerGameLogsTable.minutes,
-            gameDate: playerGameLogsTable.gameDate,
-          })
-          .from(playerGameLogsTable)
-          .where(inArray(playerGameLogsTable.playerId, playerIds))
-          .orderBy(desc(playerGameLogsTable.gameDate))
-      : Promise.resolve([] as { playerId: number; minutes: string | null; gameDate: string }[]),
+  ]);
+  const [fatigueRows, minLogs] = await Promise.all([
+    queryInChunks(playerIds, chunk =>
+      db.select().from(fatigueDataTable)
+        .where(and(
+          inArray(fatigueDataTable.playerId, chunk),
+          eq(fatigueDataTable.computedForDate, today),
+        ))
+        .orderBy(desc(fatigueDataTable.computedAt))
+    ),
+    queryInChunks(playerIds, chunk =>
+      db.select({
+          playerId: playerGameLogsTable.playerId,
+          minutes: playerGameLogsTable.minutes,
+          gameDate: playerGameLogsTable.gameDate,
+        })
+        .from(playerGameLogsTable)
+        .where(inArray(playerGameLogsTable.playerId, chunk))
+        .orderBy(desc(playerGameLogsTable.gameDate))
+    ),
   ]);
 
   // 3. Build lookup maps.
@@ -253,12 +274,14 @@ export async function computeAllVarianceScores(): Promise<number> {
     opponentIdsByPlayer.set(player.id, s);
   }
   const allOpponentIds = [...new Set([...opponentIdsByPlayer.values()].flatMap(s => [...s]))];
-  const matchupRows = playerIds.length && allOpponentIds.length
-    ? await db.select().from(matchupHistoryTable)
-        .where(and(
-          inArray(matchupHistoryTable.playerId, playerIds),
-          inArray(matchupHistoryTable.opponentTeamId, allOpponentIds),
-        ))
+  const matchupRows = allOpponentIds.length
+    ? await queryInChunks(playerIds, chunk =>
+        db.select().from(matchupHistoryTable)
+          .where(and(
+            inArray(matchupHistoryTable.playerId, chunk),
+            inArray(matchupHistoryTable.opponentTeamId, allOpponentIds),
+          ))
+      )
     : [] as (typeof matchupHistoryTable.$inferSelect)[];
 
   const matchupByKey = new Map<string, typeof matchupHistoryTable.$inferSelect>();

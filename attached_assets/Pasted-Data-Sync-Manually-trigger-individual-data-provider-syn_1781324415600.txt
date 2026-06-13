@@ -1,0 +1,222 @@
+Data Sync
+Manually trigger individual data provider syncs
+Sync All
+PrizePicks Lines
+Stale · 17389 lines · 2 days ago
+Sync
+LIVE DATA
+Injury Reports
+0 · 3 minutes ago
+Sync
+External Odds
+0 lines · 3 minutes ago
+Sync
+Auto-sync in 168m · Manual sync uses API credits
+Game Schedule
+35 · 2 minutes ago
+Sync
+PROJECTIONS & SCORING
+Player Projections
+Never run
+Sync
+Variance Compute
+0 · 2 minutes ago
+Sync
+Team Pace Ratings
+Sync
+Game Scores
+35 · 2 minutes ago
+Sync
+NHL CONTEXT
+NHL TOI/PP/Corsi
+Sync
+MAINTENANCE
+Grade Pending Picks
+Runs nightly at 3:30 AM
+Grade Now
+Backfill History
+Sync
+Derive Blks+Stls
+Sync
+MLB Pitcher Hand Tags
+0 · 2 minutes ago
+Sync
+Run Calibration
+380 buckets · 2 minutes ago
+Re-run
+Rebuild Calibration
+0 · 2 minutes ago
+Sync
+Recent Sync Logs
+Latest automated data pull results
+auto-grade-picks
+SUCCESS
+0 records
+2 minutes ago
+nhl-player-context
+SUCCESS
+0 records
+2 minutes ago
+sync-scores
+RUNNING
+0 records
+2 minutes ago
+variance
+ERROR
+0 records
+2 minutes ago
+Maximum call stack size exceeded
+game-schedule
+SUCCESS
+35 records
+2 minutes ago
+external-odds
+SUCCESS
+0 records
+3 minutes ago
+sync-injuries
+SUCCESS
+0 records
+3 minutes ago
+auto-grade-picks
+SUCCESS
+0 records
+7 minutes ago
+nhl-player-context
+SUCCESS
+0 records
+7 minutes ago
+sync-scores
+RUNNING
+0 records
+7 minutes ago
+variance
+ERROR
+0 records
+8 minutes ago
+Maximum call stack size exceeded
+projections
+ERROR
+0 records
+8 minutes ago
+Maximum call stack size exceeded
+game-schedule
+SUCCESS
+35 records
+8 minutes ago
+external-odds
+SUCCESS
+0 records
+8 minutes ago
+sync-injuries
+SUCCESS
+0 records
+8 minutes ago
+game-schedule
+SUCCESS
+34 records
+19 minutes ago
+injuries
+SUCCESS
+0 records
+39 minutes ago
+auto-grade-picks
+SUCCESS
+0 records
+about 1 hour ago
+game-schedule
+SUCCESS
+35 records
+about 1 hour ago
+injuries
+SUCCESS
+0 records
+about 1 hour ago
+variance
+ERROR
+0 records
+about 1 hour ago
+Maximum call stack size exceeded
+fatigue
+SUCCESS
+0 records
+about 1 hour ago
+projections
+ERROR
+0 records
+about 1 hour ago
+Failed query: select "id", "sport", "home_team_id", "away_team_id", "start_time", "status", "spread", "total", "implied_home_total", "implied_away_total", "home_win_prob", "away_win_prob", "was_ot", "metadata", "created_at", "updated_at" from "games" where "games"."id" in ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) params: 18974,18957,18964,18958,18853,18971,18979,18961,18972,18973,18963,18771,18902,18944,18932,18836,18769,18811,18854,18813
+nhl-player-context
+SUCCESS
+0 records
+about 1 hour ago
+external-odds
+RUNNING
+0 records
+about 1 hour ago
+injuries
+RUNNING
+0 records
+about 1 hour ago
+variance
+ERROR
+0 records
+about 1 hour ago
+Maximum call stack size exceeded
+fatigue
+SUCCESS
+0 records
+about 1 hour ago
+projections
+ERROR
+0 records
+about 1 hour ago
+Maximum call stack size exceeded
+nhl-player-context
+SUCCESS
+0 records
+about 1 hour ago
+Data Providers
+Live sync status — last 10 runs per provider
+PrizePicks Lines
+Last OK: 2 days ago · 17389 records
+100%
+SUCCESS
+Injuries (ESPN)
+Last OK: 3 minutes ago · 0 records
+90%
+SUCCESS
+External Odds
+Last OK: 3 minutes ago · 0 records
+60%
+SUCCESS
+Model Projections
+0%
+ERROR
+Maximum call stack size exceeded
+FantasyPros Projections
+Last OK: 2 days ago · 3179 records
+50%
+SUCCESS
+Game Schedule / Logs
+Last OK: 2 minutes ago · 35 records
+80%
+RUNNING
+Internal (Variance / Fatigue / Matchups)
+Last OK: 2 minutes ago · 0 records
+60%
+SUCCESS
+NFL Advanced Metrics
+0%
+ERROR
+interrupted (server restarted)
+System Info
+Runtime environment and data mode
+System Health
+HEALTHY
+Board Freshness
+53.1h ago
+Data Mode
+LIVE
+Sync Log Entries
+30
