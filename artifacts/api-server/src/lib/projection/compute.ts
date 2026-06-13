@@ -1104,6 +1104,22 @@ export async function computeAllProjections(): Promise<number> {
       const stdDevMultiplier = nflAdvApplied?.stdMultiplier ?? 1;
       const adjustedStdDev = result.stdDev * stdDevMultiplier;
 
+      // Re-derive pOver and percentileAtLine with the aDOT-adjusted stdDev so that
+      // deep-route WRs (wider variance) and short-route WRs (narrower variance) get
+      // the correct win probability, not just the correct stdDev in the detail sheet.
+      // When stdMultiplier is 1 (no aDOT signal present) the values are unchanged.
+      let payloadPOver = result.pOver;
+      let payloadPercentileAtLine = result.percentileAtLine;
+      if (stdDevMultiplier !== 1) {
+        const ppLineVal = parseFloat(line.lineValue.toString());
+        const rawAdj = pOverLineDist(adjustedMean, adjustedStdDev, ppLineVal, line.statType);
+        const calAdj = calibratePOver(rawAdj, player.sport, line.statType, line.lineType, calibrationMap);
+        payloadPOver = Math.round(calAdj.pOver * 10) / 10;
+        payloadPercentileAtLine = Math.round(
+          percentileAtLineDist(adjustedMean, adjustedStdDev, ppLineVal, line.statType) * 10,
+        ) / 10;
+      }
+
       const factorVal = (key: string): string =>
         (applied.find(f => f.key === key)?.factor ?? 1).toString();
 
@@ -1114,14 +1130,14 @@ export async function computeAllProjections(): Promise<number> {
         projectedValue: adjustedMean.toString(),
         weightedAvg: result.mean.toString(),
         gamesUsed: result.gamesUsed,
-        confidence: result.pOver >= 60 && result.dataQualityScore >= 70 ? "high"
-          : result.pOver >= 52 && result.dataQualityScore >= 50 ? "medium"
+        confidence: payloadPOver >= 60 && result.dataQualityScore >= 70 ? "high"
+          : payloadPOver >= 52 && result.dataQualityScore >= 50 ? "medium"
           : "low",
         modelVersion: "v3",
         stdDev: adjustedStdDev.toString(),
         p99: result.p99 != null ? result.p99.toString() : null,
-        pOver: result.pOver.toString(),
-        percentileAtLine: result.percentileAtLine.toString(),
+        pOver: payloadPOver.toString(),
+        percentileAtLine: payloadPercentileAtLine.toString(),
         dataQualityScore: result.dataQualityScore,
         shrinkageFactor: result.shrinkageFactor.toString(),
         noPlayReason: result.noPlayReason,
