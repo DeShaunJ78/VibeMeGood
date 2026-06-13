@@ -222,19 +222,28 @@ router.get("/market-intel", async (req, res) => {
     const uniquePlayerIds = [...new Set(rows.map(r => r.line.playerId))];
     const uniquePlayerNames = [...new Set(rows.map(r => r.player.fullName))];
 
+    // External lines freshness cutoff — same 4-hour window as the stale-odds banner.
+    // Only lines pulled within this window count as "current market data" for a prop.
+    // This prevents historical external lines from a prior sync run from inflating
+    // trueEdge or marketDataStatus for props that had no data in the latest sync.
+    const extLinesCutoff = new Date(Date.now() - 4 * 60 * 60 * 1000);
+
     const [allExtLines, allVarScores, allRecentMoves, allPlatformLines, allGameLogs, allPlayerProjections] = ppLineIds.length
       ? await Promise.all([
           db
             .select()
             .from(externalLinesTable)
             .where(
-              or(
-                inArray(externalLinesTable.ppLineId, ppLineIds),
-                and(
-                  isNull(externalLinesTable.ppLineId),
-                  inArray(
-                    externalLinesTable.playerId,
-                    rows.map(r => r.line.playerId),
+              and(
+                gte(externalLinesTable.pulledAt, extLinesCutoff),
+                or(
+                  inArray(externalLinesTable.ppLineId, ppLineIds),
+                  and(
+                    isNull(externalLinesTable.ppLineId),
+                    inArray(
+                      externalLinesTable.playerId,
+                      rows.map(r => r.line.playerId),
+                    ),
                   ),
                 ),
               ),
@@ -448,12 +457,13 @@ router.get("/market-intel", async (req, res) => {
         ? fairProbDecimal.times(100).toDecimalPlaces(2).toNumber()
         : null;
 
+      // Per-prop freshness-based status.
+      // allExtLines is already filtered to pulledAt >= extLinesCutoff (4h), so
+      // vals.length reflects only lines from the latest sync window — no global
+      // ageMins heuristic needed here.
       let marketDataStatus: "available" | "partial" | "unavailable" | "not_synced";
       if (vals.length >= 2) {
-        const ageMins = lastOddsRun?.finishedAt
-          ? (Date.now() - lastOddsRun.finishedAt.getTime()) / 60000
-          : Infinity;
-        marketDataStatus = ageMins <= 30 ? "available" : ageMins <= 60 ? "partial" : "unavailable";
+        marketDataStatus = "available";
       } else if (vals.length === 1) {
         marketDataStatus = "partial";
       } else if (lastOddsRun) {
