@@ -192,6 +192,20 @@ router.post("/sync/historical-stats", async (req, res) => {
               err instanceof Error ? err.message : "Auto-chain failed");
           });
       }
+      // Auto-chain MLB pitcher hand backfill whenever MLB logs were synced.
+      // DB-only (no API calls) — infers pitcher_hand on batter logs from existing
+      // pitcher game logs + pitcher_profiles.  Safe to re-run.
+      if (mlb && result.mlb > 0) {
+        logger.info("Auto-triggering MLB pitcher hand backfill after backfill");
+        import("../lib/sync/historical-stats")
+          .then(m => m.backfillMlbPitcherHand())
+          .then(n => broadcastSyncStatus("backfill-mlb-pitcher-hand", "success", `${n} batter logs updated (auto)`))
+          .catch(err => {
+            logger.warn({ err }, "MLB pitcher hand auto-chain failed (non-critical)");
+            broadcastSyncStatus("backfill-mlb-pitcher-hand", "error",
+              err instanceof Error ? err.message : "Auto-chain failed");
+          });
+      }
       // Auto-chain calibration — only when new records were written (skip if 0)
       if (result.total > 0) {
         runAutoCalibration("Auto-started after historical-stats sync").catch(() => {});

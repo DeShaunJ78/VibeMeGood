@@ -51,8 +51,9 @@ async function triggerSync(action: string): Promise<Response | null> {
     "nfl-advanced":         "/api/admin/sync/nfl-advanced",
     "calibration":          "/api/sync/calibration",
     "historical-stats":     "/api/sync/historical-stats",
-    "backfill-game-ids":    "/api/sync/backfill-game-ids",
-    "matchup-history":      "/api/sync/matchup-history",
+    "backfill-game-ids":          "/api/sync/backfill-game-ids",
+    "backfill-mlb-pitcher-hand":  "/api/sync/backfill-mlb-pitcher-hand",
+    "matchup-history":            "/api/sync/matchup-history",
     "game-logs":            "/api/sync/game-logs",
     "game-schedule":        "/api/sync/game-schedule",
     "game-schedule-history":"/api/sync/game-schedule-history",
@@ -75,7 +76,8 @@ const JOB_NAME_BY_ACTION: Record<string, string> = {
   "variance":             "variance",
   "game-schedule":        "game-schedule",
   "matchup-history":      "matchup-history",
-  "backfill-game-ids":    "backfill-game-ids",
+  "backfill-game-ids":              "backfill-game-ids",
+  "backfill-mlb-pitcher-hand":      "backfill-mlb-pitcher-hand",
   "game-logs":            "game-logs",
   "game-schedule-history":"game-schedule-history",
   "historical-stats":     "historical-stats",
@@ -209,8 +211,9 @@ const UTILITY_STEPS = [
   { label: "NFL Advanced",       action: "nfl-advanced" },
   { label: "Sync Pace",          action: "pace" },
   { label: "Sync Sharp",         action: "sharp" },
-  { label: "Backfill Game IDs",  action: "backfill-game-ids" },
-  { label: "Schedule History",   action: "game-schedule-history" },
+  { label: "Backfill Game IDs",       action: "backfill-game-ids" },
+  { label: "MLB Pitcher Hands",       action: "backfill-mlb-pitcher-hand" },
+  { label: "Schedule History",        action: "game-schedule-history" },
 ];
 
 export default function SystemHealth() {
