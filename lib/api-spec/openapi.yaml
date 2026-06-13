@@ -227,6 +227,20 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Game" }
 
+  /schedule/mlb-starters:
+    get:
+      operationId: getMlbStarters
+      tags: [games]
+      summary: Today's MLB games with probable starter confirmation status
+      responses:
+        "200":
+          description: List of today's MLB games with pitcher metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MlbStarterGame" }
+
   # ─── PP LINES ─────────────────────────────────────────────────────
   /pp-lines:
     get:
@@ -1649,6 +1663,23 @@ components:
         total: { type: ["number", "null"] }
         metadata: {}
       required: [sport, homeTeamId, awayTeamId, startTime, status]
+
+    MlbStarterGame:
+      type: object
+      properties:
+        id: { type: integer }
+        startTime: { type: string, format: date-time }
+        status: { type: string }
+        homeTeamId: { type: integer }
+        awayTeamId: { type: integer }
+        homeTeamAbbr: { type: ["string", "null"] }
+        awayTeamAbbr: { type: ["string", "null"] }
+        homeTeamName: { type: ["string", "null"] }
+        awayTeamName: { type: ["string", "null"] }
+        homeStartingPitcher: { type: ["string", "null"] }
+        awayStartingPitcher: { type: ["string", "null"] }
+        confirmed: { type: boolean }
+      required: [id, startTime, status, homeTeamId, awayTeamId, confirmed]
 
     # ─── PP LINE ────────────────────────────────────────────────────
     PpLine:

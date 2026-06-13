@@ -226,6 +226,26 @@ export const GetGameResponse = zod.object({
 
 
 /**
+ * @summary Today's MLB games with probable starter confirmation status
+ */
+export const GetMlbStartersResponseItem = zod.object({
+  "id": zod.number(),
+  "startTime": zod.coerce.date(),
+  "status": zod.string(),
+  "homeTeamId": zod.number(),
+  "awayTeamId": zod.number(),
+  "homeTeamAbbr": zod.string().nullish(),
+  "awayTeamAbbr": zod.string().nullish(),
+  "homeTeamName": zod.string().nullish(),
+  "awayTeamName": zod.string().nullish(),
+  "homeStartingPitcher": zod.string().nullish(),
+  "awayStartingPitcher": zod.string().nullish(),
+  "confirmed": zod.boolean()
+})
+export const GetMlbStartersResponse = zod.array(GetMlbStartersResponseItem)
+
+
+/**
  * @summary List PrizePicks lines
  */
 export const ListPpLinesQueryParams = zod.object({

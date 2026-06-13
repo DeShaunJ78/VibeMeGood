@@ -81,6 +81,7 @@ import type {
   LiveScoresResponse,
   MarkAllAlertsRead200,
   MarketIntelPage,
+  MlbStarterGame,
   NflAdvancedRow,
   NflAdvancedSyncResult,
   PaceSyncResult,
@@ -964,6 +965,83 @@ export function useGetGame<TData = Awaited<ReturnType<typeof getGame>>, TError =
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetGameQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetMlbStartersUrl = () => {
+
+
+
+
+  return `/api/schedule/mlb-starters`
+}
+
+/**
+ * @summary Today's MLB games with probable starter confirmation status
+ */
+export const getMlbStarters = async ( options?: RequestInit): Promise<MlbStarterGame[]> => {
+
+  return customFetch<MlbStarterGame[]>(getGetMlbStartersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMlbStartersQueryKey = () => {
+    return [
+    `/api/schedule/mlb-starters`
+    ] as const;
+    }
+
+
+export const getGetMlbStartersQueryOptions = <TData = Awaited<ReturnType<typeof getMlbStarters>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMlbStarters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMlbStartersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMlbStarters>>> = ({ signal }) => getMlbStarters({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMlbStarters>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMlbStartersQueryResult = NonNullable<Awaited<ReturnType<typeof getMlbStarters>>>
+export type GetMlbStartersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Today's MLB games with probable starter confirmation status
+ */
+
+export function useGetMlbStarters<TData = Awaited<ReturnType<typeof getMlbStarters>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMlbStarters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMlbStartersQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

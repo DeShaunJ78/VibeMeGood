@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useGetDataHealth, getGetDataHealthQueryKey } from "@workspace/api-client-react";
+import { useGetDataHealth, getGetDataHealthQueryKey, useGetMlbStarters, getGetMlbStartersQueryKey } from "@workspace/api-client-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
-import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical, Lock, Zap, DollarSign, Target } from "lucide-react";
+import { RefreshCw, Database, Server, CheckCircle2, AlertCircle, Clock, Brain, FlaskConical, Lock, Zap, DollarSign, Target, Users } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useUserSettings, useUpdateUserSettings, type UserSettings } from "@/hooks/use-user-settings";
 
@@ -275,9 +275,10 @@ const SYNC_JOB_GROUPS: Array<{ label: string; jobs: SyncJob[] }> = [
   {
     label: "Live Data",
     jobs: [
-      { label: "Injury Reports",  endpoint: "/api/sync/injuries" },
-      { label: "External Odds",   endpoint: "/api/sync/external-odds" },
-      { label: "Game Schedule",   endpoint: "/api/sync/game-schedule" },
+      { label: "Injury Reports",            endpoint: "/api/sync/injuries" },
+      { label: "External Odds",             endpoint: "/api/sync/external-odds" },
+      { label: "Game Schedule",             endpoint: "/api/sync/game-schedule" },
+      { label: "MLB Probable Starters",     endpoint: "/api/sync/mlb-starters" },
     ],
   },
   {
@@ -323,6 +324,7 @@ const JOB_PROVIDER: Record<string, string> = {
   "/api/sync/nhl-player-context":             "nhl-stats",
   "/api/sync/backfill-mlb-pitcher-hand":      "internal",
   "/api/sync/rebuild-calibration":            "internal",
+  "/api/sync/mlb-starters":                  "mlb-stats",
 };
 
 function StatusDot({ status }: { status: string }) {
@@ -371,6 +373,10 @@ export default function Settings() {
     },
     refetchInterval: 60000,
     staleTime: 30000,
+  });
+
+  const { data: mlbStarters, isLoading: mlbStartersLoading } = useGetMlbStarters({
+    query: { queryKey: getGetMlbStartersQueryKey(), refetchInterval: 5 * 60 * 1000, staleTime: 60_000 },
   });
 
   useEffect(() => {
@@ -1044,6 +1050,105 @@ export default function Settings() {
           </CardContent>
         </Card>
       </div>
+
+      {/* MLB Probable Starters — per-game confirmed/TBD breakdown */}
+      {(mlbStarters && mlbStarters.length > 0) || mlbStartersLoading ? (
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Users className="w-4 h-4 text-primary" /> MLB Probable Starters
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  {data?.mlbStarterCoverage
+                    ? `${data.mlbStarterCoverage.confirmed}/${data.mlbStarterCoverage.total} games confirmed · refreshes every 30 min`
+                    : "Today's starting pitcher lineup status"}
+                </CardDescription>
+              </div>
+              {data?.mlbStarterCoverage && (
+                <div className="shrink-0 text-right">
+                  <div className={`text-2xl font-bold font-mono ${
+                    data.mlbStarterCoverage.confirmed === data.mlbStarterCoverage.total
+                      ? "text-emerald-400"
+                      : data.mlbStarterCoverage.confirmed > 0
+                        ? "text-amber-400"
+                        : "text-slate-500"
+                  }`}>
+                    {data.mlbStarterCoverage.confirmed}/{data.mlbStarterCoverage.total}
+                  </div>
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">confirmed</div>
+                </div>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {mlbStartersLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 bg-slate-800" />)}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {mlbStarters!.map(game => {
+                  const awayAbbr  = game.awayTeamAbbr  ?? game.awayTeamName ?? `Team ${game.awayTeamId}`;
+                  const homeAbbr  = game.homeTeamAbbr  ?? game.homeTeamName ?? `Team ${game.homeTeamId}`;
+                  const awayName  = game.awayTeamName  ?? awayAbbr;
+                  const homeName  = game.homeTeamName  ?? homeAbbr;
+                  const gameTime  = new Date(game.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+                  const awayPitcher = game.awayStartingPitcher;
+                  const homePitcher = game.homeStartingPitcher;
+                  const confirmed   = game.confirmed;
+
+                  return (
+                    <div
+                      key={game.id}
+                      className={`p-3 bg-slate-950 border rounded ${
+                        confirmed ? "border-emerald-500/25" : "border-slate-800"
+                      }`}
+                    >
+                      {/* Matchup header */}
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-1.5 font-mono font-bold text-sm">
+                          <span className="text-slate-300" title={awayName}>{awayAbbr}</span>
+                          <span className="text-slate-600 text-xs">@</span>
+                          <span className="text-slate-300" title={homeName}>{homeAbbr}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono text-slate-500">{gameTime}</span>
+                          {confirmed ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-900/40 border border-emerald-700/40 text-emerald-300">
+                              <CheckCircle2 className="w-3 h-3" /> CONFIRMED
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-400">
+                              <Clock className="w-3 h-3" /> TBD
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {/* Pitchers row */}
+                      <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                        <div className="flex items-start gap-1.5">
+                          <span className="text-slate-600 shrink-0 w-8 pt-px text-right">{awayAbbr}</span>
+                          <span className={awayPitcher ? "text-slate-200" : "text-slate-600 italic"}>
+                            {awayPitcher ?? "TBD"}
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-1.5">
+                          <span className="text-slate-600 shrink-0 w-8 pt-px text-right">{homeAbbr}</span>
+                          <span className={homePitcher ? "text-slate-200" : "text-slate-600 italic"}>
+                            {homePitcher ?? "TBD"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

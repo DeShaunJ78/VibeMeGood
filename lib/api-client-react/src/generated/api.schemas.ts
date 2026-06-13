@@ -103,6 +103,27 @@ export interface GameInput {
   metadata?: unknown;
 }
 
+export interface MlbStarterGame {
+  id: number;
+  startTime: string;
+  status: string;
+  homeTeamId: number;
+  awayTeamId: number;
+  /** @nullable */
+  homeTeamAbbr?: string | null;
+  /** @nullable */
+  awayTeamAbbr?: string | null;
+  /** @nullable */
+  homeTeamName?: string | null;
+  /** @nullable */
+  awayTeamName?: string | null;
+  /** @nullable */
+  homeStartingPitcher?: string | null;
+  /** @nullable */
+  awayStartingPitcher?: string | null;
+  confirmed: boolean;
+}
+
 export interface PpLine {
   id: number;
   playerId: number;
