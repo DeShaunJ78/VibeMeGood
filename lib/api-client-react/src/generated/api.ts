@@ -51,6 +51,7 @@ import type {
   GameInput,
   GetCalibrationDiagnosticsParams,
   GetHistoricalHitRatesParams,
+  GetMarketIntelParams,
   GetPlatformLinesByPropParams,
   GetReviewStatsParams,
   GetSlateParams,
@@ -79,6 +80,7 @@ import type {
   LiveEntriesResponse,
   LiveScoresResponse,
   MarkAllAlertsRead200,
+  MarketIntelPage,
   NflAdvancedRow,
   NflAdvancedSyncResult,
   PaceSyncResult,
@@ -7075,6 +7077,90 @@ export function useGetLiveEntries<TData = Awaited<ReturnType<typeof getLiveEntri
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetLiveEntriesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetMarketIntelUrl = (params?: GetMarketIntelParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/market-intel?${stringifiedParams}` : `/api/market-intel`
+}
+
+/**
+ * @summary Paginated market intelligence with sharp signals for active props
+ */
+export const getMarketIntel = async (params?: GetMarketIntelParams, options?: RequestInit): Promise<MarketIntelPage> => {
+
+  return customFetch<MarketIntelPage>(getGetMarketIntelUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMarketIntelQueryKey = (params?: GetMarketIntelParams,) => {
+    return [
+    `/api/market-intel`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetMarketIntelQueryOptions = <TData = Awaited<ReturnType<typeof getMarketIntel>>, TError = ErrorType<unknown>>(params?: GetMarketIntelParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMarketIntel>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMarketIntelQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMarketIntel>>> = ({ signal }) => getMarketIntel(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMarketIntel>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMarketIntelQueryResult = NonNullable<Awaited<ReturnType<typeof getMarketIntel>>>
+export type GetMarketIntelQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Paginated market intelligence with sharp signals for active props
+ */
+
+export function useGetMarketIntel<TData = Awaited<ReturnType<typeof getMarketIntel>>, TError = ErrorType<unknown>>(
+ params?: GetMarketIntelParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMarketIntel>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMarketIntelQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

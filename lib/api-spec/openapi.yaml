@@ -1516,6 +1516,26 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LiveEntriesResponse" }
 
+  /market-intel:
+    get:
+      summary: Paginated market intelligence with sharp signals for active props
+      operationId: getMarketIntel
+      tags: [slate]
+      parameters:
+        - { in: query, name: sport,        schema: { type: string } }
+        - { in: query, name: actionTag,    schema: { type: string } }
+        - { in: query, name: lineType,     schema: { type: string } }
+        - { in: query, name: minEdgeScore, schema: { type: string } }
+        - { in: query, name: search,       schema: { type: string } }
+        - { in: query, name: page,         schema: { type: string } }
+        - { in: query, name: limit,        schema: { type: string } }
+      responses:
+        "200":
+          description: Paginated market intel rows with scoring, sharp signals, and projections
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MarketIntelPage" }
+
 components:
   schemas:
     HealthStatus:
@@ -2420,7 +2440,7 @@ components:
         statType:           { type: string }
         lineValue:          { type: number }
         sport:              { type: string }
-        signal:             { type: string, enum: [sharp, public, neutral] }
+        signal:             { type: string, enum: [sharp, fade, neutral] }
         confidence:         { type: string, enum: [low, medium, high] }
         explanation:        { type: string }
         estimatedPublicPct: { type: integer }
@@ -2447,6 +2467,102 @@ components:
         neutral: { type: integer }
         total:   { type: integer }
       required: [sharp, public, neutral, total]
+
+    # ─── MARKET INTEL ─────────────────────────────────────────────────
+    MarketIntelPage:
+      type: object
+      properties:
+        data:        { type: array, items: { $ref: "#/components/schemas/MarketIntelRow" } }
+        total:       { type: integer }
+        page:        { type: integer }
+        limit:       { type: integer }
+        hasMore:     { type: boolean }
+        lastOddsSync: { type: ["string", "null"] }
+      required: [data, total, page, limit, hasMore]
+
+    MarketIntelOurProjection:
+      type: object
+      properties:
+        value:            { type: number }
+        stdDev:           { type: ["number", "null"] }
+        p99:              { type: ["number", "null"] }
+        pOver:            { type: ["number", "null"] }
+        percentileAtLine: { type: ["number", "null"] }
+        noPlayReason:     { type: ["string", "null"] }
+        dataQualityScore: { type: ["number", "null"] }
+        sourceLabel:      { type: ["string", "null"] }
+        confidence:       { type: ["string", "null"] }
+        gamesUsed:        { type: ["number", "null"] }
+        shrinkageFactor:  { type: ["number", "null"] }
+        isStale:          { type: boolean }
+        vor:              { type: ["number", "null"] }
+        ensembleBlendPct: { type: number }
+        calSampleSize:    { type: integer }
+        adjustments:      { type: array, items: { type: object } }
+      required: [value, isStale, ensembleBlendPct, calSampleSize]
+
+    MarketIntelRow:
+      type: object
+      properties:
+        ppLineId:          { type: integer }
+        playerId:          { type: integer }
+        playerName:        { type: string }
+        imageUrl:          { type: ["string", "null"] }
+        teamId:            { type: ["integer", "null"] }
+        sport:             { type: string }
+        statType:          { type: string }
+        lineValue:         { type: number }
+        lineType:          { type: string }
+        marketAvg:         { type: ["number", "null"] }
+        trueEdge:          { type: ["number", "null"] }
+        bookCount:         { type: integer }
+        marketDataStatus:  { type: string, enum: [available, partial, unavailable, not_synced] }
+        fairProb:          { type: ["number", "null"] }
+        marketHoldPct:     { type: ["number", "null"] }
+        holdRating:        { type: ["string", "null"] }
+        edgeScore:         { type: ["number", "null"] }
+        actionTag:         { type: ["string", "null"] }
+        sharpSignal:       { type: ["string", "null"], description: "sharp / fade / neutral — sourced from latest line_move_events row per ppLineId" }
+        sharpConfidence:   { type: ["string", "null"] }
+        sharpExplanation:  { type: ["string", "null"] }
+        sharpSide:         { type: ["string", "null"] }
+        sharpPublicPct:    { type: ["number", "null"] }
+        calibrationCount:  { type: integer }
+        gameLogs:          { type: array, items: { type: number } }
+        ourProjection:     { $ref: "#/components/schemas/MarketIntelOurProjection", nullable: true }
+        streak:
+          nullable: true
+          type: object
+          properties:
+            count: { type: integer }
+            type:  { type: ["string", "null"] }
+        bookLines:
+          type: object
+          additionalProperties: { type: number }
+        bookHolds:
+          type: array
+          items:
+            type: object
+            properties:
+              book:       { type: string }
+              holdPct:    { type: number }
+              overPrice:  { type: ["number", "null"] }
+              underPrice: { type: ["number", "null"] }
+        recentMoves:  { type: array, items: { type: object } }
+        scoring:      { type: object, nullable: true }
+        variance:
+          nullable: true
+          type: object
+          properties:
+            volatilityRating: { type: ["string", "null"] }
+            blowoutRisk:      { type: ["number", "null"] }
+            fatigueScore:     { type: ["number", "null"] }
+            usageScore:       { type: ["number", "null"] }
+            matchupScore:     { type: ["number", "null"] }
+            environmentScore: { type: ["number", "null"] }
+            warnings:         { type: array, items: { type: string }, nullable: true }
+            whyItMoves:       { type: ["string", "null"] }
+      required: [ppLineId, playerId, playerName, sport, statType, lineValue, lineType, bookCount, marketDataStatus, calibrationCount]
 
     # ─── PLATFORM LINE COMPARISON ────────────────────────────────────
     PlatformLineEntry:

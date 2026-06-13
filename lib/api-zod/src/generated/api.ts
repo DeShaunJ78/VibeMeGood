@@ -1824,7 +1824,7 @@ export const GetSharpSignalsResponseItem = zod.object({
   "statType": zod.string(),
   "lineValue": zod.number(),
   "sport": zod.string(),
-  "signal": zod.enum(['sharp', 'public', 'neutral']),
+  "signal": zod.enum(['sharp', 'fade', 'neutral']),
   "confidence": zod.enum(['low', 'medium', 'high']),
   "explanation": zod.string(),
   "estimatedPublicPct": zod.number(),
@@ -2271,6 +2271,102 @@ export const GetLiveEntriesResponse = zod.object({
 }))
 })),
   "hasAnyLive": zod.boolean()
+})
+
+
+/**
+ * @summary Paginated market intelligence with sharp signals for active props
+ */
+export const GetMarketIntelQueryParams = zod.object({
+  "sport": zod.coerce.string().optional(),
+  "actionTag": zod.coerce.string().optional(),
+  "lineType": zod.coerce.string().optional(),
+  "minEdgeScore": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "page": zod.coerce.string().optional(),
+  "limit": zod.coerce.string().optional()
+})
+
+export const GetMarketIntelResponse = zod.object({
+  "data": zod.array(zod.object({
+  "ppLineId": zod.number(),
+  "playerId": zod.number(),
+  "playerName": zod.string(),
+  "imageUrl": zod.string().nullish(),
+  "teamId": zod.number().nullish(),
+  "sport": zod.string(),
+  "statType": zod.string(),
+  "lineValue": zod.number(),
+  "lineType": zod.string(),
+  "marketAvg": zod.number().nullish(),
+  "trueEdge": zod.number().nullish(),
+  "bookCount": zod.number(),
+  "marketDataStatus": zod.enum(['available', 'partial', 'unavailable', 'not_synced']),
+  "fairProb": zod.number().nullish(),
+  "marketHoldPct": zod.number().nullish(),
+  "holdRating": zod.string().nullish(),
+  "edgeScore": zod.number().nullish(),
+  "actionTag": zod.string().nullish(),
+  "sharpSignal": zod.string().nullish().describe('sharp \/ fade \/ neutral — sourced from latest line_move_events row per ppLineId'),
+  "sharpConfidence": zod.string().nullish(),
+  "sharpExplanation": zod.string().nullish(),
+  "sharpSide": zod.string().nullish(),
+  "sharpPublicPct": zod.number().nullish(),
+  "calibrationCount": zod.number(),
+  "gameLogs": zod.array(zod.number()).optional(),
+  "ourProjection": zod.object({
+  "value": zod.number(),
+  "stdDev": zod.number().nullish(),
+  "p99": zod.number().nullish(),
+  "pOver": zod.number().nullish(),
+  "percentileAtLine": zod.number().nullish(),
+  "noPlayReason": zod.string().nullish(),
+  "dataQualityScore": zod.number().nullish(),
+  "sourceLabel": zod.string().nullish(),
+  "confidence": zod.string().nullish(),
+  "gamesUsed": zod.number().nullish(),
+  "shrinkageFactor": zod.number().nullish(),
+  "isStale": zod.boolean(),
+  "vor": zod.number().nullish(),
+  "ensembleBlendPct": zod.number(),
+  "calSampleSize": zod.number(),
+  "adjustments": zod.array(zod.object({
+
+}).passthrough()).optional()
+}).nullish(),
+  "streak": zod.object({
+  "count": zod.number().optional(),
+  "type": zod.string().nullish()
+}).nullish(),
+  "bookLines": zod.record(zod.string(), zod.number()).optional(),
+  "bookHolds": zod.array(zod.object({
+  "book": zod.string().optional(),
+  "holdPct": zod.number().optional(),
+  "overPrice": zod.number().nullish(),
+  "underPrice": zod.number().nullish()
+})).optional(),
+  "recentMoves": zod.array(zod.object({
+
+}).passthrough()).optional(),
+  "scoring": zod.object({
+
+}).passthrough().nullish(),
+  "variance": zod.object({
+  "volatilityRating": zod.string().nullish(),
+  "blowoutRisk": zod.number().nullish(),
+  "fatigueScore": zod.number().nullish(),
+  "usageScore": zod.number().nullish(),
+  "matchupScore": zod.number().nullish(),
+  "environmentScore": zod.number().nullish(),
+  "warnings": zod.array(zod.string()).nullish(),
+  "whyItMoves": zod.string().nullish()
+}).nullish()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number(),
+  "hasMore": zod.boolean(),
+  "lastOddsSync": zod.string().nullish()
 })
 
 

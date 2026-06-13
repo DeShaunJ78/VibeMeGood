@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef, type ReactNod
 import {
   useGetSlate, getGetSlateQueryKey, useGetSlateSports,
   useAddToWatchlist, useRemoveFromWatchlist, useSetPpLineOverrides,
-  useGetDataHealth,
+  useGetDataHealth, useGetMarketIntel, getGetMarketIntelQueryKey,
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -102,23 +102,6 @@ type MarketIntelPage = {
   lastOddsSync?: string | null;
 };
 
-function useMarketIntel(params: Record<string, string | undefined>, page: number, enabled = true) {
-  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) if (v) qs.set(k, v);
-  qs.set("page", String(page));
-  qs.set("limit", "100");
-  return useQuery<MarketIntelPage>({
-    queryKey: ["market-intel", params, page],
-    queryFn: async () => {
-      const r = await fetch(`${base}/api/market-intel?${qs}`);
-      if (!r.ok) throw new Error("market-intel fetch failed");
-      return r.json();
-    },
-    staleTime: 60_000,
-    enabled,
-  });
-}
 
 function SyncProjectionsButton() {
   const [syncing, setSyncing] = useState(false);
@@ -883,7 +866,20 @@ export default function SlateBoard() {
     },
   });
 
-  const { data: miPageData, isLoading: miLoading } = useMarketIntel(miParams, miPage, sportResolved);
+  const miQueryParams = {
+    sport: sport !== "all" ? sport : undefined,
+    lineType: lineTypeFilter !== "all" ? lineTypeFilter : undefined,
+    actionTag: actionTagFilter !== "all" ? actionTagFilter : undefined,
+    search: searchQuery || undefined,
+    page: String(miPage),
+    limit: "100",
+  };
+  const rawMiQuery = useGetMarketIntel(
+    miQueryParams,
+    { query: { queryKey: getGetMarketIntelQueryKey(miQueryParams), enabled: !!sportResolved, staleTime: 60_000 } },
+  );
+  const miPageData = rawMiQuery.data as MarketIntelPage | undefined;
+  const miLoading = rawMiQuery.isLoading;
 
   // Accumulate pages as they load; capture lastOddsSync from page 1
   useEffect(() => {

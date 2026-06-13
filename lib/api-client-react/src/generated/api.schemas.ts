@@ -956,7 +956,7 @@ export type SharpSignalRowSignal = typeof SharpSignalRowSignal[keyof typeof Shar
 
 export const SharpSignalRowSignal = {
   sharp: 'sharp',
-  public: 'public',
+  fade: 'fade',
   neutral: 'neutral',
 } as const;
 
@@ -997,6 +997,149 @@ export interface SharpSummary {
   public: number;
   neutral: number;
   total: number;
+}
+
+export type MarketIntelRowMarketDataStatus = typeof MarketIntelRowMarketDataStatus[keyof typeof MarketIntelRowMarketDataStatus];
+
+
+export const MarketIntelRowMarketDataStatus = {
+  available: 'available',
+  partial: 'partial',
+  unavailable: 'unavailable',
+  not_synced: 'not_synced',
+} as const;
+
+export type MarketIntelOurProjectionAdjustmentsItem = { [key: string]: unknown };
+
+export interface MarketIntelOurProjection {
+  value: number;
+  /** @nullable */
+  stdDev?: number | null;
+  /** @nullable */
+  p99?: number | null;
+  /** @nullable */
+  pOver?: number | null;
+  /** @nullable */
+  percentileAtLine?: number | null;
+  /** @nullable */
+  noPlayReason?: string | null;
+  /** @nullable */
+  dataQualityScore?: number | null;
+  /** @nullable */
+  sourceLabel?: string | null;
+  /** @nullable */
+  confidence?: string | null;
+  /** @nullable */
+  gamesUsed?: number | null;
+  /** @nullable */
+  shrinkageFactor?: number | null;
+  isStale: boolean;
+  /** @nullable */
+  vor?: number | null;
+  ensembleBlendPct: number;
+  calSampleSize: number;
+  adjustments?: MarketIntelOurProjectionAdjustmentsItem[];
+}
+
+export type MarketIntelRowStreak = {
+  count?: number;
+  /** @nullable */
+  type?: string | null;
+} | null;
+
+export type MarketIntelRowBookLines = {[key: string]: number};
+
+export type MarketIntelRowBookHoldsItem = {
+  book?: string;
+  holdPct?: number;
+  /** @nullable */
+  overPrice?: number | null;
+  /** @nullable */
+  underPrice?: number | null;
+};
+
+export type MarketIntelRowRecentMovesItem = { [key: string]: unknown };
+
+export type MarketIntelRowScoring = { [key: string]: unknown } | null;
+
+export type MarketIntelRowVariance = {
+  /** @nullable */
+  volatilityRating?: string | null;
+  /** @nullable */
+  blowoutRisk?: number | null;
+  /** @nullable */
+  fatigueScore?: number | null;
+  /** @nullable */
+  usageScore?: number | null;
+  /** @nullable */
+  matchupScore?: number | null;
+  /** @nullable */
+  environmentScore?: number | null;
+  warnings?: string[] | null;
+  /** @nullable */
+  whyItMoves?: string | null;
+} | null;
+
+export interface MarketIntelRow {
+  ppLineId: number;
+  playerId: number;
+  playerName: string;
+  /** @nullable */
+  imageUrl?: string | null;
+  /** @nullable */
+  teamId?: number | null;
+  sport: string;
+  statType: string;
+  lineValue: number;
+  lineType: string;
+  /** @nullable */
+  marketAvg?: number | null;
+  /** @nullable */
+  trueEdge?: number | null;
+  bookCount: number;
+  marketDataStatus: MarketIntelRowMarketDataStatus;
+  /** @nullable */
+  fairProb?: number | null;
+  /** @nullable */
+  marketHoldPct?: number | null;
+  /** @nullable */
+  holdRating?: string | null;
+  /** @nullable */
+  edgeScore?: number | null;
+  /** @nullable */
+  actionTag?: string | null;
+  /**
+     * sharp / fade / neutral — sourced from latest line_move_events row per ppLineId
+     * @nullable
+     */
+  sharpSignal?: string | null;
+  /** @nullable */
+  sharpConfidence?: string | null;
+  /** @nullable */
+  sharpExplanation?: string | null;
+  /** @nullable */
+  sharpSide?: string | null;
+  /** @nullable */
+  sharpPublicPct?: number | null;
+  calibrationCount: number;
+  gameLogs?: number[];
+  ourProjection?: MarketIntelOurProjection | null;
+  streak?: MarketIntelRowStreak;
+  bookLines?: MarketIntelRowBookLines;
+  bookHolds?: MarketIntelRowBookHoldsItem[];
+  recentMoves?: MarketIntelRowRecentMovesItem[];
+  scoring?: MarketIntelRowScoring;
+  variance?: MarketIntelRowVariance;
+}
+
+export interface MarketIntelPage {
+  data: MarketIntelRow[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+  /** @nullable */
+  lastOddsSync?: string | null;
 }
 
 export interface PlatformLineEntry {
@@ -1673,5 +1816,15 @@ export type GetPlatformLinesByPropParams = {
 playerName: string;
 statType: string;
 ppLineValue: number;
+};
+
+export type GetMarketIntelParams = {
+sport?: string;
+actionTag?: string;
+lineType?: string;
+minEdgeScore?: string;
+search?: string;
+page?: string;
+limit?: string;
 };
 
