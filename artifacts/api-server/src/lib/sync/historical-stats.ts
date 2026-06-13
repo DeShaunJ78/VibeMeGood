@@ -1061,13 +1061,13 @@ export async function backfillMlbPitcherHand(): Promise<number> {
         AND p.team_id IS NOT NULL
       ORDER BY pgl.game_date, p.team_id
     )
-    UPDATE player_game_logs bgl
+    UPDATE player_game_logs
     SET pitcher_hand = ps.hand
-    FROM pitcher_starts ps
-    JOIN players bp ON bp.id = bgl.player_id
-    WHERE bp.sport = 'MLB'
-      AND bgl.game_date = ps.game_date
-      AND bgl.opponent_team_id = ps.pitcher_team_id
+    FROM pitcher_starts ps, players bp
+    WHERE bp.id = player_game_logs.player_id
+      AND bp.sport = 'MLB'
+      AND player_game_logs.game_date = ps.game_date
+      AND player_game_logs.opponent_team_id = ps.pitcher_team_id
   `);
   const updated = (result as any)?.rowCount ?? 0;
   logger.info({ updated }, "MLB pitcher hand backfill complete");
