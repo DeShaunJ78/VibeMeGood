@@ -1985,7 +1985,9 @@ export const GenerateLineupFactoryResponse = zod.object({
   "correlationPairs": zod.array(zod.string()).nullish().describe('Top 2–3 dominant correlated player pairs in this lineup (e.g. \'LeBron James + Anthony Davis (+40%)\'). Null when no meaningful correlation exists.'),
   "diversificationScore": zod.number(),
   "storyTemplate": zod.string().nullish().describe('Story template id assigned to this lineup (e.g. \'shootout\', \'pace_exploit\'). Null when storyMode is off.'),
-  "anchorPickId": zod.number().nullish().describe('ppLineId of the anchor pick — the pick with highest narrative fit × ceiling \/ ownership for the assigned story.')
+  "anchorPickId": zod.number().nullish().describe('ppLineId of the anchor pick — the pick with highest narrative fit × ceiling \/ ownership for the assigned story.'),
+  "hitCountProbabilities": zod.array(zod.number()).nullish().describe('Simulated probability of hitting exactly k legs (index 0 = 0 hits, index n = all hits). Populated for Flex entries from Monte Carlo sim; null for Power entries.'),
+  "bustProbability": zod.number().describe('Probability of hitting zero legs (bust). For Flex: from Monte Carlo sim. For Power: 1 - hitProbability.')
 })),
   "portfolioStats": zod.object({
   "totalStake": zod.number(),

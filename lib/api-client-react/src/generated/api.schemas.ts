@@ -1437,6 +1437,10 @@ export interface GeneratedLineup {
      * @nullable
      */
   anchorPickId?: number | null;
+  /** Simulated probability of hitting exactly k legs (index 0 = 0 hits, index n = all hits). Populated for Flex entries from Monte Carlo sim; null for Power entries. */
+  hitCountProbabilities?: number[] | null;
+  /** Probability of hitting zero legs (bust). For Flex: from Monte Carlo sim. For Power: 1 - hitProbability. */
+  bustProbability: number;
 }
 
 export type PortfolioStatsPlayerExposure = {[key: string]: number};

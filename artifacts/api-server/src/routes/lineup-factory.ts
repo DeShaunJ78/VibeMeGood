@@ -118,6 +118,9 @@ type GeneratedLineup = {
   // Story mode fields — null when storyMode is off
   storyTemplate: string | null;
   anchorPickId: number | null;
+  // Per-tier hit-count probabilities (index = number of hits)
+  hitCountProbabilities: number[] | null;
+  bustProbability: number;
 };
 
 // ─── Story Mode ───────────────────────────────────────────────────────────────
@@ -1206,6 +1209,8 @@ router.post("/lineup-factory/generate", async (req, res) => {
       let correlationAdjusted = false;
       let correlationNote: string | null = null;
       let correlationPairs: string[] | null = null;
+      let hitCountProbabilities: number[] | null = null;
+      let bustProbability = 0;
 
       if (cfg.format === "flex") {
         // Use the same Cholesky-based Monte Carlo model as Power entries so
@@ -1233,6 +1238,8 @@ router.post("/lineup-factory/generate", async (req, res) => {
         pHit = Math.min(0.97, Math.max(0.005, flexSim.trueJointProbability));
         grossPayout = (getFlexMultiplier(picks.length, picks.length) || 1) * payoutFactor * stake;
         correlationAdjusted = flexSim.correlationAdjustment !== 0;
+        hitCountProbabilities = flexSim.hitCountProbabilities;
+        bustProbability = flexSim.bustProbability;
         const corrPct = (flexSim.correlationAdjustment * 100).toFixed(1);
         const bustPct = (flexSim.bustProbability * 100).toFixed(1);
         if (Math.abs(flexSim.correlationAdjustment) > 0.005) {
@@ -1250,6 +1257,7 @@ router.post("/lineup-factory/generate", async (req, res) => {
         pHit = result.pHit;
         grossPayout = (POWER_MULT[picks.length] ?? 10) * payoutFactor * stake;
         correlationAdjusted = result.corrFactor !== 1.0;
+        bustProbability = Math.round((1 - pHit) * 1000) / 1000;
         if (result.corrFactor > 1.01) {
           correlationNote = `Positive correlation detected (+${((result.corrFactor - 1) * 100).toFixed(1)}% joint-prob). Estimate is approximate.`;
         }
@@ -1261,20 +1269,22 @@ router.post("/lineup-factory/generate", async (req, res) => {
         : 1.0;
 
       lineups.push({
-        id:                  luIdx + 1,
+        id:                    luIdx + 1,
         picks,
-        format:              cfg.format,
-        picksPerEntry:       picks.length,
-        ev:                  Math.round(ev * 100) / 100,
-        hitProbability:      Math.round(pHit * 1000) / 1000,
+        format:                cfg.format,
+        picksPerEntry:         picks.length,
+        ev:                    Math.round(ev * 100) / 100,
+        hitProbability:        Math.round(pHit * 1000) / 1000,
         grossPayout,
         stake,
         correlationAdjusted,
         correlationNote,
         correlationPairs,
         diversificationScore,
-        storyTemplate:       assignedTemplate?.id ?? null,
+        storyTemplate:         assignedTemplate?.id ?? null,
         anchorPickId,
+        hitCountProbabilities,
+        bustProbability,
       });
     }
 

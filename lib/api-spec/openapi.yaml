@@ -2734,7 +2734,9 @@ components:
         diversificationScore: { type: number }
         storyTemplate: { type: ["string", "null"], description: "Story template id assigned to this lineup (e.g. 'shootout', 'pace_exploit'). Null when storyMode is off." }
         anchorPickId: { type: ["integer", "null"], description: "ppLineId of the anchor pick — the pick with highest narrative fit × ceiling / ownership for the assigned story." }
-      required: [id, picks, format, picksPerEntry, ev, hitProbability, grossPayout, stake, correlationAdjusted, diversificationScore]
+        hitCountProbabilities: { type: array, items: { type: number }, nullable: true, description: "Simulated probability of hitting exactly k legs (index 0 = 0 hits, index n = all hits). Populated for Flex entries from Monte Carlo sim; null for Power entries." }
+        bustProbability: { type: number, description: "Probability of hitting zero legs (bust). For Flex: from Monte Carlo sim. For Power: 1 - hitProbability." }
+      required: [id, picks, format, picksPerEntry, ev, hitProbability, grossPayout, stake, correlationAdjusted, diversificationScore, bustProbability]
 
     PortfolioStats:
       type: object
