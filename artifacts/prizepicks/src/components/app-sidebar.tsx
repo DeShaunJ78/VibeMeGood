@@ -23,7 +23,9 @@ import {
   Crosshair,
   Microscope,
   Smartphone,
+  Radio,
 } from "lucide-react";
+import { useGetLiveEntries, getGetLiveEntriesQueryKey } from "@workspace/api-client-react";
 import {
   Sidebar,
   SidebarContent,
@@ -51,6 +53,7 @@ const NAV_ITEMS = [
   { title: "Review", url: "/review", icon: LineChart },
   { title: "AI Analyst", url: "/ai-chat", icon: Bot },
   { title: "Lineup Factory", url: "/lineup-factory", icon: Factory },
+  { title: "Live Tracker", url: "/live", icon: Radio },
 ];
 
 const INTEL_ITEMS = [
@@ -96,6 +99,12 @@ export function AppSidebar() {
       window.removeEventListener("pinned-picks-changed", sync);
     };
   }, []);
+
+  // Poll live entries every 60s for the pulsing dot indicator
+  const { data: liveData } = useGetLiveEntries({
+    query: { queryKey: getGetLiveEntriesQueryKey(), refetchInterval: 60_000, staleTime: 55_000 },
+  });
+  const hasAnyLive = liveData?.hasAnyLive ?? false;
 
   // Poll data health every 5 min to detect stale PP lines
   const { data: healthData } = useGetDataHealth({
@@ -182,6 +191,7 @@ export function AppSidebar() {
                 const isActive = location === item.url;
                 const isEntryBuilder = item.url === "/entry-builder";
                 const isLineupFactory = item.url === "/lineup-factory";
+                const isLive = item.url === "/live";
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
@@ -204,6 +214,14 @@ export function AppSidebar() {
                         {isLineupFactory && pinnedCount > 0 && (
                           <span className="ml-auto bg-violet-600 text-white text-[10px] font-bold font-mono rounded-full w-4 h-4 flex items-center justify-center shrink-0">
                             {pinnedCount}
+                          </span>
+                        )}
+                        {isLive && hasAnyLive && (
+                          <span className="ml-auto flex items-center">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                            </span>
                           </span>
                         )}
                       </Link>

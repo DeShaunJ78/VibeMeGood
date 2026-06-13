@@ -5,12 +5,12 @@ if (!API_KEY) throw new Error("SGO_API_KEY not set");
 
 const BASE = "https://api.sportsgameodds.com/v2";
 
-async function get(path: string, params: Record<string, string> = {}) {
+async function get(path: string, params: Record<string, string> = {}): Promise<any> {
   const url = new URL(`${BASE}${path}`);
   url.searchParams.set("apiKey", API_KEY!);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   const res = await fetch(url.toString());
-  return res.json();
+  return res.json() as Promise<any>;
 }
 
 async function main() {

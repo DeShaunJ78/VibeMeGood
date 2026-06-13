@@ -2223,3 +2223,54 @@ export const RunAuditResponse = zod.object({
 })
 
 
+/**
+ * @summary Live game scores for all sports today (cached 45s)
+ */
+export const GetLiveScoresResponse = zod.object({
+  "games": zod.array(zod.object({
+  "id": zod.string(),
+  "sport_key": zod.string(),
+  "home_team": zod.string(),
+  "away_team": zod.string(),
+  "commence_time": zod.string(),
+  "completed": zod.boolean(),
+  "last_update": zod.string().nullable()
+}))
+})
+
+
+/**
+ * @summary Today's pending entries with per-leg live game context
+ */
+export const GetLiveEntriesResponse = zod.object({
+  "entries": zod.array(zod.object({
+  "entryId": zod.number(),
+  "entryType": zod.string(),
+  "pickCount": zod.number(),
+  "stake": zod.number(),
+  "potentialPayout": zod.number().nullable(),
+  "hasLiveGame": zod.boolean(),
+  "legs": zod.array(zod.object({
+  "pickId": zod.number(),
+  "playerName": zod.string(),
+  "statType": zod.string(),
+  "lineValue": zod.number(),
+  "direction": zod.string(),
+  "result": zod.string(),
+  "currentValue": zod.number().nullable(),
+  "isLive": zod.boolean(),
+  "isFinal": zod.boolean(),
+  "gameScore": zod.union([zod.object({
+  "homeTeam": zod.string(),
+  "awayTeam": zod.string(),
+  "homeScore": zod.string().nullable(),
+  "awayScore": zod.string().nullable(),
+  "commenceTime": zod.string(),
+  "lastUpdate": zod.string().nullable()
+}),zod.null()])
+}))
+})),
+  "hasAnyLive": zod.boolean()
+})
+
+

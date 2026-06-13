@@ -27,6 +27,8 @@ import { VarianceBadge } from "@/components/ui/variance-badge";
 import { useUserSettings } from "@/hooks/use-user-settings";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
 
+type ProjectionFactor = { key: string; label: string; factor: number; explain: string };
+
 type OurProjection = {
   value: number;
   stdDev: number | null;
@@ -43,6 +45,7 @@ type OurProjection = {
   vor: number | null;
   ensembleBlendPct: number;
   calSampleSize: number;
+  adjustments: ProjectionFactor[];
 };
 
 type MarketIntelRow = {
@@ -2685,6 +2688,39 @@ export default function SlateBoard() {
                                   </TooltipContent>
                                 </Tooltip>
                               )}
+                              {(() => {
+                                const adjs: ProjectionFactor[] = row.ourProjection?.adjustments ?? [];
+                                const active = adjs.filter(a => Math.abs(a.factor - 1) >= 0.02);
+                                if (active.length === 0) return null;
+                                const combined = active.reduce((acc, a) => acc * a.factor, 1);
+                                const pct = Math.round((combined - 1) * 100);
+                                if (pct === 0) return null;
+                                const pos = pct > 0;
+                                return (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className={`font-mono text-[9px] font-bold px-1 py-px rounded border leading-none cursor-help ${
+                                        pos
+                                          ? "text-sky-300 bg-sky-950/40 border-sky-700/40"
+                                          : "text-orange-300 bg-orange-950/40 border-orange-700/40"
+                                      }`}>
+                                        {pos ? "+" : ""}{pct}%
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="font-mono text-xs max-w-xs space-y-1">
+                                      <p className="font-bold text-slate-200 mb-1">Active Projection Factors</p>
+                                      {active.map(a => (
+                                        <div key={a.key}>
+                                          <span className={`font-bold ${a.factor > 1 ? "text-sky-300" : "text-orange-300"}`}>
+                                            {a.label} {a.factor > 1 ? "+" : ""}{Math.round((a.factor - 1) * 100)}%
+                                          </span>
+                                          <p className="text-slate-400 text-[10px] leading-snug">{a.explain}</p>
+                                        </div>
+                                      ))}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                );
+                              })()}
                               {bDeltaRow != null && (() => {
                                 const bd = bDeltaRow;
                                 const pos = bd >= 0;

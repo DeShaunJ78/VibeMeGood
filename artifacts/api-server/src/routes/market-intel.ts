@@ -569,6 +569,7 @@ router.get("/market-intel", async (req, res) => {
           vor: effectiveProj?.vor != null ? parseFloat(effectiveProj.vor.toString()) : null,
           ensembleBlendPct: effectiveProj?.ensembleBlendPct ?? 0,
           calSampleSize: calibMap.get(`${row.player.sport.toLowerCase()}:${row.line.statType.toLowerCase()}`) ?? 0,
+          adjustments: Array.isArray(effectiveProj?.adjustments) ? effectiveProj.adjustments : [],
         } : null,
 
         streak: streakData,

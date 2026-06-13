@@ -1492,6 +1492,30 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AuditResult" }
 
+  /live/scores:
+    get:
+      summary: Live game scores for all sports today (cached 45s)
+      operationId: getLiveScores
+      tags: [live]
+      responses:
+        "200":
+          description: Live scores response
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LiveScoresResponse" }
+
+  /live/entries:
+    get:
+      summary: Today's pending entries with per-leg live game context
+      operationId: getLiveEntries
+      tags: [live]
+      responses:
+        "200":
+          description: Live entries response
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LiveEntriesResponse" }
+
 components:
   schemas:
     HealthStatus:
@@ -2763,3 +2787,75 @@ components:
       properties:
         buckets: { type: array, items: { $ref: "#/components/schemas/StatBiasBucket" } }
       required: [buckets]
+
+    LiveGameScore:
+      type: object
+      properties:
+        homeTeam:     { type: string }
+        awayTeam:     { type: string }
+        homeScore:    { type: ["string", "null"] }
+        awayScore:    { type: ["string", "null"] }
+        commenceTime: { type: string }
+        lastUpdate:   { type: ["string", "null"] }
+      required: [homeTeam, awayTeam, homeScore, awayScore, commenceTime, lastUpdate]
+
+    LiveLeg:
+      type: object
+      properties:
+        pickId:       { type: integer }
+        playerName:   { type: string }
+        statType:     { type: string }
+        lineValue:    { type: number }
+        direction:    { type: string }
+        result:       { type: string }
+        currentValue: { type: ["number", "null"] }
+        isLive:       { type: boolean }
+        isFinal:      { type: boolean }
+        gameScore:
+          oneOf:
+            - { $ref: "#/components/schemas/LiveGameScore" }
+            - { type: "null" }
+      required: [pickId, playerName, statType, lineValue, direction, result, currentValue, isLive, isFinal, gameScore]
+
+    LiveEntry:
+      type: object
+      properties:
+        entryId:         { type: integer }
+        entryType:       { type: string }
+        pickCount:       { type: integer }
+        stake:           { type: number }
+        potentialPayout: { type: ["number", "null"] }
+        hasLiveGame:     { type: boolean }
+        legs:
+          type: array
+          items: { $ref: "#/components/schemas/LiveLeg" }
+      required: [entryId, entryType, pickCount, stake, potentialPayout, hasLiveGame, legs]
+
+    OddsGameScore:
+      type: object
+      properties:
+        id:            { type: string }
+        sport_key:     { type: string }
+        home_team:     { type: string }
+        away_team:     { type: string }
+        commence_time: { type: string }
+        completed:     { type: boolean }
+        last_update:   { type: ["string", "null"] }
+      required: [id, sport_key, home_team, away_team, commence_time, completed, last_update]
+
+    LiveScoresResponse:
+      type: object
+      properties:
+        games:
+          type: array
+          items: { $ref: "#/components/schemas/OddsGameScore" }
+      required: [games]
+
+    LiveEntriesResponse:
+      type: object
+      properties:
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/LiveEntry" }
+        hasAnyLive: { type: boolean }
+      required: [entries, hasAnyLive]

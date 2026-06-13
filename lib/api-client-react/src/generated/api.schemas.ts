@@ -1453,6 +1453,63 @@ export interface StatBiasResponse {
   buckets: StatBiasBucket[];
 }
 
+export interface LiveGameScore {
+  homeTeam: string;
+  awayTeam: string;
+  /** @nullable */
+  homeScore: string | null;
+  /** @nullable */
+  awayScore: string | null;
+  commenceTime: string;
+  /** @nullable */
+  lastUpdate: string | null;
+}
+
+export interface LiveLeg {
+  pickId: number;
+  playerName: string;
+  statType: string;
+  lineValue: number;
+  direction: string;
+  result: string;
+  /** @nullable */
+  currentValue: number | null;
+  isLive: boolean;
+  isFinal: boolean;
+  gameScore: LiveGameScore | null;
+}
+
+export interface LiveEntry {
+  entryId: number;
+  entryType: string;
+  pickCount: number;
+  stake: number;
+  /** @nullable */
+  potentialPayout: number | null;
+  hasLiveGame: boolean;
+  legs: LiveLeg[];
+}
+
+export interface OddsGameScore {
+  id: string;
+  sport_key: string;
+  home_team: string;
+  away_team: string;
+  commence_time: string;
+  completed: boolean;
+  /** @nullable */
+  last_update: string | null;
+}
+
+export interface LiveScoresResponse {
+  games: OddsGameScore[];
+}
+
+export interface LiveEntriesResponse {
+  entries: LiveEntry[];
+  hasAnyLive: boolean;
+}
+
 export type ListPlayersParams = {
 sport?: string;
 teamId?: number;

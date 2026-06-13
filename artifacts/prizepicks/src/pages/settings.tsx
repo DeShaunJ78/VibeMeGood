@@ -603,6 +603,9 @@ export default function Settings() {
                           data?.boardFreshnessAt ? formatDistanceToNow(new Date(data.boardFreshnessAt), { addSuffix: true }) : ""
                         }`}
                   </span>
+                  <span className="text-[10px] font-mono text-slate-500 mt-0.5 block">
+                    Visit prizepicks.com first, then click Sync to import the live board
+                  </span>
                 </div>
               </div>
               <Button

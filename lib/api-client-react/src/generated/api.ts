@@ -76,6 +76,8 @@ import type {
   ListPropScoresParams,
   ListTeamsParams,
   ListWatchlistParams,
+  LiveEntriesResponse,
+  LiveScoresResponse,
   MarkAllAlertsRead200,
   NflAdvancedRow,
   NflAdvancedSyncResult,
@@ -6930,4 +6932,158 @@ export const useRunAudit = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getRunAuditMutationOptions(options));
     }
+
+export const getGetLiveScoresUrl = () => {
+
+
+
+
+  return `/api/live/scores`
+}
+
+/**
+ * @summary Live game scores for all sports today (cached 45s)
+ */
+export const getLiveScores = async ( options?: RequestInit): Promise<LiveScoresResponse> => {
+
+  return customFetch<LiveScoresResponse>(getGetLiveScoresUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLiveScoresQueryKey = () => {
+    return [
+    `/api/live/scores`
+    ] as const;
+    }
+
+
+export const getGetLiveScoresQueryOptions = <TData = Awaited<ReturnType<typeof getLiveScores>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLiveScores>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLiveScoresQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLiveScores>>> = ({ signal }) => getLiveScores({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLiveScores>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLiveScoresQueryResult = NonNullable<Awaited<ReturnType<typeof getLiveScores>>>
+export type GetLiveScoresQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Live game scores for all sports today (cached 45s)
+ */
+
+export function useGetLiveScores<TData = Awaited<ReturnType<typeof getLiveScores>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLiveScores>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLiveScoresQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetLiveEntriesUrl = () => {
+
+
+
+
+  return `/api/live/entries`
+}
+
+/**
+ * @summary Today's pending entries with per-leg live game context
+ */
+export const getLiveEntries = async ( options?: RequestInit): Promise<LiveEntriesResponse> => {
+
+  return customFetch<LiveEntriesResponse>(getGetLiveEntriesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLiveEntriesQueryKey = () => {
+    return [
+    `/api/live/entries`
+    ] as const;
+    }
+
+
+export const getGetLiveEntriesQueryOptions = <TData = Awaited<ReturnType<typeof getLiveEntries>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLiveEntries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLiveEntriesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLiveEntries>>> = ({ signal }) => getLiveEntries({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLiveEntries>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLiveEntriesQueryResult = NonNullable<Awaited<ReturnType<typeof getLiveEntries>>>
+export type GetLiveEntriesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Today's pending entries with per-leg live game context
+ */
+
+export function useGetLiveEntries<TData = Awaited<ReturnType<typeof getLiveEntries>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLiveEntries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLiveEntriesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
