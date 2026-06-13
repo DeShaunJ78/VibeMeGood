@@ -1,0 +1,224 @@
+Data Sync
+Manually trigger individual data provider syncs
+Sync All
+PrizePicks Lines
+Stale · 17389 lines · 2 days ago
+Sync
+LIVE DATA
+Injury Reports
+0 · 1 minute ago
+Sync
+External Odds
+0 lines · 24 minutes ago
+Sync
+Auto-sync in 146m · Manual sync uses API credits
+Game Schedule
+19 · 11 minutes ago
+Sync
+PROJECTIONS & SCORING
+Player Projections
+Never run
+Sync
+Variance Compute
+0 · 2 minutes ago
+Sync
+Team Pace Ratings
+Sync
+Game Scores
+19 · 11 minutes ago
+Sync
+NHL CONTEXT
+NHL TOI/PP/Corsi
+Sync
+MAINTENANCE
+Grade Pending Picks
+Runs nightly at 3:30 AM
+Grade Now
+Backfill History
+Sync
+Derive Blks+Stls
+Sync
+MLB Pitcher Hand Tags
+0 · 2 minutes ago
+Sync
+Run Calibration
+380 buckets · 23 minutes ago
+Re-run
+Rebuild Calibration
+0 · 2 minutes ago
+Sync
+Recent Sync Logs
+Latest automated data pull results
+injuries
+SUCCESS
+0 records
+1 minute ago
+variance
+ERROR
+0 records
+2 minutes ago
+Maximum call stack size exceeded
+fatigue
+SUCCESS
+0 records
+2 minutes ago
+projections
+ERROR
+0 records
+2 minutes ago
+Maximum call stack size exceeded
+nhl-player-context
+SUCCESS
+0 records
+2 minutes ago
+projections
+RUNNING
+0 records
+3 minutes ago
+nhl-player-context
+SUCCESS
+0 records
+3 minutes ago
+game-schedule
+SUCCESS
+19 records
+11 minutes ago
+injuries
+SUCCESS
+0 records
+21 minutes ago
+auto-grade-picks
+SUCCESS
+0 records
+24 minutes ago
+nhl-player-context
+SUCCESS
+0 records
+24 minutes ago
+sync-scores
+ERROR
+0 records
+24 minutes ago
+interrupted (server restarted)
+variance
+ERROR
+0 records
+24 minutes ago
+Maximum call stack size exceeded
+game-schedule
+SUCCESS
+35 records
+24 minutes ago
+external-odds
+SUCCESS
+0 records
+24 minutes ago
+sync-injuries
+SUCCESS
+0 records
+24 minutes ago
+auto-grade-picks
+SUCCESS
+0 records
+29 minutes ago
+nhl-player-context
+SUCCESS
+0 records
+29 minutes ago
+sync-scores
+ERROR
+0 records
+29 minutes ago
+interrupted (server restarted)
+variance
+ERROR
+0 records
+29 minutes ago
+Maximum call stack size exceeded
+projections
+ERROR
+0 records
+29 minutes ago
+Maximum call stack size exceeded
+game-schedule
+SUCCESS
+35 records
+29 minutes ago
+external-odds
+SUCCESS
+0 records
+29 minutes ago
+sync-injuries
+SUCCESS
+0 records
+29 minutes ago
+game-schedule
+SUCCESS
+34 records
+41 minutes ago
+injuries
+SUCCESS
+0 records
+about 1 hour ago
+auto-grade-picks
+SUCCESS
+0 records
+about 1 hour ago
+game-schedule
+SUCCESS
+35 records
+about 1 hour ago
+injuries
+SUCCESS
+0 records
+about 1 hour ago
+variance
+ERROR
+0 records
+about 2 hours ago
+Maximum call stack size exceeded
+Data Providers
+Live sync status — last 10 runs per provider
+PrizePicks Lines
+Last OK: 2 days ago · 17389 records
+100%
+SUCCESS
+Injuries (ESPN)
+Last OK: 1 minute ago · 0 records
+90%
+SUCCESS
+External Odds
+Last OK: 24 minutes ago · 0 records
+60%
+SUCCESS
+Model Projections
+0%
+ERROR
+Maximum call stack size exceeded
+FantasyPros Projections
+Last OK: 2 days ago · 3179 records
+50%
+SUCCESS
+Game Schedule / Logs
+Last OK: 11 minutes ago · 19 records
+80%
+SUCCESS
+Internal (Variance / Fatigue / Matchups)
+Last OK: 2 minutes ago · 0 records
+60%
+ERROR
+Maximum call stack size exceeded
+NFL Advanced Metrics
+0%
+ERROR
+interrupted (server restarted)
+System Info
+Runtime environment and data mode
+System Health
+HEALTHY
+Board Freshness
+53.47h ago
+Data Mode
+LIVE
+Sync Log Entries
+30

@@ -411,15 +411,15 @@ interface WeatherMeta { isOutdoor?: boolean; windSpeed?: number; temp?: number }
 // chunk, concatenating results. Prevents Drizzle ORM's mergeQueries() from
 // recursing too deep when building large IN (...) SQL clauses — overflows at
 // roughly >1000 IDs depending on column count in the surrounding query.
-const IN_CHUNK = 1000;
+const IN_CHUNK = 200;
 async function queryInChunks<T>(
   ids: number[],
   queryFn: (chunk: number[]) => Promise<T[]>,
 ): Promise<T[]> {
   if (ids.length === 0) return [];
-  const out: T[] = [];
+  let out: T[] = [];
   for (let i = 0; i < ids.length; i += IN_CHUNK) {
-    out.push(...await queryFn(ids.slice(i, i + IN_CHUNK)));
+    out = out.concat(await queryFn(ids.slice(i, i + IN_CHUNK)));
   }
   return out;
 }
