@@ -7,6 +7,7 @@ import {
   ourProjectionsTable, playerGameLogsTable, lineMoveEventsTable,
 } from "@workspace/db/schema";
 import { eq, and, inArray, desc, gte } from "drizzle-orm";
+import { queryInChunks } from "../lib/db-utils";
 import { pOverLineDist, percentileAtLineDist } from "../lib/projection/distributions";
 import { effectivePayoutMultiplier } from "../lib/payout/multiplier";
 
@@ -56,10 +57,10 @@ router.get("/slate", async (req, res) => {
     const gameIds = [...new Set(lines.filter(l => l.gameId).map(l => l.gameId as number))];
 
     const [players, scores, ourProjections, watchlistItems, games] = await Promise.all([
-      db.select().from(playersTable).where(inArray(playersTable.id, playerIds)),
-      db.select().from(propScoresTable).where(inArray(propScoresTable.ppLineId, lineIds)),
-      db.select().from(ourProjectionsTable).where(inArray(ourProjectionsTable.playerId, playerIds)),
-      db.select().from(watchlistItemsTable).where(inArray(watchlistItemsTable.playerId, playerIds)),
+      queryInChunks(playerIds, chunk => db.select().from(playersTable).where(inArray(playersTable.id, chunk))),
+      queryInChunks(lineIds, chunk => db.select().from(propScoresTable).where(inArray(propScoresTable.ppLineId, chunk))),
+      queryInChunks(playerIds, chunk => db.select().from(ourProjectionsTable).where(inArray(ourProjectionsTable.playerId, chunk))),
+      queryInChunks(playerIds, chunk => db.select().from(watchlistItemsTable).where(inArray(watchlistItemsTable.playerId, chunk))),
       gameIds.length ? db.select().from(gamesTable).where(inArray(gamesTable.id, gameIds)) : [],
     ]);
 

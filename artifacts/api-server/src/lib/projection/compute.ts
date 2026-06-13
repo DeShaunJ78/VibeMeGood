@@ -739,9 +739,11 @@ export async function computeAllProjections(): Promise<number> {
 
   if (mlbPitcherPlayers.length > 0) {
     const pitcherIds = mlbPitcherPlayers.map(p => p.id);
-    const pitcherLogs = await db.select().from(playerGameLogsTable)
-      .where(inArray(playerGameLogsTable.playerId, pitcherIds))
-      .orderBy(desc(playerGameLogsTable.gameDate));
+    const pitcherLogs = await queryInChunks(pitcherIds, chunk =>
+      db.select().from(playerGameLogsTable)
+        .where(inArray(playerGameLogsTable.playerId, chunk))
+        .orderBy(desc(playerGameLogsTable.gameDate))
+    );
 
     const logsByPitcher = new Map<number, typeof pitcherLogs>();
     for (const log of pitcherLogs) {

@@ -8,6 +8,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, inArray, desc, isNotNull } from "drizzle-orm";
 import { logger } from "../lib/logger";
+import { queryInChunks } from "../lib/db-utils";
 import { pOverLine } from "../lib/projection/normal-dist";
 import { effectivePayoutMultiplier } from "../lib/payout/multiplier";
 import { POWER_PAYOUTS, flexPayout } from "../lib/payout/tables";
@@ -540,9 +541,9 @@ router.post("/lineup-factory/generate", async (req, res) => {
 
     // ── 2. Bulk query external lines (avoids N+1) ──────────────────────────
     const ppLineIds = rows.map(r => r.line.id);
-    const allExtLines = ppLineIds.length
-      ? await db.select().from(externalLinesTable).where(inArray(externalLinesTable.ppLineId, ppLineIds))
-      : [];
+    const allExtLines = await queryInChunks(ppLineIds, chunk =>
+      db.select().from(externalLinesTable).where(inArray(externalLinesTable.ppLineId, chunk))
+    );
 
     const extByLineId = new Map<number, typeof allExtLines>();
     for (const el of allExtLines) {
@@ -645,12 +646,12 @@ router.post("/lineup-factory/generate", async (req, res) => {
     }
 
     // ── 2d. Bulk query latest sharp signals (for GPP sharp filter) ────────
-    const allSharpEvents = ppLineIds.length
-      ? await db.select()
-          .from(lineMoveEventsTable)
-          .where(and(inArray(lineMoveEventsTable.ppLineId, ppLineIds), isNotNull(lineMoveEventsTable.sharpSignal)))
-          .orderBy(desc(lineMoveEventsTable.capturedAt))
-      : [];
+    const allSharpEvents = await queryInChunks(ppLineIds, chunk =>
+      db.select()
+        .from(lineMoveEventsTable)
+        .where(and(inArray(lineMoveEventsTable.ppLineId, chunk), isNotNull(lineMoveEventsTable.sharpSignal)))
+        .orderBy(desc(lineMoveEventsTable.capturedAt))
+    );
     const latestSharpByLine = new Map<number, { signal: string; moveDirection: string | null }>();
     for (const ev of allSharpEvents) {
       if (ev.ppLineId && !latestSharpByLine.has(ev.ppLineId) && ev.sharpSignal) {
@@ -665,24 +666,21 @@ router.post("/lineup-factory/generate", async (req, res) => {
     // when no real data exists.
     const todayStr = new Date().toISOString().slice(0, 10);
     const playerIds = [...new Set(rows.map(r => r.player.id))];
-    const crowdOwnershipRows = playerIds.length
-      ? await db
-          .select({
-            playerId:     crowdOwnershipTable.playerId,
-            statType:     crowdOwnershipTable.statType,
-            ownershipPct: crowdOwnershipTable.ownershipPct,
-            source:       crowdOwnershipTable.source,
-            capturedAt:   crowdOwnershipTable.capturedAt,
-          })
-          .from(crowdOwnershipTable)
-          .where(
-            and(
-              eq(crowdOwnershipTable.slateDate, todayStr),
-              inArray(crowdOwnershipTable.playerId, playerIds),
-            ),
-          )
-          .orderBy(desc(crowdOwnershipTable.capturedAt))
-      : [];
+    const crowdOwnershipRows = await queryInChunks(playerIds, chunk =>
+      db.select({
+          playerId:     crowdOwnershipTable.playerId,
+          statType:     crowdOwnershipTable.statType,
+          ownershipPct: crowdOwnershipTable.ownershipPct,
+          source:       crowdOwnershipTable.source,
+          capturedAt:   crowdOwnershipTable.capturedAt,
+        })
+        .from(crowdOwnershipTable)
+        .where(and(
+          eq(crowdOwnershipTable.slateDate, todayStr),
+          inArray(crowdOwnershipTable.playerId, chunk),
+        ))
+        .orderBy(desc(crowdOwnershipTable.capturedAt))
+    );
 
     // Key: "playerId:statType" → most-recently-captured ownership pct (already ordered DESC)
     const crowdOwnershipByKey = new Map<string, number>();

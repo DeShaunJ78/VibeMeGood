@@ -6,6 +6,7 @@ import {
   playersTable, teamsTable, ourProjectionsTable,
 } from "@workspace/db/schema";
 import { eq, and, gte, desc, sql, inArray, isNotNull } from "drizzle-orm";
+import { queryInChunks } from "../lib/db-utils";
 
 const router = Router();
 
@@ -40,26 +41,28 @@ router.get("/dashboard/summary", async (req, res) => {
       .map(l => l.playerId);
 
     const [lineScores, allPlayers, allTeams, allHistory, modelProjections] = await Promise.all([
-      lineIds.length ? db.select().from(propScoresTable).where(inArray(propScoresTable.ppLineId, lineIds)) : [],
-      allPlayerIds.length ? db.select().from(playersTable).where(inArray(playersTable.id, allPlayerIds)) : [],
+      queryInChunks(lineIds, chunk => db.select().from(propScoresTable).where(inArray(propScoresTable.ppLineId, chunk))),
+      queryInChunks(allPlayerIds, chunk => db.select().from(playersTable).where(inArray(playersTable.id, chunk))),
       db.select().from(teamsTable),
-      lineIds.length
-        ? db.select().from(ppLineHistoryTable)
-            .where(inArray(ppLineHistoryTable.ppLineId, lineIds))
-            .orderBy(desc(ppLineHistoryTable.capturedAt))
-        : [],
+      queryInChunks(lineIds, chunk =>
+        db.select().from(ppLineHistoryTable)
+          .where(inArray(ppLineHistoryTable.ppLineId, chunk))
+          .orderBy(desc(ppLineHistoryTable.capturedAt))
+      ),
       playerLinePlayerIds.length
-        ? db.select({
-            playerId: ourProjectionsTable.playerId,
-            statType: ourProjectionsTable.statType,
-            pOver: ourProjectionsTable.pOver,
-            noPlayReason: ourProjectionsTable.noPlayReason,
-          })
-          .from(ourProjectionsTable)
-          .where(and(
-            inArray(ourProjectionsTable.playerId, playerLinePlayerIds),
-            isNotNull(ourProjectionsTable.pOver),
-          ))
+        ? queryInChunks(playerLinePlayerIds, chunk =>
+            db.select({
+              playerId: ourProjectionsTable.playerId,
+              statType: ourProjectionsTable.statType,
+              pOver: ourProjectionsTable.pOver,
+              noPlayReason: ourProjectionsTable.noPlayReason,
+            })
+            .from(ourProjectionsTable)
+            .where(and(
+              inArray(ourProjectionsTable.playerId, chunk),
+              isNotNull(ourProjectionsTable.pOver),
+            ))
+          )
         : ([] as Array<{ playerId: number | null; statType: string; pOver: string | null; noPlayReason: string | null }>),
     ]);
 
