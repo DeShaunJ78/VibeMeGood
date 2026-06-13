@@ -2677,17 +2677,32 @@ export default function SlateBoard() {
                                 }
                                 return <ActionTagBadge tag={row.actionTag} />;
                               })()}
-                              {row.sharpSignal === "sharp" && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="text-amber-400 text-[11px] cursor-help leading-none">⚡</span>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="left" className="font-mono text-xs max-w-xs">
-                                    <p className="font-bold text-amber-400 mb-1">Sharp Signal — {row.sharpConfidence} confidence</p>
-                                    <p className="text-slate-300 leading-relaxed">{row.sharpExplanation}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
+                              {row.sharpSignal && row.sharpSignal !== "neutral" && (() => {
+                                const isSharp  = row.sharpSignal === "sharp";
+                                const isPublic = row.sharpSignal === "public";
+                                const label    = isSharp  ? "⚡ SHARP" : "📊 PUBLIC";
+                                const cls      = isSharp
+                                  ? "text-emerald-400 bg-emerald-950/40 border-emerald-700/50"
+                                  : "text-amber-400  bg-amber-950/30  border-amber-700/40";
+                                const tipHeader = isSharp
+                                  ? `Sharp Signal — ${row.sharpConfidence ?? "low"} confidence`
+                                  : "Public Steam";
+                                return (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className={`font-mono text-[9px] font-bold px-1.5 py-px rounded border leading-none cursor-help ${cls}`}>
+                                        {label}
+                                        {isSharp && row.sharpConfidence === "high" && " ★"}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="font-mono text-xs max-w-xs">
+                                      <p className={`font-bold mb-1 ${isSharp ? "text-emerald-400" : "text-amber-400"}`}>{tipHeader}</p>
+                                      {isPublic && <p className="text-slate-400 text-[10px] mb-1">Public consensus — no reverse-line movement detected.</p>}
+                                      <p className="text-slate-300 leading-relaxed">{row.sharpExplanation ?? (isSharp ? "Sharp money detected." : "Public steam on this side.")}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                );
+                              })()}
                               {(() => {
                                 const adjs: ProjectionFactor[] = row.ourProjection?.adjustments ?? [];
                                 const active = adjs.filter(a => Math.abs(a.factor - 1) >= 0.02);
