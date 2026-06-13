@@ -612,6 +612,7 @@ export default function SlateBoard() {
   const [minEdge, setMinEdge] = useState<string>("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedPropId, setSelectedPropId] = useState<number | null>(null);
+  const [focusFactors, setFocusFactors] = useState(false);
   const [optimizerOpen, setOptimizerOpen] = useState(false);
   const [actionTagFilter, setActionTagFilter] = useState<string>(() => {
     try { return localStorage.getItem("slate-action-tag") ?? "all"; } catch { return "all"; }
@@ -2162,7 +2163,7 @@ export default function SlateBoard() {
                           row.isWatched ? "bg-amber-950/10 hover:bg-amber-950/20" :
                           "hover:bg-slate-800/50"
                         }`}
-                        onClick={() => setSelectedPropId(row.ppLineId)}
+                        onClick={() => { setSelectedPropId(row.ppLineId); setFocusFactors(false); }}
                       >
                         <TableCell onClick={e => e.stopPropagation()} className="pr-0">
                           <div className="flex items-center gap-0.5">
@@ -2700,36 +2701,47 @@ export default function SlateBoard() {
                                 );
                               })()}
                               {(() => {
+                                const FACTOR_ABBREV: Record<string, string> = {
+                                  dvp: "DvP", pace: "pace", rest: "rest", impliedTotal: "tot.",
+                                  minutes: "min", usageRate: "usg", threePointDefense: "3P-D",
+                                  weather: "wthr", nflAdvanced: "tgt%", snap: "snap", park: "park",
+                                  mlbPlatoon: "pltn", strikeoutMatchup: "K-Δ", pitcherForm: "P-frm",
+                                  nhlToi: "TOI", powerPlay: "PP", corsi: "Crsi",
+                                };
                                 const adjs: ProjectionFactor[] = row.ourProjection?.adjustments ?? [];
-                                const active = adjs.filter(a => Math.abs(a.factor - 1) >= 0.02);
-                                if (active.length === 0) return null;
-                                const combined = active.reduce((acc, a) => acc * a.factor, 1);
-                                const pct = Math.round((combined - 1) * 100);
-                                if (pct === 0) return null;
-                                const pos = pct > 0;
+                                const top2 = adjs
+                                  .filter(a => Math.abs(a.factor - 1) >= 0.02)
+                                  .sort((a, b) => Math.abs(b.factor - 1) - Math.abs(a.factor - 1))
+                                  .slice(0, 2);
+                                if (top2.length === 0) return null;
                                 return (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span className={`font-mono text-[9px] font-bold px-1 py-px rounded border leading-none cursor-help ${
-                                        pos
-                                          ? "text-sky-300 bg-sky-950/40 border-sky-700/40"
-                                          : "text-orange-300 bg-orange-950/40 border-orange-700/40"
-                                      }`}>
-                                        {pos ? "+" : ""}{pct}%
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="left" className="font-mono text-xs max-w-xs space-y-1">
-                                      <p className="font-bold text-slate-200 mb-1">Active Projection Factors</p>
-                                      {active.map(a => (
-                                        <div key={a.key}>
-                                          <span className={`font-bold ${a.factor > 1 ? "text-sky-300" : "text-orange-300"}`}>
-                                            {a.label} {a.factor > 1 ? "+" : ""}{Math.round((a.factor - 1) * 100)}%
-                                          </span>
-                                          <p className="text-slate-400 text-[10px] leading-snug">{a.explain}</p>
-                                        </div>
-                                      ))}
-                                    </TooltipContent>
-                                  </Tooltip>
+                                  <>
+                                    {top2.map(a => {
+                                      const up = a.factor > 1;
+                                      const short = FACTOR_ABBREV[a.key] ?? a.label.slice(0, 6);
+                                      return (
+                                        <Tooltip key={a.key}>
+                                          <TooltipTrigger asChild>
+                                            <span
+                                              className={`font-mono text-[9px] font-bold px-1 py-px rounded border leading-none cursor-pointer select-none transition-colors ${
+                                                up
+                                                  ? "text-sky-300 bg-sky-950/40 border-sky-700/40 hover:bg-sky-900/50"
+                                                  : "text-orange-300 bg-orange-950/40 border-orange-700/40 hover:bg-orange-900/50"
+                                              }`}
+                                              onClick={e => { e.stopPropagation(); setSelectedPropId(row.ppLineId); setFocusFactors(true); }}
+                                            >
+                                              {up ? "↑" : "↓"}{short}
+                                            </span>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="left" className="font-mono text-xs max-w-xs">
+                                            <p className={`font-bold mb-0.5 ${up ? "text-sky-300" : "text-orange-300"}`}>{a.label}</p>
+                                            <p className="text-slate-300 text-[10px] leading-snug">{a.explain}</p>
+                                            <p className="text-slate-500 mt-0.5">×{a.factor.toFixed(3)}</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      );
+                                    })}
+                                  </>
                                 );
                               })()}
                               {bDeltaRow != null && (() => {
@@ -2988,13 +3000,14 @@ export default function SlateBoard() {
           <PropDetailSheet
             ppLineId={selectedPropId}
             open={!!selectedPropId}
-            onOpenChange={open => !open && setSelectedPropId(null)}
+            onOpenChange={open => { if (!open) { setSelectedPropId(null); setFocusFactors(false); } }}
             sharpSignal={sharpRow?.sharpSignal ?? null}
             sharpConfidence={sharpRow?.sharpConfidence ?? null}
             sharpExplanation={sharpRow?.sharpExplanation ?? null}
             sharpSide={sharpRow?.sharpSide ?? null}
             sharpPublicPct={sharpRow?.sharpPublicPct ?? null}
             calibrationCount={sharpRow?.calibrationCount ?? null}
+            focusFactors={focusFactors}
           />
         );
       })()}

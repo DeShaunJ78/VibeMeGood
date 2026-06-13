@@ -26,6 +26,7 @@ interface PropDetailSheetProps {
   sharpSide?:        string | null;
   sharpPublicPct?:   number | null;
   calibrationCount?: number | null;
+  focusFactors?: boolean;
 }
 
 interface HitRateWindow {
@@ -283,7 +284,7 @@ function WhyThisEdgePanel({ variance, gamePace, gamesUsed }: { variance: Varianc
   );
 }
 
-export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sharpConfidence, sharpExplanation, sharpSide, sharpPublicPct, calibrationCount }: PropDetailSheetProps) {
+export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sharpConfidence, sharpExplanation, sharpSide, sharpPublicPct, calibrationCount, focusFactors }: PropDetailSheetProps) {
   const [data, setData] = useState<PropDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [explainText, setExplainText] = useState<string>("");
@@ -294,6 +295,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
   const [lineShopping, setLineShopping] = useState<LineShopping | null>(null);
   const [gamePace, setGamePace] = useState<GamePaceData | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const factorsSectionRef = useRef<HTMLDivElement>(null);
   const { addPick, removePick, hasPick, updateDirection } = useEntry();
   const { data: userSettings } = useUserSettings();
 
@@ -450,6 +452,15 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
   useEffect(() => {
     if (lineLocked && direction !== "more") setDirection("more");
   }, [lineLocked, direction]);
+
+  // When opened with focusFactors, scroll the factors section into view after animation.
+  useEffect(() => {
+    if (!open || !focusFactors) return;
+    const timer = setTimeout(() => {
+      factorsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [open, focusFactors]);
 
   function handleAddRemove() {
     if (!ppLineId || !data) return;
@@ -622,7 +633,7 @@ export function PropDetailSheet({ ppLineId, open, onOpenChange, sharpSignal, sha
 
               {/* ── Why this number moved (applied context factors) ── */}
               {op?.adjustments && op.adjustments.length > 0 && (
-                <div className="px-5 py-4 border-b border-slate-800/50">
+                <div ref={factorsSectionRef} className="px-5 py-4 border-b border-slate-800/50">
                   <div className="flex items-center gap-2 mb-3">
                     <Sparkles className="w-3 h-3 text-amber-400" />
                     <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
