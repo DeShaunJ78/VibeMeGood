@@ -1870,24 +1870,33 @@ export default function LineupFactory() {
     <>
     <div className="flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
       {/* ── Header ── */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-border/50 shrink-0">
-        <Factory className="h-5 w-5 text-primary" />
-        <div>
-          <h1 className="text-lg font-bold font-mono">Lineup Factory</h1>
-          <p className="text-xs text-muted-foreground">Portfolio construction — risk-adjusted, diversified, correlation-aware</p>
+      <div className="flex flex-col gap-1.5 px-4 py-3 border-b border-border/50 shrink-0 sm:px-6 sm:py-4 lg:flex-row lg:items-center lg:gap-3 lg:py-4">
+        {/* Title row — always one line */}
+        <div className="flex items-center gap-3 min-w-0">
+          <Factory className="h-5 w-5 text-primary shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-lg font-bold font-mono">Lineup Factory</h1>
+            <p className="hidden text-xs text-muted-foreground sm:block">Portfolio construction — risk-adjusted, diversified, correlation-aware</p>
+          </div>
         </div>
+        {/* Stats row — compact dots on mobile, chevron chain on desktop */}
         {result && (
-          <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground font-mono">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-8 text-xs text-muted-foreground font-mono lg:pl-0 lg:ml-auto lg:flex-nowrap lg:gap-x-2">
             {activeEntry && (
-              <span className="text-primary font-medium truncate max-w-[160px]" title={activeEntry.label || activeEntry.autoName}>
+              <span className="text-primary font-medium truncate max-w-[150px]" title={activeEntry.label || activeEntry.autoName}>
                 {activeEntry.label || activeEntry.autoName}
               </span>
             )}
-            {activeEntry && <ChevronRight className="h-3 w-3" />}
+            {activeEntry && <>
+              <span className="lg:hidden opacity-50">·</span>
+              <ChevronRight className="h-3 w-3 hidden lg:inline-block" />
+            </>}
             <span>{result.filteredPropCount} eligible</span>
-            <ChevronRight className="h-3 w-3" />
+            <span className="lg:hidden opacity-50">·</span>
+            <ChevronRight className="h-3 w-3 hidden lg:inline-block" />
             <span>{result.lineups.length} lineups</span>
-            <ChevronRight className="h-3 w-3" />
+            <span className="lg:hidden opacity-50">·</span>
+            <ChevronRight className="h-3 w-3 hidden lg:inline-block" />
             <span className={cn(profileInfo.color)}>{profileInfo.label}</span>
           </div>
         )}
