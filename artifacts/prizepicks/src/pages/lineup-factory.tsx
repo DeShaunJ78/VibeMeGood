@@ -175,6 +175,16 @@ function pct(v: number) { return `${Math.round(v * 100)}%`; }
 function dollars(v: number) { return `$${v.toFixed(2)}`; }
 function sign(v: number) { return v >= 0 ? `+$${v.toFixed(2)}` : `-$${Math.abs(v).toFixed(2)}`; }
 
+/** Returns true when hitting exactly k legs on an n-pick Flex entry earns a payout. */
+function isPayingFlexTier(k: number, n: number): boolean {
+  if (k === n) return true;          // all hits always pays
+  if (n === 3) return k >= 2;        // 2/3 = 1×
+  if (n === 4) return k >= 3;        // 3/4 = 1.5×
+  if (n === 5) return k >= 3;        // 3/5 = 0.4×, 4/5 = 2×
+  if (n === 6) return k >= 4;        // 4/6 = 0.4×, 5/6 = 2×
+  return false;
+}
+
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts;
   const mins = Math.floor(diff / 60_000);
@@ -746,6 +756,22 @@ function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap, o
           <Badge variant="outline" className="font-mono text-xs text-blue-400 border-blue-800/50">
             {pct(lineup.hitProbability)} hit
           </Badge>
+          {lineup.hitCountProbabilities != null && (
+            <Badge
+              variant="outline"
+              title="Probability of hitting 0 legs (all picks miss)"
+              className={cn(
+                "font-mono text-xs border",
+                lineup.bustProbability > 0.25
+                  ? "text-rose-400 border-rose-800/50"
+                  : lineup.bustProbability > 0.10
+                  ? "text-amber-400/80 border-amber-800/40"
+                  : "text-slate-500 border-slate-700/50",
+              )}
+            >
+              {pct(lineup.bustProbability)} bust
+            </Badge>
+          )}
           <Badge variant="outline" className="font-mono text-xs text-purple-400 border-purple-800/50">
             {dollars(lineup.grossPayout)} payout
           </Badge>
@@ -835,6 +861,39 @@ function LineupCard({ lineup, index, onLoad, isGppMode, isStoryMode, propsMap, o
           </div>
           );
         })}
+        {lineup.hitCountProbabilities != null && lineup.hitCountProbabilities.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-slate-800/60">
+            <div className="flex items-center gap-1 mb-1.5">
+              <BarChart2 className="h-2.5 w-2.5 text-slate-500 shrink-0" />
+              <span className="text-[9px] font-mono text-slate-500 uppercase tracking-wide">Flex hit distribution</span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {lineup.hitCountProbabilities.map((prob, k) => {
+                const n = lineup.picksPerEntry;
+                const isBust = k === 0;
+                const isAll = k === n;
+                const pays = !isBust && isPayingFlexTier(k, n);
+                const cls = isBust
+                  ? "text-rose-300/90 bg-rose-950/40 border-rose-800/30"
+                  : isAll
+                  ? "text-emerald-300/90 bg-emerald-950/40 border-emerald-800/30"
+                  : pays
+                  ? "text-amber-300/80 bg-amber-950/30 border-amber-800/30"
+                  : "text-slate-500 bg-slate-800/30 border-slate-700/30";
+                const label = isBust ? "bust" : isAll ? `${k}/${n}` : k === 1 ? "1 hit" : `${k} hits`;
+                return (
+                  <span
+                    key={k}
+                    title={pays && !isBust ? `Paying tier — ${k}/${n} legs hit` : isBust ? "All picks miss" : `${k}/${n} legs hit — no payout`}
+                    className={`text-[9px] font-mono border px-1.5 py-0.5 rounded whitespace-nowrap ${cls}`}
+                  >
+                    {label}: {(prob * 100).toFixed(1)}%
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {lineup.correlationNote && (
           <div className="flex items-start gap-1.5 mt-2 text-[10px] text-amber-400/80">
             <Info className="h-3 w-3 shrink-0 mt-0.5" />
