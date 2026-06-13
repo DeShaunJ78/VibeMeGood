@@ -368,9 +368,11 @@ export async function computeAllVarianceScores(): Promise<number> {
     }
   }
 
-  // 6. Bulk upsert all variance scores in one DB round-trip.
-  if (insertPayloads.length > 0) {
-    await db.insert(varianceScoresTable).values(insertPayloads)
+  // 6. Bulk upsert variance scores in chunked batches (same Drizzle stack-depth
+  //    guard as compute.ts — single large INSERT overflows mergeQueries recursion).
+  const VAR_CHUNK = 500;
+  for (let i = 0; i < insertPayloads.length; i += VAR_CHUNK) {
+    await db.insert(varianceScoresTable).values(insertPayloads.slice(i, i + VAR_CHUNK))
       .onConflictDoUpdate({
         target: [varianceScoresTable.ppLineId],
         set: {

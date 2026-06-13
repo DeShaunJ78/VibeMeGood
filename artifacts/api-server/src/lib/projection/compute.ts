@@ -1163,9 +1163,14 @@ export async function computeAllProjections(): Promise<number> {
     }
   }
 
-  // Bulk upsert all computed projections in one DB round-trip.
-  if (projectionPayloads.length > 0) {
-    await db.insert(ourProjectionsTable).values(projectionPayloads)
+  // Bulk upsert all computed projections in chunked batches.
+  // Drizzle ORM builds INSERT SQL by recursively merging chunks; a single
+  // INSERT with thousands of rows overflows Node's call stack (RangeError:
+  // Maximum call stack size exceeded in mergeQueries). 500 rows per batch
+  // keeps the recursion depth well within the default limit.
+  const PROJ_CHUNK = 500;
+  for (let i = 0; i < projectionPayloads.length; i += PROJ_CHUNK) {
+    await db.insert(ourProjectionsTable).values(projectionPayloads.slice(i, i + PROJ_CHUNK))
       .onConflictDoUpdate({
         target: [ourProjectionsTable.playerId, ourProjectionsTable.statType],
         set: {
