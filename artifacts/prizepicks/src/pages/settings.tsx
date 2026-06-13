@@ -757,12 +757,12 @@ export default function Settings() {
                             Auto-sync in {cooldownMins}m · Manual sync uses API credits
                           </div>
                         )}
-                        {(data as any)?.marketGaps && (
+                        {data?.marketGaps && (
                           <div className="text-[10px] font-mono text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5 px-0.5">
-                            <span className="text-emerald-500">{(data as any).marketGaps.processed} matched</span>
-                            <span className="text-amber-500">{(data as any).marketGaps.noMarketOffered} no market offered</span>
-                            <span className="text-slate-500">{(data as any).marketGaps.noKeyMapped} no key mapped</span>
-                            <span className="text-slate-600">/ {(data as any).marketGaps.total} total active</span>
+                            <span className="text-emerald-500">{data.marketGaps.processed} matched</span>
+                            <span className="text-amber-500">{data.marketGaps.noMarketOffered} no market offered</span>
+                            <span className="text-slate-500">{data.marketGaps.noKeyMapped} no key mapped</span>
+                            <span className="text-slate-600">/ {data.marketGaps.total} total active</span>
                           </div>
                         )}
                       </div>
